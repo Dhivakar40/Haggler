@@ -1,4 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import { Public } from '../common/decorators';
 import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { pincodeSchema } from '@haggler/shared';
@@ -12,6 +13,7 @@ const priceBandQuery = z.object({
 });
 
 @ApiTags('catalog')
+@Public()
 @Controller({ path: '', version: '1' })
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}

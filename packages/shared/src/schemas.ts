@@ -48,12 +48,12 @@ export const readinessSchema = z.object({
   status: z.enum(['ok', 'degraded', 'unavailable']),
   checks: z.object({ postgres: z.enum(['up', 'down']), redis: z.enum(['up', 'down']) }),
   adapters: z.object({
-    sms: z.enum(['sandbox', 'live']),
-    kyc: z.enum(['sandbox', 'live']),
-    payments: z.enum(['sandbox', 'live']),
-    calls: z.enum(['sandbox', 'live']),
-    push: z.enum(['sandbox', 'live']),
-    maps: z.enum(['sandbox', 'live']),
+    sms: z.string(),
+    kyc: z.string(),
+    payments: z.string(),
+    calls: z.string(),
+    push: z.string(),
+    maps: z.string(),
   }),
 });
 export type Readiness = z.infer<typeof readinessSchema>;

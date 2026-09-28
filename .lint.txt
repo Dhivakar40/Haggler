@@ -1,0 +1,28 @@
+
+> haggler@0.0.0 lint C:\Users\dhiva\OneDrive\Desktop\Projects\HAGGLER
+> eslint .
+
+
+C:\Users\dhiva\OneDrive\Desktop\Projects\HAGGLER\apps\admin\src\app\kyc\[id]\page.tsx
+  79:15  error  Definition for rule '@next/next/no-img-element' was not found  @next/next/no-img-element
+
+C:\Users\dhiva\OneDrive\Desktop\Projects\HAGGLER\apps\api\src\auth\auth.service.ts
+  56:29  error  '_id' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\dhiva\OneDrive\Desktop\Projects\HAGGLER\apps\api\src\auth\token.service.ts
+  115:29  error  '_ignored' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\dhiva\OneDrive\Desktop\Projects\HAGGLER\apps\api\src\users\addresses.service.ts
+  60:23  error  '_la' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  60:39  error  '_lo' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\dhiva\OneDrive\Desktop\Projects\HAGGLER\apps\api\test\auth.e2e-spec.ts
+  444:23  error  '_a' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  444:38  error  '_b' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\dhiva\OneDrive\Desktop\Projects\HAGGLER\apps\mobile\src\auth\session.spec.ts
+  96:14  error  'c' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 8 problems (8 errors, 0 warnings)
+
+ ELIFECYCLE  Command failed with exit code 1.

@@ -3,12 +3,23 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { randomUUID } from 'node:crypto';
 import { LoggerModule } from 'nestjs-pino';
+import { AdminModule } from './admin/admin.module';
+import { AuditModule } from './audit/audit.service';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard, RolesGuard } from './auth/auth.guards';
+import { SessionModule } from './auth/session.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CryptoModule } from './common/crypto.module';
 import { EnvModule, EnvService } from './config/env.service';
 import { HealthModule } from './health/health.module';
+import { KycModule } from './kyc/kyc.module';
 import { HttpMetricsMiddleware, MetricsModule } from './metrics/metrics';
 import { PrismaModule } from './prisma/prisma.module';
-import { RedisModule } from './redis/redis.service';
+import { RateLimitModule } from './ratelimit/rate-limit.service';
+import { RedisThrottlerStorage } from './ratelimit/redis-throttler.storage';
+import { RedisModule, RedisService } from './redis/redis.service';
+import { UsersModule } from './users/users.module';
+import { WorkerModule } from './worker/worker.module';
 
 /** Fields that must never reach a log line (D: never log secrets or Aadhaar numbers). */
 export const LOG_REDACT_PATHS = [
@@ -20,6 +31,8 @@ export const LOG_REDACT_PATHS = [
   'req.body.password',
   'req.body.aadhaar',
   'req.body.aadhaarNumber',
+  'req.body.aadhaarLast4',
+  'req.body.dateOfBirth',
   'req.body.refreshToken',
   'res.headers["set-cookie"]',
 ];
@@ -51,15 +64,40 @@ export const LOG_REDACT_PATHS = [
         };
       },
     }),
-    // Global default: 100 requests / minute / IP. Auth endpoints get stricter limits in Phase 1.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // Global per-IP limit, stored in Redis so it holds across instances (D-022).
+    ThrottlerModule.forRootAsync({
+      inject: [EnvService, RedisService],
+      useFactory: (envService: EnvService, redis: RedisService) => ({
+        throttlers: [
+          {
+            ttl: envService.env.THROTTLE_TTL_SECONDS * 1000,
+            limit: envService.env.THROTTLE_LIMIT,
+          },
+        ],
+        storage: new RedisThrottlerStorage(redis),
+      }),
+    }),
     PrismaModule,
     RedisModule,
+    CryptoModule,
+    RateLimitModule,
+    AuditModule,
+    SessionModule,
     MetricsModule,
     HealthModule,
     CatalogModule,
+    AuthModule,
+    UsersModule,
+    WorkerModule,
+    KycModule,
+    AdminModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    // Order matters: throttle first (cheap), then authenticate, then check roles.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

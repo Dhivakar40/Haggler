@@ -1,0 +1,12 @@
+PASS src/ratelimit/redis-throttler.storage.spec.ts
+  RedisThrottlerStorage
+    √ allows up to the limit, then reports isBlocked with the time left (5 ms)
+    √ keeps separate counters per key
+    √ when Redis is down it still blocks (in-memory), instead of failing open
+    √ the in-memory window resets after it expires (2 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        4.11 s
+Ran all test suites matching /redis-throttler/i.

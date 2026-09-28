@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
-/** Every third-party adapter runs in "sandbox" (fake) or "live" (real vendor) mode. */
-export const ADAPTER_MODES = ['sandbox', 'live'] as const;
-const adapterMode = z.enum(ADAPTER_MODES).default('sandbox');
-
+/**
+ * Adapter modes (docs/DECISIONS.md D-016, D-019, D-020, D-021):
+ *  - sms:      sandbox (logs the OTP) | live (MSG91)
+ *  - kyc:      manual_admin (the only implementation; admins review documents by hand)
+ *  - payments: sandbox (in-process fake) | test (real Razorpay API, rzp_test_ keys ONLY)
+ *  - calls:    disabled (masked calling is out of scope for now)
+ *  - push:     sandbox | live (FCM)
+ *  - maps:     sandbox (no geocoding) | osm (OpenStreetMap Nominatim, no key)
+ */
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -14,67 +19,95 @@ const envSchema = z
     REDIS_URL: z.string().url(),
 
     JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
+    ADMIN_JWT_SECRET: z.string().min(32, 'ADMIN_JWT_SECRET must be at least 32 characters'),
     JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+    ADMIN_JWT_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
     REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
+    /** 32 random bytes, base64. Encrypts date of birth and Aadhaar last-4 at rest. */
+    FIELD_ENCRYPTION_KEY: z
+      .string()
+      .refine(
+        (v) => Buffer.from(v, 'base64').length === 32,
+        'FIELD_ENCRYPTION_KEY must be 32 bytes, base64-encoded',
+      ),
+
+    /** Global per-IP limit (requests per window). Auth routes have stricter, dedicated limits. */
+    THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
+    THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
 
     S3_ENDPOINT: z.string().url().optional(),
+    /** Host used in presigned URLs handed to phones (e.g. your LAN IP). Defaults to S3_ENDPOINT. */
+    S3_PUBLIC_ENDPOINT: z.string().url().optional(),
     S3_REGION: z.string().default('ap-south-1'),
-    S3_ACCESS_KEY: z.string().optional(),
-    S3_SECRET_KEY: z.string().optional(),
+    S3_ACCESS_KEY: z.string().min(1),
+    S3_SECRET_KEY: z.string().min(1),
+    S3_FORCE_PATH_STYLE: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    /** Set to AES256 (or aws:kms) to require server-side encryption headers on uploads. */
+    S3_SSE: z.string().optional(),
     S3_BUCKET_MEDIA: z.string().default('haggler-media'),
     S3_BUCKET_KYC: z.string().default('haggler-kyc'),
 
-    SMS_MODE: adapterMode,
-    KYC_MODE: adapterMode,
-    PAYMENTS_MODE: adapterMode,
-    CALLS_MODE: adapterMode,
-    PUSH_MODE: adapterMode,
-    MAPS_MODE: adapterMode,
+    SMS_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+    KYC_PROVIDER: z.literal('manual_admin').default('manual_admin'),
+    PAYMENTS_MODE: z.enum(['sandbox', 'test']).default('sandbox'),
+    CALLS_MODE: z.literal('disabled').default('disabled'),
+    PUSH_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+    MAPS_MODE: z.enum(['sandbox', 'osm']).default('sandbox'),
 
     MSG91_AUTH_KEY: z.string().optional(),
+    MSG91_TEMPLATE_ID: z.string().optional(),
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
-    EXOTEL_SID: z.string().optional(),
-    EXOTEL_API_KEY: z.string().optional(),
-    EXOTEL_API_TOKEN: z.string().optional(),
     FCM_SERVICE_ACCOUNT_JSON: z.string().optional(),
-    GOOGLE_MAPS_API_KEY: z.string().optional(),
+    NOMINATIM_URL: z.string().url().default('https://nominatim.openstreetmap.org'),
+    NOMINATIM_USER_AGENT: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
   })
   .superRefine((env, ctx) => {
-    // Refuse to boot in "live" mode without the credentials that mode needs.
-    const requireWhenLive = (
-      mode: (typeof ADAPTER_MODES)[number],
-      adapter: string,
-      keys: (keyof typeof env)[],
-    ) => {
-      if (mode !== 'live') return;
-      for (const key of keys) {
-        if (!env[key]) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [key],
-            message: `${String(key)} is required when ${adapter}_MODE=live`,
-          });
-        }
+    const need = (cond: boolean, key: keyof typeof env, why: string) => {
+      if (cond && !env[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${String(key)} is required ${why}`,
+        });
       }
     };
-    requireWhenLive(env.SMS_MODE, 'SMS', ['MSG91_AUTH_KEY']);
-    requireWhenLive(env.PAYMENTS_MODE, 'PAYMENTS', [
-      'RAZORPAY_KEY_ID',
-      'RAZORPAY_KEY_SECRET',
-      'RAZORPAY_WEBHOOK_SECRET',
-    ]);
-    requireWhenLive(env.CALLS_MODE, 'CALLS', ['EXOTEL_SID', 'EXOTEL_API_KEY', 'EXOTEL_API_TOKEN']);
-    requireWhenLive(env.PUSH_MODE, 'PUSH', ['FCM_SERVICE_ACCOUNT_JSON']);
-    requireWhenLive(env.MAPS_MODE, 'MAPS', ['GOOGLE_MAPS_API_KEY']);
+    need(env.SMS_MODE === 'live', 'MSG91_AUTH_KEY', 'when SMS_MODE=live');
+    need(env.SMS_MODE === 'live', 'MSG91_TEMPLATE_ID', 'when SMS_MODE=live');
+    need(env.PAYMENTS_MODE === 'test', 'RAZORPAY_KEY_ID', 'when PAYMENTS_MODE=test');
+    need(env.PAYMENTS_MODE === 'test', 'RAZORPAY_KEY_SECRET', 'when PAYMENTS_MODE=test');
+    need(env.PAYMENTS_MODE === 'test', 'RAZORPAY_WEBHOOK_SECRET', 'when PAYMENTS_MODE=test');
+    need(env.PUSH_MODE === 'live', 'FCM_SERVICE_ACCOUNT_JSON', 'when PUSH_MODE=live');
+    need(
+      env.MAPS_MODE === 'osm',
+      'NOMINATIM_USER_AGENT',
+      'when MAPS_MODE=osm (Nominatim policy requires an identifying agent)',
+    );
 
-    // A sandbox adapter in production is a silent way to ship fake payments/KYC.
+    // D-020: no real money anywhere, for now. Test mode must use Razorpay TEST keys.
+    if (
+      env.PAYMENTS_MODE === 'test' &&
+      env.RAZORPAY_KEY_ID &&
+      !env.RAZORPAY_KEY_ID.startsWith('rzp_test_')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['RAZORPAY_KEY_ID'],
+        message:
+          'Only Razorpay TEST keys (rzp_test_...) are allowed; live payments are not enabled (D-020)',
+      });
+    }
+
+    // A sandbox adapter in production is a silent way to ship fakes.
     if (env.NODE_ENV === 'production') {
-      const sandboxed = (
-        ['SMS_MODE', 'KYC_MODE', 'PAYMENTS_MODE', 'CALLS_MODE', 'PUSH_MODE', 'MAPS_MODE'] as const
-      ).filter((k) => env[k] === 'sandbox');
+      const sandboxed = (['SMS_MODE', 'PUSH_MODE', 'MAPS_MODE', 'PAYMENTS_MODE'] as const).filter(
+        (k) => env[k] === 'sandbox',
+      );
       for (const key of sandboxed) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -108,7 +141,7 @@ export function parseEnv(raw: Record<string, string | undefined>): Env {
 export function adapterModes(env: Env) {
   return {
     sms: env.SMS_MODE,
-    kyc: env.KYC_MODE,
+    kyc: env.KYC_PROVIDER,
     payments: env.PAYMENTS_MODE,
     calls: env.CALLS_MODE,
     push: env.PUSH_MODE,

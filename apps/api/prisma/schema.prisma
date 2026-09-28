@@ -59,22 +59,28 @@ enum ActorType {
 }
 
 model User {
-  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  phone             String       @unique
-  phoneVerifiedAt   DateTime?    @map("phone_verified_at") @db.Timestamptz(6)
-  fullName          String?      @map("full_name")
-  photoUrl          String?      @map("photo_url")
-  preferredLanguage String       @default("en") @map("preferred_language")
-  languages         String[]     @default(["en"])
-  status            UserStatus   @default(ACTIVE)
-  deletionRequestedAt DateTime?  @map("deletion_requested_at") @db.Timestamptz(6)
-  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone                String     @unique
+  phoneVerifiedAt      DateTime?  @map("phone_verified_at") @db.Timestamptz(6)
+  fullName             String?    @map("full_name")
+  photoUrl             String?    @map("photo_url")
+  preferredLanguage    String     @default("en") @map("preferred_language")
+  languages            String[]   @default(["en"])
+  status               UserStatus @default(ACTIVE)
+  deletionRequestedAt  DateTime?  @map("deletion_requested_at") @db.Timestamptz(6)
+  deletionScheduledFor DateTime?  @map("deletion_scheduled_for") @db.Timestamptz(6)
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  roles         UserRole[]
-  devices       Device[]
-  refreshTokens RefreshToken[]
-  addresses     Address[]
+  roles             UserRole[]
+  devices           Device[]
+  refreshTokens     RefreshToken[]
+  addresses         Address[]
+  workerProfile     WorkerProfile?
+  emergencyContacts EmergencyContact[]
+  consents          Consent[]
+  kycChecks         KycCheck[]
+  kycDocuments      KycDocument[]
 
   @@map("users")
 }
@@ -132,15 +138,15 @@ model RefreshToken {
 }
 
 model OtpAttempt {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  phone      String
-  codeHash   String    @map("code_hash")
-  ip         String?
-  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
-  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
-  failedTries Int      @default(0) @map("failed_tries")
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone       String
+  codeHash    String    @map("code_hash")
+  ip          String?
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(6)
+  failedTries Int       @default(0) @map("failed_tries")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([phone, createdAt(sort: Desc)])
   @@index([ip, createdAt(sort: Desc)])
@@ -148,18 +154,19 @@ model OtpAttempt {
 }
 
 model Address {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
+  id        String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String                                @map("user_id") @db.Uuid
   label     String
   line1     String
   line2     String?
   city      String
   state     String
   pincode   String
+  isDefault Boolean                               @default(false) @map("is_default")
   /// geography(Point,4326); read/write via raw SQL (ST_MakePoint(lng, lat)).
   location  Unsupported("geography(Point,4326)")?
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime                              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -180,26 +187,27 @@ model ServiceCategory {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  priceBands PriceBand[]
+  priceBands       PriceBand[]
+  workerCategories WorkerCategory[]
 
   @@map("service_categories")
 }
 
 model PriceBand {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  categoryId     String         @map("category_id") @db.Uuid
-  scope          PriceBandScope
-  city           String?
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId    String         @map("category_id") @db.Uuid
+  scope         PriceBandScope
+  city          String?
   /// First 3 digits of the PIN code (the "cluster"); only for scope PINCODE_CLUSTER.
-  pincodePrefix  String?        @map("pincode_prefix")
-  minPaise       Int            @map("min_paise")
-  medianPaise    Int            @map("median_paise")
-  maxPaise       Int            @map("max_paise")
+  pincodePrefix String?        @map("pincode_prefix")
+  minPaise      Int            @map("min_paise")
+  medianPaise   Int            @map("median_paise")
+  maxPaise      Int            @map("max_paise")
   /// Completed jobs the band was computed from. 0 means a seeded default.
-  sampleSize     Int            @default(0) @map("sample_size")
-  computedAt     DateTime       @default(now()) @map("computed_at") @db.Timestamptz(6)
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sampleSize    Int            @default(0) @map("sample_size")
+  computedAt    DateTime       @default(now()) @map("computed_at") @db.Timestamptz(6)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
@@ -216,7 +224,8 @@ model AdminUser {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  roles AdminRole[]
+  roles      AdminRole[]
+  kycReviews KycReview[]
 
   @@map("admin_users")
 }
@@ -279,16 +288,244 @@ model SystemConfig {
 /// Legal counsel must confirm every row before launch (docs/COMPLIANCE.md). Intentionally
 /// NOT seeded: inventing wage numbers would be fake data.
 model MinimumWageRule {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  state              String
-  tradeSlug          String   @map("trade_slug")
-  dailyWagePaise     Int      @map("daily_wage_paise")
-  effectiveFrom      DateTime @map("effective_from") @db.Date
-  source             String?
-  verifiedByCounsel  Boolean  @default(false) @map("verified_by_counsel")
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state             String
+  tradeSlug         String   @map("trade_slug")
+  dailyWagePaise    Int      @map("daily_wage_paise")
+  effectiveFrom     DateTime @map("effective_from") @db.Date
+  source            String?
+  verifiedByCounsel Boolean  @default(false) @map("verified_by_counsel")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([state, tradeSlug, effectiveFrom])
   @@map("minimum_wage_rules")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1: identity, consent, verification
+// ---------------------------------------------------------------------------
+
+enum KycDocumentType {
+  AADHAAR_FRONT
+  AADHAAR_BACK
+  SELFIE
+  ADDRESS_PROOF
+  TRADE_LICENSE
+
+  @@map("kyc_document_type")
+}
+
+enum KycDocumentStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  DELETED
+
+  @@map("kyc_document_status")
+}
+
+enum KycCheckStatus {
+  DRAFT
+  PENDING_REVIEW
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+
+  @@map("kyc_check_status")
+}
+
+enum KycDecision {
+  APPROVE
+  REJECT
+  REQUEST_INFO
+
+  @@map("kyc_decision")
+}
+
+enum ReferenceCallOutcome {
+  NOT_CALLED
+  VERIFIED
+  NOT_REACHABLE
+  NEGATIVE
+
+  @@map("reference_call_outcome")
+}
+
+enum ConsentPurpose {
+  TERMS_OF_SERVICE
+  PRIVACY_POLICY
+  KYC_PROCESSING
+
+  @@map("consent_purpose")
+}
+
+/// The Ranger profile (internal name: worker). Created when a user adds the WORKER role.
+model WorkerProfile {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @unique @map("user_id") @db.Uuid
+  /// 0 = unverified, 1 = identity verified, 2 = live-ready, 3 = licensed (category specific).
+  kycTier         Int      @default(0) @map("kyc_tier")
+  bio             String?
+  experienceYears Int?     @map("experience_years")
+  /// AES-256-GCM ciphertext (EncryptionService). Never store these in plaintext.
+  aadhaarLast4Enc String?  @map("aadhaar_last4_enc")
+  dateOfBirthEnc  String?  @map("date_of_birth_enc")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories WorkerCategory[]
+
+  @@map("worker_profiles")
+}
+
+model WorkerCategory {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerProfileId String   @map("worker_profile_id") @db.Uuid
+  categoryId      String   @map("category_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workerProfile WorkerProfile   @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  category      ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([workerProfileId, categoryId])
+  @@map("worker_categories")
+}
+
+model EmergencyContact {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  name         String
+  phone        String
+  relationship String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("emergency_contacts")
+}
+
+/// DPDP: explicit, purpose-specific, versioned consent. Withdrawal sets revoked_at.
+model Consent {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  purpose   ConsentPurpose
+  version   String
+  grantedAt DateTime       @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt DateTime?      @map("revoked_at") @db.Timestamptz(6)
+  ip        String?
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("consents")
+}
+
+model KycCheck {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  tier            Int
+  /// 'manual_admin' today. A vendor name later, with no schema change (D-016).
+  provider        String         @default("manual_admin")
+  status          KycCheckStatus @default(DRAFT)
+  /// Vendor reference (unused for manual review).
+  rawRef          String?        @map("raw_ref")
+  /// Reason/message shown to the Ranger after a reject or a request for more info.
+  reviewerMessage String?        @map("reviewer_message")
+  submittedAt     DateTime?      @map("submitted_at") @db.Timestamptz(6)
+  decidedAt       DateTime?      @map("decided_at") @db.Timestamptz(6)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents KycDocument[]
+  reviews   KycReview[]
+  reference ProfessionalReference?
+
+  @@index([status, submittedAt])
+  @@index([userId])
+  @@map("kyc_checks")
+}
+
+model KycDocument {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String            @map("user_id") @db.Uuid
+  kycCheckId  String            @map("kyc_check_id") @db.Uuid
+  type        KycDocumentType
+  bucket      String
+  storageKey  String            @unique @map("storage_key")
+  contentType String            @map("content_type")
+  sizeBytes   Int?              @map("size_bytes")
+  status      KycDocumentStatus @default(PENDING_UPLOAD)
+  uploadedAt  DateTime?         @map("uploaded_at") @db.Timestamptz(6)
+  deletedAt   DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kycCheck KycCheck @relation(fields: [kycCheckId], references: [id], onDelete: Cascade)
+
+  @@index([kycCheckId])
+  @@map("kyc_documents")
+}
+
+model KycReview {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kycCheckId  String      @map("kyc_check_id") @db.Uuid
+  adminUserId String      @map("admin_user_id") @db.Uuid
+  decision    KycDecision
+  reason      String?
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  kycCheck  KycCheck  @relation(fields: [kycCheckId], references: [id], onDelete: Cascade)
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id])
+
+  @@index([kycCheckId])
+  @@map("kyc_reviews")
+}
+
+/// Tier 2: one professional reference per check; an admin logs the verification call.
+model ProfessionalReference {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kycCheckId   String               @unique @map("kyc_check_id") @db.Uuid
+  name         String
+  phone        String
+  relationship String
+  callOutcome  ReferenceCallOutcome @default(NOT_CALLED) @map("call_outcome")
+  callNotes    String?              @map("call_notes")
+  calledAt     DateTime?            @map("called_at") @db.Timestamptz(6)
+  calledBy     String?              @map("called_by") @db.Uuid
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  kycCheck KycCheck @relation(fields: [kycCheckId], references: [id], onDelete: Cascade)
+
+  @@map("professional_references")
+}
+
+/// Masked-call sessions. Table only: the Exotel adapter is out of scope (D-019).
+model CallSession {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Will reference jobs(id) once the jobs table exists (Phase 2).
+  jobId        String?   @map("job_id") @db.Uuid
+  callerUserId String    @map("caller_user_id") @db.Uuid
+  calleeUserId String    @map("callee_user_id") @db.Uuid
+  provider     String
+  providerRef  String?   @map("provider_ref")
+  status       String    @default("CREATED")
+  startedAt    DateTime? @map("started_at") @db.Timestamptz(6)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(6)
+  durationSecs Int?      @map("duration_secs")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([callerUserId])
+  @@index([calleeUserId])
+  @@map("call_sessions")
 }

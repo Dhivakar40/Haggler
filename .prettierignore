@@ -6,3 +6,6 @@ pnpm-lock.yaml
 apps/api/prisma/migrations
 docs/openapi.json
 docs/API.md
+
+.next
+next-env.d.ts

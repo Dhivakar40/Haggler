@@ -49,6 +49,11 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
   },
   { key: 'otp_ttl_seconds', value: 300, description: 'Phone OTP validity' },
   {
+    key: 'kyc_image_retention_days',
+    value: 30,
+    description: 'Days after a KYC decision before identity images are deleted',
+  },
+  {
     key: 'student_weekly_hour_cap',
     value: 20,
     description: 'Max part-time hours per week for students',

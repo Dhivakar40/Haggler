@@ -24,15 +24,15 @@ describe('health', () => {
     expect(res.headers['x-request-id']).toBe('trace-123');
   });
 
-  it('readiness reports postgres+redis up and every adapter as sandbox', async () => {
+  it('readiness reports postgres+redis up and the adapter modes', async () => {
     const res = await http().get('/health/ready').expect(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.checks).toEqual({ postgres: 'up', redis: 'up' });
     expect(res.body.adapters).toEqual({
       sms: 'sandbox',
-      kyc: 'sandbox',
+      kyc: 'manual_admin',
       payments: 'sandbox',
-      calls: 'sandbox',
+      calls: 'disabled',
       push: 'sandbox',
       maps: 'sandbox',
     });
@@ -227,6 +227,28 @@ describe('database guarantees', () => {
   });
 });
 
+describe('rate limiting', () => {
+  it('returns 429 with the RATE_LIMITED envelope once the per-IP limit is exceeded (Redis-backed)', async () => {
+    const limited = await h.createApp({ THROTTLE_LIMIT: '20' });
+    try {
+      const hit = () =>
+        request(limited.getHttpServer())
+          .get('/v1/categories')
+          .set('X-Forwarded-For', '203.0.113.9');
+      for (let i = 0; i < 20; i++) await hit().expect(200);
+      const res = await hit().expect(429);
+      expect(res.body.error.code).toBe('RATE_LIMITED');
+      // A different client IP is unaffected.
+      await request(limited.getHttpServer())
+        .get('/v1/categories')
+        .set('X-Forwarded-For', '203.0.113.10')
+        .expect(200);
+    } finally {
+      await limited.close();
+    }
+  });
+});
+
 describe('graceful degradation', () => {
   it('stays ready but reports degraded when Redis is down', async () => {
     await h.redis.stop();
@@ -235,20 +257,5 @@ describe('graceful degradation', () => {
     expect(res.body.checks).toEqual({ postgres: 'up', redis: 'down' });
     // Non-Redis endpoints keep working.
     await http().get('/v1/categories').expect(200);
-  });
-});
-
-describe('rate limiting', () => {
-  it('returns 429 with the RATE_LIMITED envelope after 100 requests/minute', async () => {
-    let last = 200;
-    let body: { error?: { code?: string } } = {};
-    for (let i = 0; i < 130; i++) {
-      const res = await http().get('/v1/categories');
-      last = res.status;
-      body = res.body;
-      if (last === 429) break;
-    }
-    expect(last).toBe(429);
-    expect(body.error?.code).toBe('RATE_LIMITED');
   });
 });

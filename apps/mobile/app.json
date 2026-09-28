@@ -21,6 +21,24 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "plugins": ["expo-router", "expo-localization", "expo-status-bar"]
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      "expo-status-bar",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Haggler uses the camera to take your verification selfie and job photos.",
+          "photosPermission": "Haggler reads photos you choose for verification and job requests."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Haggler uses your location to fill in your address."
+        }
+      ]
+    ]
   }
 }

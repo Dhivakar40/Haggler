@@ -66,8 +66,7 @@ export function SettingsScreen() {
               </Text>
               {Object.entries(status.data.adapters).map(([name, mode]) => (
                 <Text key={name} variant="caption" color="textMuted">
-                  {t(`settings.adapters.${name}`)}:{' '}
-                  {mode === 'sandbox' ? t('settings.adapterSandbox') : t('settings.adapterLive')}
+                  {t(`settings.adapters.${name}`)}: {t(`settings.mode.${mode}`)}
                 </Text>
               ))}
             </View>

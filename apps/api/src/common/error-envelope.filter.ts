@@ -52,6 +52,10 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       this.logger.error({ err: exception, requestId }, 'Unhandled exception');
     }
 
+    const retryAfter = (details as { retryAfterSeconds?: number } | undefined)?.retryAfterSeconds;
+    if (status === 429 && typeof retryAfter === 'number')
+      res.setHeader('Retry-After', String(retryAfter));
+
     const body: ErrorEnvelope = { error: { code, message, details, requestId } };
     res.status(status).json(body);
   }
@@ -67,7 +71,12 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       const response = exception.getResponse();
       // Nest's ValidationPipe puts the field messages in response.message (string[]).
       if (typeof response === 'object' && response !== null) {
-        const r = response as { message?: string | string[]; details?: unknown; error?: string };
+        const r = response as {
+          message?: string | string[];
+          details?: unknown;
+          error?: string;
+          code?: ErrorCode;
+        };
         if (Array.isArray(r.message)) {
           return {
             status,
@@ -78,7 +87,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
         }
         return {
           status,
-          code: codeForStatus(status),
+          code: r.code ?? codeForStatus(status),
           message: r.message ?? exception.message,
           details: r.details,
         };

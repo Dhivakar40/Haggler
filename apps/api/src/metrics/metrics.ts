@@ -10,6 +10,7 @@ import {
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { NextFunction, Request, Response } from 'express';
+import { Public } from '../common/decorators';
 import { collectDefaultMetrics, Histogram, Registry } from 'prom-client';
 
 @Injectable()
@@ -45,6 +46,7 @@ export class HttpMetricsMiddleware implements NestMiddleware {
 
 @ApiExcludeController()
 @SkipThrottle()
+@Public()
 @Controller({ path: 'metrics', version: VERSION_NEUTRAL })
 export class MetricsController {
   constructor(private readonly metrics: MetricsService) {}

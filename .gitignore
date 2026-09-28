@@ -14,3 +14,5 @@ apps/mobile/android/
 apps/mobile/ios/
 
 .claude/
+
+coverage-integration/

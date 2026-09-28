@@ -14,6 +14,10 @@ async function main(): Promise<void> {
   process.env.DATABASE_URL ??= 'postgresql://x:x@localhost:5432/x';
   process.env.REDIS_URL ??= 'redis://localhost:6379';
   process.env.JWT_ACCESS_SECRET ??= 'openapi-generation-only-not-a-secret-000';
+  process.env.ADMIN_JWT_SECRET ??= 'openapi-generation-only-admin-secret-0000';
+  process.env.FIELD_ENCRYPTION_KEY ??= Buffer.alloc(32, 1).toString('base64');
+  process.env.S3_ACCESS_KEY ??= 'openapi';
+  process.env.S3_SECRET_KEY ??= 'openapi';
 
   const app = await NestFactory.create(AppModule, { logger: false });
   configureApp(app);

@@ -1,17 +1,28 @@
 import { adapterModes, EnvValidationError, parseEnv } from './env';
 
-const base = {
+const KEY = Buffer.alloc(32, 7).toString('base64');
+export const baseEnv = {
   DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
   REDIS_URL: 'redis://localhost:6379',
   JWT_ACCESS_SECRET: 'x'.repeat(32),
+  ADMIN_JWT_SECRET: 'y'.repeat(32),
+  FIELD_ENCRYPTION_KEY: KEY,
+  S3_ACCESS_KEY: 'a',
+  S3_SECRET_KEY: 'b',
 };
 
 describe('parseEnv', () => {
-  it('applies defaults and defaults every adapter to sandbox', () => {
-    const env = parseEnv(base);
+  it('applies defaults; adapters default to safe modes', () => {
+    const env = parseEnv(baseEnv);
     expect(env.PORT).toBe(3000);
-    expect(env.NODE_ENV).toBe('development');
-    expect(Object.values(adapterModes(env))).toEqual(Array(6).fill('sandbox'));
+    expect(adapterModes(env)).toEqual({
+      sms: 'sandbox',
+      kyc: 'manual_admin',
+      payments: 'sandbox',
+      calls: 'disabled',
+      push: 'sandbox',
+      maps: 'sandbox',
+    });
   });
 
   it('lists every problem at once', () => {
@@ -21,28 +32,50 @@ describe('parseEnv', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(EnvValidationError);
       const msg = (e as EnvValidationError).message;
-      expect(msg).toContain('DATABASE_URL');
-      expect(msg).toContain('REDIS_URL');
-      expect(msg).toContain('PORT');
-      expect(msg).toContain('JWT_ACCESS_SECRET');
+      for (const k of [
+        'DATABASE_URL',
+        'REDIS_URL',
+        'PORT',
+        'JWT_ACCESS_SECRET',
+        'FIELD_ENCRYPTION_KEY',
+      ]) {
+        expect(msg).toContain(k);
+      }
     }
   });
 
-  it('requires vendor credentials when an adapter is live', () => {
-    expect(() => parseEnv({ ...base, PAYMENTS_MODE: 'live' })).toThrow(/RAZORPAY_KEY_ID/);
+  it('rejects an encryption key that is not 32 bytes', () => {
     expect(() =>
-      parseEnv({
-        ...base,
-        PAYMENTS_MODE: 'live',
-        RAZORPAY_KEY_ID: 'k',
-        RAZORPAY_KEY_SECRET: 's',
-        RAZORPAY_WEBHOOK_SECRET: 'w',
-      }),
-    ).not.toThrow();
+      parseEnv({ ...baseEnv, FIELD_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') }),
+    ).toThrow(/32 bytes/);
+  });
+
+  it('payments test mode needs Razorpay TEST keys and refuses live keys (D-020)', () => {
+    const test = {
+      ...baseEnv,
+      PAYMENTS_MODE: 'test',
+      RAZORPAY_KEY_SECRET: 's',
+      RAZORPAY_WEBHOOK_SECRET: 'w',
+    };
+    expect(() => parseEnv({ ...test, RAZORPAY_KEY_ID: 'rzp_test_abc' })).not.toThrow();
+    expect(() => parseEnv({ ...test, RAZORPAY_KEY_ID: 'rzp_live_abc' })).toThrow(/TEST keys/);
+    expect(() => parseEnv({ ...test })).toThrow(/RAZORPAY_KEY_ID/);
+  });
+
+  it('there is no live payments mode', () => {
+    expect(() => parseEnv({ ...baseEnv, PAYMENTS_MODE: 'live' })).toThrow();
+  });
+
+  it('live SMS needs MSG91 credentials', () => {
+    expect(() => parseEnv({ ...baseEnv, SMS_MODE: 'live' })).toThrow(/MSG91_AUTH_KEY/);
+  });
+
+  it('osm maps need an identifying user agent', () => {
+    expect(() => parseEnv({ ...baseEnv, MAPS_MODE: 'osm' })).toThrow(/NOMINATIM_USER_AGENT/);
   });
 
   it('refuses sandbox adapters in production', () => {
-    expect(() => parseEnv({ ...base, NODE_ENV: 'production' })).toThrow(
+    expect(() => parseEnv({ ...baseEnv, NODE_ENV: 'production' })).toThrow(
       /not allowed when NODE_ENV=production/,
     );
   });

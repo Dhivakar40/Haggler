@@ -47,8 +47,45 @@ export type BadgeTier = (typeof BADGE_TIERS)[number];
 export const PRICE_BAND_SCOPES = ['PINCODE_CLUSTER', 'CITY', 'DEFAULT'] as const;
 export type PriceBandScope = (typeof PRICE_BAND_SCOPES)[number];
 
+export const CONSENT_PURPOSES = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'KYC_PROCESSING'] as const;
+export type ConsentPurposeName = (typeof CONSENT_PURPOSES)[number];
+
+/**
+ * Version of the (placeholder) legal texts users consent to. Bump it when the text changes so
+ * everyone is asked again. Texts are placeholders that counsel must replace (COMPLIANCE.md).
+ */
+export const LEGAL_VERSION = '2026-09-placeholder-1';
+
+export const KYC_DOCUMENT_TYPES = [
+  'AADHAAR_FRONT',
+  'AADHAAR_BACK',
+  'SELFIE',
+  'ADDRESS_PROOF',
+  'TRADE_LICENSE',
+] as const;
+export type KycDocumentTypeName = (typeof KYC_DOCUMENT_TYPES)[number];
+
+export const KYC_CHECK_STATUSES = [
+  'DRAFT',
+  'PENDING_REVIEW',
+  'NEEDS_INFO',
+  'APPROVED',
+  'REJECTED',
+] as const;
+export type KycCheckStatusName = (typeof KYC_CHECK_STATUSES)[number];
+
+export const MAX_EMERGENCY_CONTACTS = 5;
+export const MAX_ADDRESSES = 10;
+export const MAX_WORKER_CATEGORIES = 5;
+export const MIN_ADULT_AGE = 18;
+
 /** Machine-readable error codes returned in the error envelope. */
 export const ERROR_CODES = {
+  OTP_INVALID: 'OTP_INVALID',
+  ACCOUNT_UNAVAILABLE: 'ACCOUNT_UNAVAILABLE',
+  CONSENT_REQUIRED: 'CONSENT_REQUIRED',
+  UNDERAGE: 'UNDERAGE',
+  UNPROCESSABLE: 'UNPROCESSABLE',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   FORBIDDEN: 'FORBIDDEN',

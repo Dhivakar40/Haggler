@@ -2,6 +2,7 @@ import { Controller, Get, HttpStatus, Res, VERSION_NEUTRAL } from '@nestjs/commo
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
+import { Public } from '../common/decorators';
 import { adapterModes } from '../config/env';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +17,7 @@ import { RedisService } from '../redis/redis.service';
  */
 @ApiTags('health')
 @SkipThrottle()
+@Public()
 @Controller({ path: 'health', version: VERSION_NEUTRAL })
 export class HealthController {
   constructor(

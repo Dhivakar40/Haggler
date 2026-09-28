@@ -57,3 +57,41 @@ See `apps/api/prisma/schema.prisma` and `docs/DECISIONS.md` (D-001, D-002, D-008
 - Preferences (theme, language) persist locally; no server round trip.
 - Every user-facing string comes from i18n keys; tests enforce identical key sets across
   en/hi/ta/kn/te and forbid the word "worker" (D-003).
+
+# Phase 1 additions
+
+## Identity and sessions
+
+```
+ phone ──otp/send──▶ [limits: 30 s cooldown · 5/h/phone · 20/h/IP · lockout after 10 wrong codes]
+   │                    Redis first, Postgres fallback (otp_attempts)          ┌──────────────┐
+   │                    code = 6 digits, HMAC-hashed, 5 min TTL ─────────────▶│ SmsProvider  │ sandbox | MSG91
+   └──otp/verify──▶ atomic single-use claim ─▶ user (created on first sign-in) └──────────────┘
+                     └─▶ device bound ─▶ access JWT (15 min) + rotating refresh token (hashed, per-family)
+```
+
+- **Global guards**, in order: throttler (Redis-backed, per IP) → `JwtAuthGuard` (every route unless
+  `@Public()`; re-reads account status and roles from the DB each request) → `RolesGuard` (`@Roles`).
+- **Refresh rotation**: each use retires the token and issues the next in the same family; presenting
+  a retired token revokes the family (theft detection). Tokens are bound to the device id.
+- Admin tokens use a **different secret and audience**, so a user token can never open an admin
+  route and vice versa.
+
+## Verification (manual review, D-016)
+
+```
+Ranger phone ──1 presign──▶ API ──signed PUT url (5 min, size+type bound)──▶ phone
+      │                                                                        │
+      └──2 PUT file ────────────────────────────────────────────────────────▶ private bucket (MinIO/S3)
+      └──3 confirm ──▶ API checks the object exists at the declared size
+      └──4 submit ───▶ KycProvider(manual_admin) ─▶ status PENDING_REVIEW ─▶ admin queue
+Admin (Next.js, httpOnly cookie) ─ views images side by side (2-min links, each view audit-logged)
+      └─ approve (needs DOB + Aadhaar last 4; under-18 refused) | reject (reason) | request info
+```
+
+`kyc_checks.provider` is `manual_admin`; a vendor adapter can replace it without a schema change.
+
+## Admin app (`apps/admin`)
+
+Server components and actions call the API; the token lives in an httpOnly, SameSite=Strict cookie
+so page scripts cannot read it. CSP allows images only from this origin and the storage host.

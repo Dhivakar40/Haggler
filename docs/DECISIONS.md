@@ -63,3 +63,84 @@ Redis-backed limits (per phone and per IP for OTP) so limits hold across instanc
 real screen. Scaffolding an empty Next app now would be a dummy shell.
 
 **D-015 Cursor pagination, not OFFSET.** Helper in `packages/shared/src/pagination.ts`, tested.
+
+## Phase 1 (changes requested by the product owner before Phase 1 started)
+
+**D-016 ⚠ KYC is manual admin review; no paid vendor.** Replaces the Part C "Aadhaar eKYC +
+face match + background-check vendor" adapters. A Ranger uploads Aadhaar photos (front/back)
+and a camera selfie through the presigned-upload pipeline; an admin compares them side by side
+and approves, rejects (with reason) or requests more info. No automated eKYC, face match or
+background check runs. Data still lands in `kyc_checks` / `kyc_documents` / `kyc_reviews` with
+`provider = 'manual_admin'`, so a vendor adapter can be added later without a schema change
+(`KycProvider` interface, one implementation). Consequences:
+
+- Tier 2's "background check" is **not performed**; Tier 2 = address proof + a professional
+  reference whose verification call an admin logs. This is a weaker guarantee than the brief and
+  is recorded in COMPLIANCE.md.
+- Face match is a human judgment, so it does not scale and is only as good as the reviewer.
+- The selfie is taken with the camera (no gallery) in the app, but the server cannot prove liveness.
+
+**D-017 Aadhaar images: masked copies only, short retention, field encryption.** Storing an
+unmasked Aadhaar card image conflicts with the "never store the full number" rule (D12). So the
+app tells users to upload the UIDAI **masked** Aadhaar (first 8 digits hidden), the admin types the
+last 4 digits and date of birth (stored AES-256-GCM encrypted, `FIELD_ENCRYPTION_KEY`), images live
+in a private bucket and are deleted `kyc_image_retention_days` (default 30) after the decision.
+Admin views of images are audit-logged. **Counsel must still confirm this is acceptable**, because a
+user can upload an unmasked card despite the instruction.
+
+**D-018 Age gate at approval.** An admin cannot approve Tier 1 without entering a date of birth,
+and the API refuses approval when the person is under 18 (hard block, tested).
+
+**D-019 ⚠ Masked calling dropped from Phase 1.** No Exotel adapter. In-app chat only (Phase 2).
+The `call_sessions` table and a `CallProvider` interface exist so the adapter can be added later.
+`CALLS_MODE` is `disabled`.
+
+**D-020 ⚠ Payments: Razorpay TEST mode only.** `PAYMENTS_MODE` is `sandbox` (in-process fake) or
+`test` (real Razorpay API, `rzp_test_` keys). The API refuses to boot in `test` mode with a key that
+does not start with `rzp_test_`; there is no `live` value. Moving to live payments needs an explicit
+code change plus a new decision.
+
+**D-021 ⚠ Maps: OpenStreetMap + MapLibre instead of Google Maps.** Google Maps needs a billing
+account with a card even for free-tier use, and Places/Geocoding are metered, which is billing
+exposure for a student project. Map _rendering_ arrives with tracking in Phase 2 (MapLibre). For now
+`MapsProvider` has `sandbox` (no geocoding; clients send coordinates from device GPS) and `osm`
+(Nominatim geocoding, no key). Nominatim's public server forbids heavy use and autocomplete, and
+public OSM tiles are for light use only, so **production needs a hosted geocoder/tile provider**
+(self-hosted Nominatim/Photon, MapTiler, or Protomaps). The interface makes that a swap.
+
+**D-022 Rate limits live in Redis with a database fallback.** The global throttler now uses Redis
+storage (falls back to memory if Redis is down). OTP limits are Redis-first and fall back to counting
+`otp_attempts` rows in Postgres when Redis is unavailable, so an outage never removes the brake
+(closes D-013).
+
+**D-023 Sessions.** Access JWT 15 min. Refresh tokens are opaque random values, stored as SHA-256
+hashes, rotated on every use, grouped in a family. Presenting an already-used refresh token revokes
+the whole family (theft detection). Refresh is bound to the device id used at sign-in. Two truly
+simultaneous refreshes of one token will be treated as reuse; the client single-flights refresh.
+
+**D-024 Account deletion.** `DELETE /me` marks the account `DELETION_PENDING`, revokes all sessions
+and blocks sign-in. After 30 days `purge` anonymises the user and deletes addresses, contacts,
+devices, consents' personal fields and KYC files. Audit logs stay (immutable, no direct identifiers).
+Purge runs from a script/service method for now; the BullMQ schedule arrives with the queue in Phase 2.
+
+**D-025 Admin auth.** Email + password (scrypt, per-user salt), 30-minute JWT with a separate audience
+so a user token can never act as an admin. The Next.js admin keeps the token in an httpOnly cookie and
+calls the API from server components/actions, so page scripts never see it. Roles: KYC_REVIEWER,
+DISPUTE_AGENT, FINANCE, SUPER_ADMIN; KYC decisions need KYC_REVIEWER or SUPER_ADMIN.
+
+**D-026 Only some profile tables in Phase 1.** `worker_profiles`, `worker_categories`,
+`emergency_contacts`, `consents`, `professional_references` are created. `customer_profiles` would be
+an empty table today (name/photo live on `users`), so it waits until it has fields. `employer_profiles`
+and `student_profiles` arrive in Phases 6-7. Role `STUDENT` cannot be added yet.
+
+**D-027 Two layers of rate limiting on auth routes.** A coarse per-IP flood guard (30 requests/min,
+Redis-backed) sits above the precise OTP quotas (30 s cooldown, 5/hour/phone, 20/hour/IP, lockout).
+The flood guard is deliberately looser so the quota, which gives the useful message and
+`Retry-After`, trips first. Lesson recorded: the throttler trusts its _storage_ to say `isBlocked`.
+Our first Redis storage forgot to, so the global limiter blocked nothing until an integration test
+caught it. The blocking rule now has its own unit tests, including the Redis-down fallback.
+
+**D-028 Known gaps carried forward (Phase 1).** No scheduled trim of `otp_attempts` / expired
+`refresh_tokens`; the two purge jobs are scripts, not yet scheduled; FIELD_ENCRYPTION_KEY rotation is
+not implemented; the admin decision form is covered by unit tests of its parser plus a scripted
+end-to-end run, not by a browser test; the MSG91 adapter is untested against MSG91.

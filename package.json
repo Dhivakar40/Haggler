@@ -22,7 +22,8 @@
     "db:seed": "pnpm --filter @haggler/api db:seed",
     "api:dev": "pnpm build:shared && pnpm --filter @haggler/api start:dev",
     "mobile:start": "pnpm --filter @haggler/mobile start",
-    "openapi": "pnpm build:shared && pnpm --filter @haggler/api openapi"
+    "openapi": "pnpm build:shared && pnpm --filter @haggler/api openapi",
+    "admin:dev": "pnpm --filter @haggler/admin dev"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

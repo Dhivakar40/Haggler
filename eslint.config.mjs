@@ -7,6 +7,8 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/.next/**',
+      '**/next-env.d.ts',
       '**/coverage/**',
       '**/.expo/**',
       '**/*.config.js',
@@ -21,7 +23,10 @@ export default tseslint.config(
   prettier,
   {
     rules: {
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
       '@typescript-eslint/consistent-type-imports': 'error',
       'no-console': 'error',
     },
