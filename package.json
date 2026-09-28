@@ -1,0 +1,35 @@
+{
+  "name": "haggler",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:shared": "pnpm --filter @haggler/shared build",
+    "build": "pnpm build:shared && pnpm --filter @haggler/api build",
+    "typecheck": "pnpm build:shared && pnpm -r --parallel typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm build:shared && pnpm -r test",
+    "test:unit": "pnpm build:shared && pnpm -r test:unit",
+    "test:integration": "pnpm build:shared && pnpm --filter @haggler/api test:integration",
+    "dev:infra": "docker compose up -d",
+    "dev:infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @haggler/api db:migrate",
+    "db:seed": "pnpm --filter @haggler/api db:seed",
+    "api:dev": "pnpm build:shared && pnpm --filter @haggler/api start:dev",
+    "mobile:start": "pnpm --filter @haggler/mobile start",
+    "openapi": "pnpm build:shared && pnpm --filter @haggler/api openapi"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "~5.7.2",
+    "typescript-eslint": "^8.19.0"
+  }
+}

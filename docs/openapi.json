@@ -1,0 +1,109 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Readiness probe; also reports which adapters are sandbox vs live",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/categories": {
+      "get": {
+        "operationId": "CatalogController_categories_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of { id, slug, nameKey, icon, requiresLicense }"
+          }
+        },
+        "summary": "List active service categories (public)",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/price-bands": {
+      "get": {
+        "description": "Resolves the most local trusted band: pincode cluster, then city, then seeded default. `scope` and `isSeededDefault` tell the client which one was used.",
+        "operationId": "CatalogController_priceBand_v1",
+        "parameters": [
+          {
+            "name": "city",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "Chennai"
+            }
+          },
+          {
+            "name": "pincode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "600042"
+            }
+          },
+          {
+            "name": "category",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": "electrician"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A PriceBandDto"
+          }
+        },
+        "summary": "Price band (min/median/max, integer paise) for a category and area",
+        "tags": [
+          "catalog"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Haggler API",
+    "description": "REST API for Haggler. Money is integer paise. Errors use the envelope { error: { code, message, details?, requestId } }. Workers are called \"Rangers\" in the app.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {}
+  }
+}

@@ -1,0 +1,56 @@
+name: haggler
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: haggler
+      POSTGRES_PASSWORD: haggler_dev_pw
+      POSTGRES_DB: haggler
+    ports:
+      - '5433:5432' # 5433 so it never clashes with a Postgres installed on your machine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U haggler -d haggler']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Dev-only S3-compatible store. Production uses AWS S3 or Cloudflare R2 (same client code).
+  # bitnamilegacy image: MinIO stopped publishing images to Docker Hub/Quay.
+  # MINIO_DEFAULT_BUCKETS creates the two private buckets on first start.
+  minio:
+    image: bitnamilegacy/minio:2025.7.23
+    environment:
+      MINIO_ROOT_USER: haggler
+      MINIO_ROOT_PASSWORD: haggler_dev_pw
+      MINIO_DEFAULT_BUCKETS: haggler-media,haggler-kyc
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # web console
+    volumes:
+      - miniodata:/bitnami/minio/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

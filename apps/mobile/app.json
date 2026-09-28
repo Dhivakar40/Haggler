@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Haggler",
+    "slug": "haggler",
+    "scheme": "haggler",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.haggler.app"
+    },
+    "android": {
+      "package": "com.haggler.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F766E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": ["expo-router", "expo-localization", "expo-status-bar"]
+  }
+}

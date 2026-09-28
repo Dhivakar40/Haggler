@@ -1,0 +1,294 @@
+// Haggler foundation schema (Phase 0).
+// Conventions:
+//  - Table/column names are snake_case in the DB via @@map/@map.
+//  - Money is integer paise. Never floats.
+//  - Internal role name is WORKER; the UI calls it "Ranger" (docs/DECISIONS.md D-003).
+//  - Geo columns use PostGIS `geography(Point,4326)`; Prisma can't model them, so they are
+//    `Unsupported` and read/written with raw SQL. GIST indexes live in the raw SQL migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleType {
+  CUSTOMER
+  WORKER
+  EMPLOYER
+  STUDENT
+
+  @@map("role_type")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETION_PENDING
+  DELETED
+
+  @@map("user_status")
+}
+
+enum PriceBandScope {
+  PINCODE_CLUSTER
+  CITY
+  DEFAULT
+
+  @@map("price_band_scope")
+}
+
+enum AdminRoleType {
+  KYC_REVIEWER
+  DISPUTE_AGENT
+  FINANCE
+  SUPER_ADMIN
+
+  @@map("admin_role_type")
+}
+
+enum ActorType {
+  ADMIN
+  USER
+  SYSTEM
+
+  @@map("actor_type")
+}
+
+model User {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone             String       @unique
+  phoneVerifiedAt   DateTime?    @map("phone_verified_at") @db.Timestamptz(6)
+  fullName          String?      @map("full_name")
+  photoUrl          String?      @map("photo_url")
+  preferredLanguage String       @default("en") @map("preferred_language")
+  languages         String[]     @default(["en"])
+  status            UserStatus   @default(ACTIVE)
+  deletionRequestedAt DateTime?  @map("deletion_requested_at") @db.Timestamptz(6)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  roles         UserRole[]
+  devices       Device[]
+  refreshTokens RefreshToken[]
+  addresses     Address[]
+
+  @@map("users")
+}
+
+model UserRole {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      RoleType
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+model Device {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  deviceId   String    @map("device_id") // client-generated stable id (device binding)
+  platform   String
+  pushToken  String?   @map("push_token")
+  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@unique([userId, deviceId])
+  @@map("devices")
+}
+
+/// Rotating refresh tokens. Only a SHA-256 hash is stored. `familyId` groups a rotation
+/// chain so reuse of an old token can revoke the whole family (theft detection).
+model RefreshToken {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  deviceRefId  String?   @map("device_ref_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  familyId     String    @map("family_id") @db.Uuid
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device? @relation(fields: [deviceRefId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model OtpAttempt {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone      String
+  codeHash   String    @map("code_hash")
+  ip         String?
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  failedTries Int      @default(0) @map("failed_tries")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([phone, createdAt(sort: Desc)])
+  @@index([ip, createdAt(sort: Desc)])
+  @@map("otp_attempts")
+}
+
+model Address {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  label     String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  /// geography(Point,4326); read/write via raw SQL (ST_MakePoint(lng, lat)).
+  location  Unsupported("geography(Point,4326)")?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([pincode])
+  @@map("addresses")
+}
+
+model ServiceCategory {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug            String   @unique
+  /// i18n key, e.g. "categories.electrician". The app translates it.
+  nameKey         String   @map("name_key")
+  icon            String
+  requiresLicense Boolean  @default(false) @map("requires_license") // Tier 3 (D2)
+  isActive        Boolean  @default(true) @map("is_active")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  priceBands PriceBand[]
+
+  @@map("service_categories")
+}
+
+model PriceBand {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId     String         @map("category_id") @db.Uuid
+  scope          PriceBandScope
+  city           String?
+  /// First 3 digits of the PIN code (the "cluster"); only for scope PINCODE_CLUSTER.
+  pincodePrefix  String?        @map("pincode_prefix")
+  minPaise       Int            @map("min_paise")
+  medianPaise    Int            @map("median_paise")
+  maxPaise       Int            @map("max_paise")
+  /// Completed jobs the band was computed from. 0 means a seeded default.
+  sampleSize     Int            @default(0) @map("sample_size")
+  computedAt     DateTime       @default(now()) @map("computed_at") @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId, scope])
+  @@map("price_bands")
+}
+
+model AdminUser {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  roles AdminRole[]
+
+  @@map("admin_users")
+}
+
+model AdminRole {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminUserId String        @map("admin_user_id") @db.Uuid
+  role        AdminRoleType
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, role])
+  @@map("admin_roles")
+}
+
+/// Append-only (enforced by a trigger in the migration: UPDATE/DELETE raise).
+model AuditLog {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorType  ActorType @map("actor_type")
+  actorId    String?   @map("actor_id") @db.Uuid
+  action     String
+  entityType String    @map("entity_type")
+  entityId   String?   @map("entity_id")
+  before     Json?
+  after      Json?
+  ip         String?
+  requestId  String?   @map("request_id")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId])
+  @@index([actorType, actorId])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model FeatureFlag {
+  key            String   @id
+  enabled        Boolean  @default(false)
+  rolloutPercent Int      @default(100) @map("rollout_percent")
+  description    String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("feature_flags")
+}
+
+model SystemConfig {
+  key         String   @id
+  value       Json
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("system_config")
+}
+
+/// Legal counsel must confirm every row before launch (docs/COMPLIANCE.md). Intentionally
+/// NOT seeded: inventing wage numbers would be fake data.
+model MinimumWageRule {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state              String
+  tradeSlug          String   @map("trade_slug")
+  dailyWagePaise     Int      @map("daily_wage_paise")
+  effectiveFrom      DateTime @map("effective_from") @db.Date
+  source             String?
+  verifiedByCounsel  Boolean  @default(false) @map("verified_by_counsel")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([state, tradeSlug, effectiveFrom])
+  @@map("minimum_wage_rules")
+}
