@@ -32,5 +32,10 @@
     "prettier": "^3.4.2",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.19.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": ">=8.0.0"
+    }
   }
 }
