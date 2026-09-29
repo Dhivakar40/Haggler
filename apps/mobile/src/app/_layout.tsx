@@ -10,12 +10,15 @@ import { TrackerHost } from '../features/work/TrackerHost';
 import { defineBackgroundTask } from '../location/tracker';
 import { RealtimeProvider } from '../realtime/RealtimeProvider';
 import i18n, { deviceLanguage } from '../i18n';
+import { configureNotificationHandler } from '../notifications/push';
+import { usePushRegistration } from '../notifications/usePushRegistration';
 import { useSettings } from '../store/settings';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
 
 // The OS can wake this task with new positions even when no screen is showing, so it is
 // registered at startup rather than inside a component.
 defineBackgroundTask();
+configureNotificationHandler();
 
 /** Keeps i18next in step with the saved language (or the device language when unset). */
 function useLanguageSync(): void {
@@ -116,6 +119,7 @@ export default function RootLayout() {
   const hydrated = useSettingsHydrated();
   const status = useSession((s) => s.status);
   useLanguageSync();
+  usePushRegistration(status === 'signedIn');
 
   useEffect(() => {
     void useSession.getState().bootstrap();

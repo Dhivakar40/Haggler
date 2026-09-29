@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ConsentInput, Me, ProfileUpdate } from '@haggler/shared';
+import type { ConsentInput, Me, ProfileUpdate, RegisterPushTokenInput } from '@haggler/shared';
 import { CONSENT_PURPOSES, LEGAL_VERSION } from '@haggler/shared';
 import { conflict, notFound, unprocessable } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
@@ -44,6 +44,20 @@ export class UsersService {
   async updateProfile(userId: string, input: ProfileUpdate): Promise<Me> {
     await this.prisma.user.update({ where: { id: userId }, data: input });
     return this.getMe(userId);
+  }
+
+  /**
+   * Records a device's Expo/FCM push token (Phase 5). The device row itself is created at
+   * sign-in (`AuthService.verifyOtp`); a stranger's `deviceId` guessed at this endpoint simply
+   * matches no row for this user and updates nothing — it can never attach a token to someone
+   * else's device.
+   */
+  async registerPushToken(userId: string, input: RegisterPushTokenInput): Promise<{ ok: true }> {
+    await this.prisma.device.updateMany({
+      where: { userId, deviceId: input.deviceId },
+      data: { pushToken: input.pushToken, lastSeenAt: new Date() },
+    });
+    return { ok: true };
   }
 
   /** Adds a role. Adding WORKER (Ranger) also creates the Ranger profile. */

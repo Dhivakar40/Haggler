@@ -78,7 +78,12 @@ export class ChatService {
     const dto = toDto(row);
     if (created) {
       const other = t.job.customerId === userId ? t.job.workerId : t.job.customerId;
-      if (other) this.realtime.emitToUser(other, SOCKET_EVENTS.chat, dto);
+      if (other)
+        this.realtime.emitToUser(other, SOCKET_EVENTS.chat, dto, {
+          title: 'New message',
+          body: input.body.slice(0, 120),
+          data: { jobId: t.job.id, type: 'chat' },
+        });
     }
     return dto;
   }

@@ -15,6 +15,19 @@ jest.mock('expo-secure-store', () => {
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'test-device-uuid-0001') }));
 
+// Push notifications: default to "no device, no permission" so tests that don't care about push
+// (almost all of them) never try to touch a real notification service. Tests that DO care mock
+// these modules themselves with a narrower, test-local jest.mock.
+jest.mock('expo-device', () => ({ isDevice: false }));
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn(async () => undefined),
+  getPermissionsAsync: jest.fn(async () => ({ status: 'undetermined' })),
+  requestPermissionsAsync: jest.fn(async () => ({ status: 'denied' })),
+  getDevicePushTokenAsync: jest.fn(async () => ({ data: 'test-push-token' })),
+  AndroidImportance: { DEFAULT: 3 },
+}));
+
 // Navigation is exercised through a shared spy router.
 jest.mock('expo-router', () => {
   const router = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };

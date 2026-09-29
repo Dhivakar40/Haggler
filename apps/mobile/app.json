@@ -48,6 +48,13 @@
           "microphonePermission": "Haggler records the voice note you attach to a request."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-foreground.png",
+          "color": "#0F766E"
+        }
+      ],
       "@maplibre/maplibre-react-native"
     ]
   }

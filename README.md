@@ -3,13 +3,13 @@
 A mobile marketplace for India: verified local **Rangers** (independent workers) for on-demand
 services, plus long-term contract labour and part-time student jobs, on one trust layer.
 
-> **Status: Phase 4 (Reputation & Trust) complete.** Everything in Phases 1–3, plus: once a job is
-> confirmed complete, both the customer and the Ranger can rate each other (1–5 stars, one each);
-> a Ranger's badge tier (Bronze → Diamond) is now computed from real jobs-completed and rating
-> data instead of sitting at Bronze forever; anyone can block another user, which the matching
-> engine already excluded from broadcasts since Phase 2; and the app shows real (placeholder)
-> Grievance Officer contact details. **Rangers are still never charged anything** (D-037,
-> unchanged since Phase 3).
+> **Status: Phase 5 (Push notifications & realtime scale-out) complete.** Everything in Phases
+> 1–4, plus: a Ranger no longer needs the app open to see a new job — new broadcasts, matches,
+> status changes and chat messages now reach a backgrounded phone as a real push notification
+> (sandbox by default; FCM in `live` mode) whenever that device has no socket connected right now.
+> Socket.IO also runs the Redis adapter, so realtime events reach every connected client even if
+> more than one API instance is ever run (D-031/D-053). **Rangers are still never charged
+> anything** (D-037, unchanged since Phase 3).
 
 ## Stack
 
@@ -69,14 +69,14 @@ API keep the name `WORKER` (see [D-003](docs/DECISIONS.md)).
 
 ## Adapters: what is real and what is a stand-in
 
-| Adapter  | Modes              | Today                                                                                                         |
-| -------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| SMS      | `sandbox` / `live` | Sandbox. The MSG91 adapter exists but is **untested** against MSG91                                           |
-| KYC      | `manual_admin`     | Humans review documents. No automated eKYC/face-match/background check                                        |
-| Payments | `sandbox` / `test` | Razorpay **test keys only** (no live mode); mobile Checkout UI only wired up for `sandbox`                    |
-| Calls    | `disabled`         | Masked calling is not built; in-app chat only (built in Phase 2)                                              |
-| Push     | `sandbox` / `live` | Sandbox until Phase 5 — a Ranger must have the app open to see requests                                       |
-| Maps     | `sandbox` / `osm`  | OpenStreetMap + MapLibre; public tile server is dev-only (needs a dev build, not Expo Go, to render natively) |
+| Adapter  | Modes              | Today                                                                                                                                                      |
+| -------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SMS      | `sandbox` / `live` | Sandbox. The MSG91 adapter exists but is **untested** against MSG91                                                                                        |
+| KYC      | `manual_admin`     | Humans review documents. No automated eKYC/face-match/background check                                                                                     |
+| Payments | `sandbox` / `test` | Razorpay **test keys only** (no live mode); mobile Checkout UI only wired up for `sandbox`                                                                 |
+| Calls    | `disabled`         | Masked calling is not built; in-app chat only (built in Phase 2)                                                                                           |
+| Push     | `sandbox` / `live` | Sandbox by default. `live` calls Firebase (FCM) directly with a raw device token (Android; iOS not wired, D-051). Untested against a real Firebase project |
+| Maps     | `sandbox` / `osm`  | OpenStreetMap + MapLibre; public tile server is dev-only (needs a dev build, not Expo Go, to render natively)                                              |
 
 The active modes show at `/health/ready` and in the app's Settings. Production refuses to boot
 with a sandbox adapter.

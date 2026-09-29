@@ -362,3 +362,50 @@ individually); this was explicitly out of scope this phase (see D-047's "no cust
 product surface" note). The Grievance Officer contact details are placeholders (name/email/phone)
 per COMPLIANCE.md checklist item 8 — ops must appoint a real one before launch. Badge tier
 thresholds (D-045) are placeholders pending product/ops review, same status as price bands.
+
+## Phase 5
+
+**D-050 Push copy is not localised yet.** `job-transitions.service.ts::STATUS_PUSH` and the push
+payloads built inline in `matching.service.ts`/`chat.service.ts` are plain English strings, not
+i18next keys — the app's real translations (hi/ta/kn/te) live client-side only, and a push
+notification is composed and sent entirely server-side (there is no client round-trip to translate
+it before delivery). A Ranger or customer whose device language isn't English gets an English push
+today. Fixing this needs either duplicating the relevant i18n strings server-side (drift risk) or a
+translation service call at send time (cost + latency); explicitly deferred, not silently missed.
+
+**D-051 The live push adapter targets raw FCM tokens, not Expo's hosted push relay, and Android
+only for now.** The mobile app registers `Notifications.getDevicePushTokenAsync()` (the raw FCM
+registration id on Android, the raw APNs device token on iOS) rather than
+`getExpoPushTokenAsync()`, and the API's `FcmPushProvider` calls Firebase's Admin SDK
+(`sendEachForMulticast`) directly with that raw token. This was chosen over Expo's own push relay
+(`exp.host/--/api/v2/push/send`) because the project already needs a dev build for MapLibre (D:
+Runbook), so nothing is lost by also skipping Expo Go's push path, and it avoids a second external
+service dependency and its own access-token management. **Not done**: an iOS APNs device token
+needs to be registered with FCM's APNs bridge (or sent to APNs directly) before it is usable, which
+`FcmPushProvider` does not do — iOS push is unwired until that's built. `FcmPushProvider` itself is
+untested against a real Firebase project (no service account has been created yet), same caveat as
+`Msg91SmsProvider` (D-018-ish) and `RazorpayPaymentsProvider` (D-040).
+
+**D-052 A push notification is sent only when the recipient has no socket connected right now, not
+on every event.** `RealtimeService.emitToUser(..., push?)` checks `socketCount()` (cluster-wide,
+via the Redis adapter when attached — see below) before calling `NotificationsService.notify()`,
+so a foregrounded app talking to its socket never gets a redundant, interrupting push for
+something it just saw over the wire. This is a point-in-time check, not a guarantee: a socket that
+drops a moment after the check (a phone locking, going out of signal) can still miss the update
+without a push arriving — acceptable because state always lives in Postgres and the app re-reads it
+on reconnect (same principle as the socket layer itself, Phase 2). Not every event carries a push
+payload — `STATUS_PUSH` deliberately omits NEGOTIATING/AGREED (offers.service's own event covers
+that exchange) and the Ranger side of a match (the Ranger just tapped "accept"; they don't need to
+be told their own action happened).
+
+**D-053 Socket.IO now runs the Redis adapter (`@socket.io/redis-adapter`), closing D-031.**
+`main.ts` attaches `RedisIoAdapter` (in `realtime/redis-io.adapter.ts`) at boot, which duplicates
+the app's Redis connection for a dedicated pub/sub pair. `server.to(room).emit(...)` now reaches
+every API instance's sockets, not just the process that received the request, so running more than
+one API instance in production no longer silently drops realtime events for clients connected to a
+different instance. Consistent with D-006 (Redis is an accelerator, not the source of truth): if
+Redis can't be reached at boot, `connectToRedis()` logs a warning and falls back to Socket.IO's
+default in-memory adapter — today's single-instance behaviour — rather than failing to start.
+**Not done**: this makes multi-instance realtime possible, but nothing in the deployment story
+(RUNBOOK) yet actually runs more than one instance; that's still a future ops decision, this only
+removes the code-level blocker.

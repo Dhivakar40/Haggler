@@ -212,3 +212,37 @@ The matching exclusion (`presence.service.ts`'s candidate query checks both dire
 since Phase 2; this phase adds `GET/POST /me/blocks` and `DELETE /me/blocks/:userId`. Blocking is an
 idempotent upsert (blocking twice updates the reason, never errors) and one-directional to create,
 but protects both people because the matching query already checks both directions (D-047).
+
+## Push notifications (`src/notifications`, `src/adapters/push`)
+
+```
+RealtimeService.emitToUser(userId, event, payload, push?)
+   │  always: server.to(`user:${userId}`).emit(event, payload)   [Phase 2, unchanged]
+   │  if push given:
+   ▼
+socketCount(userId) via server.in(room).fetchSockets()  [cluster-wide, via the Redis adapter below]
+   │  > 0 sockets  ──▶ done: the app is reachable live, a push would just be noise
+   │  = 0 sockets  ──▶ NotificationsService.notify(userId, push)
+   ▼                      │  loads every `devices` row for userId with a non-null pushToken
+   PUSH_PROVIDER          │  PUSH_PROVIDER.send(tokens, message)
+   (sandbox | FCM)        │  dead tokens the provider reports ──▶ devices.pushToken = null
+```
+
+Call sites that pass a `push` payload: `matching.service.ts` (new broadcast, matched, timed out),
+`job-transitions.service.ts::STATUS_PUSH` (EN_ROUTE, ARRIVED, CONFIRMED_BY_CUSTOMER, CANCELLED,
+NO_SHOW_*), `chat.service.ts` (a new message). NEGOTIATING/AGREED are deliberately excluded — the
+offer flow has its own `offerUpdated` socket event and no push copy was written for it yet.
+
+The mobile app registers its token via `PATCH /v1/me/push-token` (`usePushRegistration`, called
+once per session from `_layout.tsx`) using `expo-notifications`' raw device token
+(`getDevicePushTokenAsync`), not Expo's own hosted push relay — see D-051 for why, and its Android
+only/untested-against-real-Firebase caveats.
+
+## Realtime at scale: the Socket.IO Redis adapter (`src/realtime/redis-io.adapter.ts`)
+
+`main.ts` attaches `RedisIoAdapter` at boot, which duplicates the app's Redis connection into a
+pub/sub pair and hands it to `@socket.io/redis-adapter`. This makes `server.to(room).emit(...)`
+(the one choke point `RealtimeService` already used) reach sockets on every API instance, not just
+the process handling the current request — closing D-031. If Redis can't be reached at boot, it
+falls back to Socket.IO's default in-memory adapter (today's single-instance behaviour) rather than
+failing to start, consistent with D-006 (Redis is an accelerator, never the source of truth).

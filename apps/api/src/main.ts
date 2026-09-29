@@ -5,6 +5,8 @@ import { AppModule } from './app.module';
 import { configureApp, mountSwagger } from './app.setup';
 import { adapterModes } from './config/env';
 import { EnvService } from './config/env.service';
+import { RedisIoAdapter } from './realtime/redis-io.adapter';
+import { RedisService } from './redis/redis.service';
 
 async function bootstrap(): Promise<void> {
   // rawBody: true keeps the exact request bytes on req.rawBody, needed to verify the Razorpay
@@ -12,6 +14,12 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   configureApp(app);
   mountSwagger(app);
+
+  // D-031: lets Socket.IO broadcast across API instances via Redis pub/sub, falling back to the
+  // default in-memory adapter (single-instance) if Redis can't be reached at boot.
+  const redisIoAdapter = new RedisIoAdapter(app, app.get(RedisService));
+  await redisIoAdapter.connectToRedis();
+  app.useWebSocketAdapter(redisIoAdapter);
 
   const { env } = app.get(EnvService);
   await app.listen(env.PORT, '0.0.0.0');

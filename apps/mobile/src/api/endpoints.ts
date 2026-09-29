@@ -13,6 +13,7 @@ import {
   type KycSubmitInput,
   meSchema,
   type ProfileUpdate,
+  type RegisterPushTokenInput,
   type WorkerProfileUpdate,
   workerProfileSchema,
 } from '@haggler/shared';
@@ -47,6 +48,13 @@ export const verifyOtp = (input: {
 
 export const updateProfile = (body: ProfileUpdate) =>
   apiRequest('/v1/me', { method: 'PATCH', body, schema: meSchema });
+
+export const registerPushToken = (body: RegisterPushTokenInput) =>
+  apiRequest('/v1/me/push-token', {
+    method: 'PATCH',
+    body,
+    schema: z.object({ ok: z.literal(true) }),
+  });
 
 export const addRole = (role: 'CUSTOMER' | 'WORKER' | 'EMPLOYER') =>
   apiRequest('/v1/me/roles', { method: 'POST', body: { role }, schema: meSchema });

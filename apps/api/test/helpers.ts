@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { SandboxSmsProvider } from '../src/adapters/sms/sms.provider';
+import { SandboxPushProvider } from '../src/adapters/push/push.provider';
 import { hashPassword } from '../src/common/crypto';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -27,6 +28,7 @@ export class Api {
   readonly http = () => request(this.app.getHttpServer());
   readonly prisma = () => this.app.get(PrismaService);
   readonly sms = () => this.app.get(SandboxSmsProvider, { strict: false });
+  readonly push = () => this.app.get(SandboxPushProvider, { strict: false });
 
   /** Skip the 30 s resend cooldown legitimately, by ageing the phone's stored codes. */
   async ageOtps(phone: string, seconds = 60) {

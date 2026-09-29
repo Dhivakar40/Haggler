@@ -56,9 +56,9 @@ check the BullMQ failed-job set (below) if a retention deadline looks like it wa
   ticks by hand.
 - `PUBLIC_BASE_URL` is the base used to build the public live-tracking link (`/t/:token`) that customers
   share; set it to the real public URL before any real deployment.
-- Socket.IO runs single-instance today (D-031): do **not** run more than one API instance in production
-  until the Redis adapter is added, or some clients will miss realtime events (they will still catch up
-  on the next REST poll, but the UI will feel laggy).
+- Socket.IO runs the Redis adapter as of Phase 5 (D-031/D-053, see below), so more than one API
+  instance in production no longer drops realtime events for clients connected to a different
+  instance — a missed event still self-heals on the next REST poll regardless.
 - The public OpenStreetMap raster tile server (`tile.openstreetmap.org`) used by the live map is for
   light development use only — it has a strict usage policy and will rate-limit or block at production
   traffic. Replace it with a hosted or self-hosted tile provider before launch.
@@ -99,6 +99,32 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
   DEFAULT price bands.
 - `PAYMENTS_SANDBOX_SECRET` signs sandbox payments; it has a fixed dev default and is never used
   when `PAYMENTS_MODE=test`, so it does not need to be set for a real deployment.
+
+## Push notifications (Phase 5)
+
+- Default `PUSH_MODE=sandbox`: no push leaves the machine; sent messages are logged (development
+  only) and kept in `SandboxPushProvider.outbox` (used by tests).
+- To try real pushes, set `PUSH_MODE=live` and `FCM_SERVICE_ACCOUNT_JSON` to a Firebase service
+  account's JSON, base64-encoded (`node -e "console.log(Buffer.from(require('fs').readFileSync('service-account.json')).toString('base64'))"`).
+  Untested against a real Firebase project (D-051) — no account has been created yet.
+- The mobile app registers a **raw** FCM device token (`expo-notifications`'
+  `getDevicePushTokenAsync()`), not an Expo push token, so this needs a **dev build**
+  (`expo run:android`/EAS), not Expo Go, same requirement as the MapLibre map screen. Expo Go
+  cannot receive a push through this path.
+- iOS push is not wired yet (D-051): an APNs device token needs to be bridged to FCM first.
+- A device only receives push once it has signed in on a real build and granted notification
+  permission (`PATCH /v1/me/push-token` records the token); the socket connection (Phase 2) still
+  covers a foregrounded/recently-backgrounded app regardless.
+
+## Realtime at scale (Phase 5)
+
+- Socket.IO now attaches the Redis adapter at boot (`main.ts`, `realtime/redis-io.adapter.ts`),
+  closing D-031: `server.to(room).emit(...)` now reaches every API instance's sockets, not just the
+  process that received the request. If Redis can't be reached at boot this falls back to the
+  default in-memory adapter (single-instance behaviour) with a logged warning, so it never blocks
+  startup.
+- Nothing in this runbook yet actually runs more than one API instance — this closes the
+  code-level blocker only; load-balancing multiple instances is still a future ops decision.
 
 ## Production notes (before any real deployment)
 
@@ -142,3 +168,8 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
       numbers without a deploy.
 - [ ] Appoint a real Grievance Officer and update the placeholder name/email/phone shown at
       Legal > Grievance Officer in the app (compliance checklist item 8).
+- [ ] Create a real Firebase project, set `PUSH_MODE=live` and `FCM_SERVICE_ACCOUNT_JSON`, and
+      verify a push actually arrives on a dev-build Android phone — `FcmPushProvider` has never
+      been exercised against a real Firebase project (D-051).
+- [ ] Wire iOS push (APNs token → FCM bridge) before shipping to iOS, or keep iOS push disabled
+      and say so in the App Store listing (D-051).

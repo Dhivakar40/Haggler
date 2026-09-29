@@ -352,6 +352,53 @@
         ]
       }
     },
+    "/v1/me/push-token": {
+      "patch": {
+        "operationId": "UsersController_registerPushToken_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deviceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "pushToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                },
+                "required": [
+                  "deviceId",
+                  "pushToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Register this device's push notification token (Phase 5)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/me/roles": {
       "post": {
         "operationId": "UsersController_addRole_v1",

@@ -16,6 +16,14 @@ export class RequestTakenException extends CodedException {
   }
 }
 
+/**
+ * Turns "electrician" into "Electrician" for a push notification's body text. The real i18n keys
+ * (categories.electrician, etc.) live client-side (D-050: push copy isn't localised yet), so this
+ * is a placeholder good enough for an English-language notification, not a translation.
+ */
+const categoryTitle = (slug: string): string =>
+  slug.length ? slug[0]!.toUpperCase() + slug.slice(1).replace(/-/g, ' ') : slug;
+
 /** Lua: delete the lock only if we still own it, so we never delete someone else's lock. */
 const RELEASE_LOCK = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`;
 const LOCK_TTL_MS = 10_000;
@@ -180,7 +188,12 @@ export class MatchingService {
 
     for (const r of ranked) {
       const dto = await this.incomingDto(job.id, r.userId);
-      if (dto) this.realtime.emitToUser(r.userId, SOCKET_EVENTS.broadcast, dto);
+      if (dto)
+        this.realtime.emitToUser(r.userId, SOCKET_EVENTS.broadcast, dto, {
+          title: 'New job nearby',
+          body: `${categoryTitle(dto.categorySlug)} · ${(dto.distanceM / 1000).toFixed(1)} km away`,
+          data: { jobId: dto.jobId, type: 'broadcast' },
+        });
     }
     await this.transitions.notify(job.id, { wave: wave + 1 });
     this.logger.log(
@@ -201,7 +214,16 @@ export class MatchingService {
       await tx.job.update({ where: { id: jobId }, data: { nextWaveAt: null } });
     });
     await this.closeBroadcasts(jobId, 'EXPIRED');
-    this.realtime.emitToUser(customerId, SOCKET_EVENTS.timeout, { jobId });
+    this.realtime.emitToUser(
+      customerId,
+      SOCKET_EVENTS.timeout,
+      { jobId },
+      {
+        title: 'No Ranger available',
+        body: 'Nobody accepted your request in time. You can try again.',
+        data: { jobId, type: 'timeout' },
+      },
+    );
     await this.transitions.notify(jobId, { timedOut: true });
   }
 
@@ -343,11 +365,16 @@ export class MatchingService {
         requestId,
         reason: 'TAKEN',
       });
-    this.realtime.emitToUser(job.customerId, SOCKET_EVENTS.matched, {
-      jobId: job.id,
-      requestId,
-      workerId,
-    });
+    this.realtime.emitToUser(
+      job.customerId,
+      SOCKET_EVENTS.matched,
+      { jobId: job.id, requestId, workerId },
+      {
+        title: 'Ranger found!',
+        body: 'A Ranger accepted your request.',
+        data: { jobId: job.id, type: 'matched' },
+      },
+    );
     this.realtime.emitToUser(workerId, SOCKET_EVENTS.matched, {
       jobId: job.id,
       requestId,

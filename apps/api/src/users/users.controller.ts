@@ -18,6 +18,7 @@ import {
   consentInputSchema,
   emergencyContactInputSchema,
   profileUpdateSchema,
+  registerPushTokenSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
 import { ApiZodBody, ClientIp, CurrentUser, type AuthUser } from '../common/decorators';
@@ -54,6 +55,16 @@ export class UsersController {
     @Body(new ZodPipe(profileUpdateSchema)) body: z.infer<typeof profileUpdateSchema>,
   ) {
     return this.users.updateProfile(user.id, body);
+  }
+
+  @Patch('push-token')
+  @ApiOperation({ summary: "Register this device's push notification token (Phase 5)" })
+  @ApiZodBody(registerPushTokenSchema)
+  registerPushToken(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodPipe(registerPushTokenSchema)) body: z.infer<typeof registerPushTokenSchema>,
+  ) {
+    return this.users.registerPushToken(user.id, body);
   }
 
   @Post('roles')

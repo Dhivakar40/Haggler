@@ -59,6 +59,7 @@
 | PATCH | `/v1/me/emergency-contacts/{id}` | Edit an emergency contact |
 | DELETE | `/v1/me/emergency-contacts/{id}` | Remove an emergency contact |
 | GET | `/v1/me/export` | Download all data we hold about me (DPDP access right) |
+| PATCH | `/v1/me/push-token` | Register this device's push notification token (Phase 5) |
 | POST | `/v1/me/roles` | Add a role (Customer, Ranger or Employer). Student arrives with Haggler Campus. |
 | POST | `/v1/offers/{id}/accept` | Accept the other party's offer; the job becomes AGREED at that price |
 | POST | `/v1/offers/{id}/counter` | Counter-offer (next round) |

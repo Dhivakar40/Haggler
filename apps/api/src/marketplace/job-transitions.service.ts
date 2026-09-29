@@ -2,10 +2,36 @@ import { Injectable } from '@nestjs/common';
 import type { JobStatus, Prisma } from '@prisma/client';
 import { SOCKET_EVENTS } from '@haggler/shared';
 import { conflict } from '../common/http-errors';
+import type { PushMessage } from '../adapters/push/push.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { WalletService } from '../wallet/wallet.service';
 import { type Actor, assertTransition } from './job-state';
+
+/**
+ * Push copy for statuses where a plain-language nudge is worth an interruption. Statuses not
+ * listed here (NEGOTIATING/AGREED go through offers.service's own offerUpdated event; MATCHED is
+ * pushed directly by matching.service so the wording can name the Ranger) send no push from here.
+ * Not yet localised to the recipient's language (i18n keys live client-side only) — see D-050.
+ */
+const STATUS_PUSH: Partial<Record<JobStatus, { customer?: PushMessage; worker?: PushMessage }>> = {
+  EN_ROUTE: {
+    customer: { title: 'Ranger on the way', body: 'Your Ranger is heading to you now.' },
+  },
+  ARRIVED: { customer: { title: 'Ranger has arrived', body: 'Your Ranger is at your location.' } },
+  CONFIRMED_BY_CUSTOMER: {
+    worker: { title: 'Job confirmed', body: 'The customer confirmed the job is complete.' },
+  },
+  CANCELLED: {
+    worker: { title: 'Job cancelled', body: 'This job was cancelled.' },
+  },
+  NO_SHOW_WORKER: {
+    customer: { title: 'Ranger did not show up', body: 'This job was marked as a no-show.' },
+  },
+  NO_SHOW_CUSTOMER: {
+    worker: { title: 'Customer did not show up', body: 'This job was marked as a no-show.' },
+  },
+};
 
 /** Terminal states that never confirm: the customer's held token goes back to their balance (D-037). */
 const RELEASES_TOKEN: JobStatus[] = ['CANCELLED', 'NO_SHOW_WORKER', 'NO_SHOW_CUSTOMER'];
@@ -65,10 +91,9 @@ export class JobTransitions {
     });
     if (!job) return;
     const payload = { jobId, requestId: job.requestId, status: job.status, ...extra };
-    this.realtime.emitToUsers(
-      [job.customerId, ...(job.workerId ? [job.workerId] : [])],
-      SOCKET_EVENTS.jobUpdated,
-      payload,
-    );
+    const push = STATUS_PUSH[job.status];
+    this.realtime.emitToUser(job.customerId, SOCKET_EVENTS.jobUpdated, payload, push?.customer);
+    if (job.workerId)
+      this.realtime.emitToUser(job.workerId, SOCKET_EVENTS.jobUpdated, payload, push?.worker);
   }
 }
