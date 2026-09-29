@@ -18,6 +18,11 @@ async function main(): Promise<void> {
   process.env.FIELD_ENCRYPTION_KEY ??= Buffer.alloc(32, 1).toString('base64');
   process.env.S3_ACCESS_KEY ??= 'openapi';
   process.env.S3_SECRET_KEY ??= 'openapi';
+  // Neither talks to real infra here (both poll/queue against the fake DATABASE_URL/REDIS_URL
+  // above), and the scheduler's 2 s timer would otherwise fire real Prisma queries against it
+  // while this script is still running.
+  process.env.SCHEDULER_ENABLED ??= 'false';
+  process.env.QUEUES_ENABLED ??= 'false';
 
   const app = await NestFactory.create(AppModule, { logger: false });
   configureApp(app);

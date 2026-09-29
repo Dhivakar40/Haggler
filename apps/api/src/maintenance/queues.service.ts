@@ -36,8 +36,17 @@ export class QueuesService implements OnModuleInit, OnModuleDestroy {
       port: Number(u.port || 6379),
       password: u.password || undefined,
       username: u.username || undefined,
-      maxRetriesPerRequest: null, // required by BullMQ workers
+      maxRetriesPerRequest: null, // required by BullMQ workers (per-command retries, not reconnection)
       enableOfflineQueue: true,
+      // Reconnection backoff, capped at ~6s total. Without a cap, ioredis's default retryStrategy
+      // retries the TCP connection forever and never rejects a pending command, so
+      // `enableOfflineQueue: true` queues commands (like the upsertJobScheduler calls below) that
+      // then await a connection that will never arrive — the try/catch in onModuleInit can only
+      // catch a rejection, so an unreachable Redis at boot hung the whole app forever instead of
+      // degrading gracefully as intended (found via a hung "generate OpenAPI" CI step: that script
+      // deliberately points at a fake Redis URL since it never expects to need one). A bounded
+      // retryStrategy makes ioredis actually give up and reject, so that try/catch can do its job.
+      retryStrategy: (times) => (times > 5 ? null : times * 1000),
     };
   }
 
