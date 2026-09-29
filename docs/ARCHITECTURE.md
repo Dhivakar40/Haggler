@@ -183,3 +183,32 @@ implement the same interface: create an order, verify a Checkout callback's sign
 webhook's signature. Two independent paths can settle a top-up — `POST /wallet/topup/:id/verify`
 (client callback, fast) and `POST /webhooks/razorpay` (server-to-server, authoritative) — and both
 funnel through the same guarded `credit()` so a double-credit is structurally impossible (D-041).
+
+# Phase 4 additions
+
+## Reviews and badge tiers (`src/reputation`)
+
+```
+Job reaches CONFIRMED_BY_CUSTOMER
+   │  ReviewsService.submit() [one row per (jobId, raterRole), enforced by a DB unique index]:
+   │    CUSTOMER rates WORKER ──▶ WorkerStats.ratingSum/ratingCount += rating
+   │                                ──▶ ReputationService.recomputeWorkerBadge() [pure fn, see below]
+   │    WORKER rates CUSTOMER   ──▶ CustomerStats.ratingSum/ratingCount += rating (no badge; D-047)
+   ▼
+JobTransitions.move() [same Phase 2 choke point]:
+   to CONFIRMED_BY_CUSTOMER ──▶ WorkerStats.jobsCompleted += 1 ──▶ recomputeWorkerBadge() again
+```
+
+`computeBadgeTier(jobsCompleted, ratingSum, ratingCount, thresholds)` in `reputation/badge-tier.ts`
+is pure and exhaustively unit-tested: it walks a ladder of thresholds (DIAMOND down to BRONZE),
+each requiring both a job-count floor AND a rating-count-and-average floor, so neither volume alone
+nor one lucky review can buy a tier (D-045). Thresholds are DB-overridable via
+`system_config.badge_tier_thresholds` (`ReputationConfig`, same caching/override pattern as
+`MarketplaceConfig`).
+
+## Blocking (`src/reputation/blocks.service.ts`)
+
+The matching exclusion (`presence.service.ts`'s candidate query checks both directions) has existed
+since Phase 2; this phase adds `GET/POST /me/blocks` and `DELETE /me/blocks/:userId`. Blocking is an
+idempotent upsert (blocking twice updates the reason, never errors) and one-directional to create,
+but protects both people because the matching query already checks both directions (D-047).

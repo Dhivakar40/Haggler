@@ -779,3 +779,135 @@ describe('JobScreen: Ranger side of the visit', () => {
     expect(screen.queryByText('I am on my way')).toBeNull();
   });
 });
+
+describe('JobScreen: reviews and blocking (Phase 4)', () => {
+  it('shows the star prompt once confirmed, and hides it once submitted', async () => {
+    const { calls } = serve(
+      asCustomer({
+        status: 'CONFIRMED_BY_CUSTOMER',
+        agreedPricePaise: 40000,
+        review: { canReview: true, submitted: false },
+      }),
+      (c) =>
+        c.path === `/v1/jobs/${JOB_ID}/review`
+          ? {
+              status: 201,
+              body: {
+                canReview: false,
+                submitted: true,
+                reviews: [
+                  {
+                    id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                    raterRole: 'CUSTOMER',
+                    rating: 5,
+                    comment: null,
+                    createdAt: iso(0),
+                  },
+                ],
+              },
+            }
+          : undefined,
+    );
+    await renderWithProviders(<JobScreen />);
+    await screen.findByTestId('review-prompt');
+    await fireEvent.press(screen.getByTestId('star-4'));
+    await fireEvent.changeText(screen.getByTestId('review-comment'), 'Great job!');
+    await fireEvent.press(screen.getByTestId('submit-review'));
+    expect(await screen.findByTestId('review-thanks')).toBeTruthy();
+    expect(post(calls, `/v1/jobs/${JOB_ID}/review`)?.body).toEqual({
+      rating: 4,
+      comment: 'Great job!',
+    });
+    expect(screen.queryByTestId('review-prompt')).toBeNull();
+  });
+
+  it('does not let you submit without choosing a star rating', async () => {
+    const { calls } = serve(
+      asCustomer({
+        status: 'CONFIRMED_BY_CUSTOMER',
+        agreedPricePaise: 40000,
+        review: { canReview: true, submitted: false },
+      }),
+    );
+    await renderWithProviders(<JobScreen />);
+    await fireEvent.press(await screen.findByTestId('submit-review'));
+    expect(await screen.findByText('Choose a star rating first.')).toBeTruthy();
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+  });
+
+  it('nothing is shown once the viewer has already reviewed', async () => {
+    serve(
+      asCustomer({
+        status: 'CONFIRMED_BY_CUSTOMER',
+        agreedPricePaise: 40000,
+        review: { canReview: false, submitted: true },
+      }),
+    );
+    await renderWithProviders(<JobScreen />);
+    await screen.findByTestId('status-title');
+    expect(screen.queryByTestId('review-prompt')).toBeNull();
+  });
+
+  it("shows the Ranger's rating average and links to their review history", async () => {
+    serve(asCustomer({ status: 'AGREED', agreedPricePaise: 40000 }));
+    await renderWithProviders(<JobScreen />);
+    expect(await screen.findByTestId('ranger-rating')).toHaveTextContent('★ 4.6 (9)');
+    await fireEvent.press(screen.getByTestId('ranger-rating'));
+    expect(routerMock().push).toHaveBeenCalledWith({
+      pathname: '/ranger-reviews/[id]',
+      params: { id: rangerParty.id },
+    });
+  });
+
+  it('a Ranger with no ratings yet says so instead of showing a rating', async () => {
+    serve(
+      asCustomer({
+        status: 'AGREED',
+        agreedPricePaise: 40000,
+        worker: { ...rangerParty, ratingAvg: null, ratingCount: 0 },
+      }),
+    );
+    await renderWithProviders(<JobScreen />);
+    expect(await screen.findByTestId('ranger-rating')).toHaveTextContent('No ratings yet');
+  });
+
+  it('blocking asks for confirmation, then blocks and shows "Blocked"', async () => {
+    const { calls } = serve(asCustomer({ status: 'AGREED', agreedPricePaise: 40000 }), (c) =>
+      c.path === '/v1/me/blocks' ? { status: 201, body: { blocked: true } } : undefined,
+    );
+    await renderWithProviders(<JobScreen />);
+    await fireEvent.press(await screen.findByTestId('block-user'));
+    expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe('Block this Ranger?');
+    await act(async () => {
+      const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
+        string,
+        string,
+        { text: string; onPress?: () => void }[],
+      ];
+      args[2].find((b) => b.text === 'Block')?.onPress?.();
+    });
+    expect(await screen.findByTestId('blocked-note')).toBeTruthy();
+    expect(post(calls, '/v1/me/blocks')?.body).toEqual({ userId: rangerParty.id });
+    expect(screen.queryByTestId('block-user')).toBeNull();
+  });
+
+  it('a failed block shows an error and does not mark them blocked', async () => {
+    serve(asCustomer({ status: 'AGREED', agreedPricePaise: 40000 }), (c) =>
+      c.path === '/v1/me/blocks'
+        ? { status: 404, body: { error: { code: 'NOT_FOUND', message: 'x' } } }
+        : undefined,
+    );
+    await renderWithProviders(<JobScreen />);
+    await fireEvent.press(await screen.findByTestId('block-user'));
+    await act(async () => {
+      const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
+        string,
+        string,
+        { text: string; onPress?: () => void }[],
+      ];
+      args[2].find((b) => b.text === 'Block')?.onPress?.();
+    });
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+    expect(screen.getByTestId('block-user')).toBeTruthy();
+  });
+});

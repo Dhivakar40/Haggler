@@ -97,6 +97,12 @@ export function AccountScreen() {
         <Button testID="open-wallet" title={t('account.wallet')} onPress={go('/wallet')} />
         <Button variant="secondary" title={t('account.editProfile')} onPress={go('/profile')} />
         <Button variant="secondary" title={t('account.addresses')} onPress={go('/addresses')} />
+        <Button
+          testID="open-blocked-users"
+          variant="secondary"
+          title={t('account.blockedUsers')}
+          onPress={go('/blocked-users')}
+        />
         <Button variant="secondary" title={t('account.contacts')} onPress={go('/contacts')} />
         <Button variant="secondary" title={t('account.legal')} onPress={go('/legal')} />
         <Button

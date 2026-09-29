@@ -15,6 +15,7 @@ import { HealthModule } from './health/health.module';
 import { KycModule } from './kyc/kyc.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
+import { ReputationModule } from './reputation/reputation.module';
 import { HttpMetricsMiddleware, MetricsModule } from './metrics/metrics';
 import { PrismaModule } from './prisma/prisma.module';
 import { RateLimitModule } from './ratelimit/rate-limit.service';
@@ -94,6 +95,7 @@ export const LOG_REDACT_PATHS = [
     WorkerModule,
     KycModule,
     WalletModule,
+    ReputationModule,
     MarketplaceModule,
     MaintenanceModule,
     AdminModule,

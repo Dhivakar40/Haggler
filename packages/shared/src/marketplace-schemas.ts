@@ -119,9 +119,18 @@ export const jobDtoSchema = z.object({
     .nullable(),
   customer: partySchema,
   worker: partySchema
-    .extend({ kycTier: z.number().int(), badgeTier: z.string(), jobsCompleted: z.number().int() })
+    .extend({
+      kycTier: z.number().int(),
+      badgeTier: z.string(),
+      jobsCompleted: z.number().int(),
+      /** null when the Ranger has no ratings yet (never shown as "0 stars"). */
+      ratingAvg: z.number().nullable(),
+      ratingCount: z.number().int(),
+    })
     .nullable(),
   offers: z.array(offerDtoSchema),
+  /** Phase 4: whether the viewer can/did leave a review for this job. */
+  review: z.object({ canReview: z.boolean(), submitted: z.boolean() }),
   /** The 4-digit code the customer reads out; shown to the CUSTOMER only, while the Ranger is there. */
   arrivalCode: z.string().nullable(),
   arrivalVerified: z.boolean(),

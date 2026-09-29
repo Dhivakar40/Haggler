@@ -726,6 +726,7 @@ model Job {
   locations  JobLocation[]
   thread     ChatThread?
   shares     TrustedShare[]
+  reviews    Review[]
 
   @@index([customerId, createdAt(sort: Desc)])
   @@index([workerId, createdAt(sort: Desc)])
@@ -908,7 +909,8 @@ model TrustedShare {
   @@map("trusted_shares")
 }
 
-/// Blocked pairs never match (either direction). Endpoints and UI arrive in Phase 4.
+/// Blocked pairs never match (either direction, see presence.service.ts). User-facing endpoints
+/// and mobile UI (block/unblock/list) are Phase 4 (reputation.module.ts).
 model Block {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   blockerId String   @map("blocker_id") @db.Uuid
@@ -926,10 +928,55 @@ model WorkerStats {
   workerUserId  String        @id @map("worker_user_id") @db.Uuid
   jobsCompleted Int           @default(0) @map("jobs_completed")
   badgeTier     BadgeTierName @default(BRONZE) @map("badge_tier")
+  /// Sum and count, not a stored average: integer math avoids float drift (same reasoning as
+  /// money), and the average is trivial to compute at read time (ratingSum / ratingCount).
+  ratingSum     Int           @default(0) @map("rating_sum")
+  ratingCount   Int           @default(0) @map("rating_count")
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("worker_stats")
+}
+
+/// The customer-side mirror of WorkerStats (Phase 4): Rangers can rate customers too. Never shown
+/// as prominently as a Ranger's own rating (customers aren't "hired"), but feeds a Ranger's own
+/// judgement and, later, could gate a customer's ability to keep booking. No badge tier: badges are
+/// a Ranger-facing trust signal only.
+model CustomerStats {
+  customerUserId String   @id @map("customer_user_id") @db.Uuid
+  ratingSum      Int      @default(0) @map("rating_sum")
+  ratingCount    Int      @default(0) @map("rating_count")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("customer_stats")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Phase 4: reviews, real badge-tier logic, and the Block feature's own endpoints (the matching
+// engine has excluded blocked pairs since Phase 2 — see presence.service.ts — this phase adds the
+// user-facing side of it).
+// ---------------------------------------------------------------------------------------------
+
+/// One review per (job, rater role): the customer can rate the Ranger, and the Ranger can rate the
+/// customer, independently, only once each, only after the job is CONFIRMED_BY_CUSTOMER (the one
+/// state that means the job genuinely happened and both parties agree on that).
+model Review {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId      String    @map("job_id") @db.Uuid
+  raterId    String    @map("rater_id") @db.Uuid
+  revieweeId String    @map("reviewee_id") @db.Uuid
+  raterRole  PartyRole @map("rater_role")
+  rating     Int
+  comment    String?
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, raterRole])
+  @@index([revieweeId, createdAt(sort: Desc)])
+  @@map("reviews")
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -310,3 +310,55 @@ but there is no admin-facing way to trigger one yet. **Roadmap, explicitly out o
 subscription (discounted token bundles, priority broadcast) and optional Rush/Boost fees paid by the
 hirer (an urgent-broadcast fee for customers, a boosted-listing fee for Contract/Campus employers).
 Neither charges Rangers, students or contract workers, consistent with D-037.
+
+## Phase 4
+
+**D-044 Reviews are bidirectional, one each, only after CONFIRMED_BY_CUSTOMER.** Both the customer
+and the Ranger can rate each other — a Ranger's judgement of a difficult customer matters for trust
+too, not just the customer's judgement of the Ranger. Each side gets exactly one review per job
+(`@@unique([jobId, raterRole])`), and only once the job reaches `CONFIRMED_BY_CUSTOMER`: the one
+state that means the job genuinely happened and both parties agree it did. A cancelled or
+disputed job is never reviewable, so a review can't be used as leverage mid-negotiation or as
+retaliation for a cancellation. Money never enters here (D-037): a review is a trust signal, not a
+payment event, and no code path in `ReviewsService` touches the wallet.
+
+**D-045 A Ranger's badge tier is computed from jobs completed AND a rating floor, never jobs alone.**
+`computeBadgeTier()` (pure, unit-tested exhaustively) requires a Ranger to clear both a job-count
+threshold and a minimum-rating-count-and-average floor for each tier — a Ranger with 200 jobs but
+only 2 ratings, or 200 jobs averaging 3.0, stays BRONZE. This stops both a "quantity without quality"
+Ranger and a single lucky 5-star review from buying a high tier. Thresholds
+(`badge-tier.ts::DEFAULT_BADGE_THRESHOLDS`) are placeholders for product/ops to tune, same status as
+the seeded DEFAULT price bands — not a promise about how many jobs a real Ranger needs — but are
+DB-overridable via `system_config.badge_tier_thresholds` (same ops-tunable-without-a-deploy pattern
+as `MarketplaceConfig`) without a code change. Badge tier is recomputed in two places: on job
+confirmation (jobsCompleted changed) and on a new review (rating changed) — both funnel through one
+`ReputationService.recomputeWorkerBadge()` so there is only one place the math can be wrong.
+
+**D-046 The wallet's ledger self-auditing pattern is reused for ratings.** `WorkerStats`/
+`CustomerStats` store `ratingSum`/`ratingCount` (integers), never a stored float average — the same
+reasoning as money (D-001): an average is trivial to compute at read time
+(`ratingSum / ratingCount`) and integer accumulation never drifts. `ratingAvg` is `null`, never `0`,
+when `ratingCount` is 0, so a brand-new Ranger never visually looks like they have a bad rating.
+
+**D-047 Blocking's matching-side exclusion (Phase 2) gets a user-facing API and UI this phase.**
+`presence.service.ts`'s candidate query has excluded blocked pairs in either direction since Phase
+2 — this phase only adds `POST/DELETE/GET /me/blocks` and the mobile screens. Blocking itself is
+one-directional to create (only the blocker's own list changes) and idempotent (`upsert`, blocking
+twice updates the reason rather than erroring); the matching exclusion already checks both
+directions, so a Ranger who gets blocked is protected without needing to block back.
+
+**D-048 A Ranger's review list shows only customer -> Ranger reviews.** A Ranger's opinion of a
+customer (their own review of that customer) is never shown to other customers — there is no
+"customer reputation" product surface yet, and a customer's poor rating from one Ranger should not
+follow them publicly. `GET /rangers/:id/reviews` filters `raterRole = 'CUSTOMER'` explicitly, and
+this is tested (a job's Ranger-side review is created and asserted absent from the public list).
+
+**D-049 Known gaps carried forward (Phase 4).** No admin UI to remove a fraudulent or abusive
+review (the DB row is mutable at the schema level — no immutability trigger, unlike `job_events`/
+`wallet_ledger_entries` — deliberately, to leave room for a future moderation/edit flow — but no
+endpoint exists yet to use that room). No rating-based enforcement on the customer side (a customer
+with a terrible `CustomerStats` average currently faces no consequence — Rangers can only block them
+individually); this was explicitly out of scope this phase (see D-047's "no customer reputation
+product surface" note). The Grievance Officer contact details are placeholders (name/email/phone)
+per COMPLIANCE.md checklist item 8 — ops must appoint a real one before launch. Badge tier
+thresholds (D-045) are placeholders pending product/ops review, same status as price bands.

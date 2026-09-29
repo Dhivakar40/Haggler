@@ -137,3 +137,8 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - [ ] Review the seeded token bundle prices (`token_bundles`, placeholders) before customers can buy.
 - [ ] Switch `PAYMENTS_MODE` to `test` with real Razorpay TEST keys and a real webhook subscription
       before any non-sandbox testing; there is still no `live` mode anywhere (D-020).
+- [ ] Review the badge tier thresholds (`badge-tier.ts::DEFAULT_BADGE_THRESHOLDS`, placeholders);
+      override via a `badge_tier_thresholds` row in `system_config` if product/ops want different
+      numbers without a deploy.
+- [ ] Appoint a real Grievance Officer and update the placeholder name/email/phone shown at
+      Legal > Grievance Officer in the app (compliance checklist item 8).

@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { Card, Screen, Text } from '../../components';
 import { spacing } from '../../theme/tokens';
 
-export const LEGAL_DOCS = ['terms', 'privacy', 'refund'] as const;
+export const LEGAL_DOCS = ['terms', 'privacy', 'refund', 'grievance'] as const;
 export type LegalDoc = (typeof LEGAL_DOCS)[number];
 
 /** Clearly marked placeholder: the real text must come from counsel (docs/COMPLIANCE.md). */
@@ -45,6 +45,25 @@ export function LegalDocScreen() {
   const { t } = useTranslation();
   const { doc } = useLocalSearchParams<{ doc: string }>();
   const known = (LEGAL_DOCS as readonly string[]).includes(doc ?? '');
+  if (doc === 'grievance') {
+    return (
+      <Screen scroll>
+        <Text variant="title">{t('legal.grievance')}</Text>
+        <Card>
+          <View style={{ gap: spacing.xs }}>
+            <Text color="textMuted">{t('legal.grievanceOfficer')}</Text>
+            <Text variant="heading">{t('legal.grievanceName')}</Text>
+            <Text>{t('legal.grievanceEmail')}</Text>
+            <Text>{t('legal.grievancePhone')}</Text>
+            <Text color="textMuted">{t('legal.grievanceHours')}</Text>
+          </View>
+        </Card>
+        <Text color="warning" accessibilityRole="alert">
+          {t('legal.grievancePlaceholder')}
+        </Text>
+      </Screen>
+    );
+  }
   return (
     <Screen scroll>
       <PlaceholderBanner />

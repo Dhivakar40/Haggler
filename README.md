@@ -3,13 +3,13 @@
 A mobile marketplace for India: verified local **Rangers** (independent workers) for on-demand
 services, plus long-term contract labour and part-time student jobs, on one trust layer.
 
-> **Status: Phase 3 (Customer Wallet & Payments) complete.** Everything in Phases 1–2, plus: a
-> customer buys token bundles via Razorpay (test mode) into a wallet, one token is reserved the
-> moment they post a request and permanently spent only once the job is confirmed complete (given
-> back if the job is cancelled or a no-show). **Rangers are never charged anything** — the
-> cash/UPI-direct payment between customer and Ranger from Phase 2 is completely unchanged; the
-> wallet exists purely for the customer/employer side. Reputation/badges beyond the raw
-> jobs-completed count start in Phase 4.
+> **Status: Phase 4 (Reputation & Trust) complete.** Everything in Phases 1–3, plus: once a job is
+> confirmed complete, both the customer and the Ranger can rate each other (1–5 stars, one each);
+> a Ranger's badge tier (Bronze → Diamond) is now computed from real jobs-completed and rating
+> data instead of sitting at Bronze forever; anyone can block another user, which the matching
+> engine already excluded from broadcasts since Phase 2; and the app shows real (placeholder)
+> Grievance Officer contact details. **Rangers are still never charged anything** (D-037,
+> unchanged since Phase 3).
 
 ## Stack
 

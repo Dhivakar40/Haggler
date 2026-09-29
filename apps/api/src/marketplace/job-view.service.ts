@@ -5,6 +5,7 @@ import { EncryptionService } from '../common/crypto';
 import { notFound } from '../common/http-errors';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ratingAverage } from '../reputation/badge-tier';
 import { MarketplaceConfig } from './marketplace-config.service';
 import { estimateAcceptMinutes } from './sla';
 
@@ -108,6 +109,12 @@ export class JobViewService {
     const stats = job.workerId
       ? await this.prisma.workerStats.findUnique({ where: { workerUserId: job.workerId } })
       : null;
+    const myReview =
+      job.status === 'CONFIRMED_BY_CUSTOMER'
+        ? await this.prisma.review.findUnique({
+            where: { jobId_raterRole: { jobId, raterRole: role } },
+          })
+        : null;
 
     const arrivalCode =
       role === 'CUSTOMER' &&
@@ -155,8 +162,17 @@ export class JobViewService {
             kycTier: worker.workerProfile?.kycTier ?? 0,
             badgeTier: stats?.badgeTier ?? 'BRONZE',
             jobsCompleted: stats?.jobsCompleted ?? 0,
+            ratingAvg:
+              stats && stats.ratingCount > 0
+                ? ratingAverage(stats.ratingSum, stats.ratingCount)
+                : null,
+            ratingCount: stats?.ratingCount ?? 0,
           }
         : null,
+      review: {
+        canReview: job.status === 'CONFIRMED_BY_CUSTOMER' && !myReview,
+        submitted: !!myReview,
+      },
       offers: job.offers.map((o) => ({
         id: o.id,
         round: o.round,

@@ -4,3 +4,4 @@ export * from './pagination';
 export * from './api-schemas';
 export * from './marketplace-schemas';
 export * from './wallet-schemas';
+export * from './reputation-schemas';

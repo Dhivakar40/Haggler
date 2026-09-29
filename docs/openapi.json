@@ -1348,6 +1348,209 @@
         ]
       }
     },
+    "/v1/jobs/{id}/review": {
+      "post": {
+        "operationId": "ReviewsController_submit_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "comment": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "rating"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Leave a review for the other party (once, only once the job is confirmed complete)",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/reviews": {
+      "get": {
+        "operationId": "ReviewsController_forJob_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Both reviews for this job, and whether I can/did review",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
+    "/v1/rangers/{id}/reviews": {
+      "get": {
+        "operationId": "RangerReviewsController_forWorker_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A Ranger's review history from customers, newest first",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
+    "/v1/me/blocks": {
+      "get": {
+        "operationId": "BlocksController_list_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "People I have blocked",
+        "tags": [
+          "blocks"
+        ]
+      },
+      "post": {
+        "operationId": "BlocksController_block_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "userId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Block someone: they will never be matched with me again, in either direction",
+        "tags": [
+          "blocks"
+        ]
+      }
+    },
+    "/v1/me/blocks/{userId}": {
+      "delete": {
+        "operationId": "BlocksController_unblock_v1",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Unblock someone",
+        "tags": [
+          "blocks"
+        ]
+      }
+    },
     "/v1/requests/media": {
       "post": {
         "operationId": "RequestsController_presign_v1",

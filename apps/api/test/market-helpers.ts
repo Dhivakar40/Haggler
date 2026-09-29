@@ -231,6 +231,12 @@ export class Market {
       .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH' })
       .then((x) => expectOk(x, 'complete'));
   }
+
+  /** Runs a job all the way to CONFIRMED_BY_CUSTOMER (Phase 4 tests usually just want this). */
+  async confirmJob(c: Customer, r: Ranger, jobId: string): Promise<void> {
+    await this.runToCompletion(c, r, jobId);
+    await this.api.post(c, `/v1/jobs/${jobId}/confirm`).then((x) => expectOk(x, 'confirm'));
+  }
 }
 
 export function expectOk(res: { status: number; body: unknown }, what: string): void {

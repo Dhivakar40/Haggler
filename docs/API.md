@@ -28,6 +28,8 @@
 | POST | `/v1/jobs/{id}/photos` | Ranger: presigned upload for the BEFORE (required to start) or AFTER (required to finish) photo |
 | POST | `/v1/jobs/{id}/photos/{photoId}/confirm` | Ranger: confirm a job photo upload |
 | POST | `/v1/jobs/{id}/report-no-show` | Report a no-show after the grace period (customer: Ranger; Ranger: customer) |
+| POST | `/v1/jobs/{id}/review` | Leave a review for the other party (once, only once the job is confirmed complete) |
+| GET | `/v1/jobs/{id}/reviews` | Both reviews for this job, and whether I can/did review |
 | POST | `/v1/jobs/{id}/share-link` | Customer: create a 12-hour live-trip link for a trusted contact |
 | POST | `/v1/jobs/{id}/share-link/revoke` | Customer: revoke all live-trip links for this job |
 | POST | `/v1/jobs/{id}/start` | Ranger: start work. Needs the arrival code verified and a before photo. |
@@ -46,6 +48,9 @@
 | POST | `/v1/me/addresses` | Save an address. Send latitude+longitude from the phone GPS, or we try to geocode it. |
 | PATCH | `/v1/me/addresses/{id}` | Edit one of my addresses |
 | DELETE | `/v1/me/addresses/{id}` | Delete one of my addresses |
+| GET | `/v1/me/blocks` | People I have blocked |
+| POST | `/v1/me/blocks` | Block someone: they will never be matched with me again, in either direction |
+| DELETE | `/v1/me/blocks/{userId}` | Unblock someone |
 | GET | `/v1/me/consents` | My consent history |
 | POST | `/v1/me/consents` | Give consent for a purpose at the current legal version |
 | DELETE | `/v1/me/consents/{purpose}` | Withdraw consent for a purpose |
@@ -59,6 +64,7 @@
 | POST | `/v1/offers/{id}/counter` | Counter-offer (next round) |
 | POST | `/v1/offers/{id}/reject` | Reject the offer: ends the negotiation and cancels the job |
 | GET | `/v1/price-bands` | Price band (min/median/max, integer paise) for a category and area |
+| GET | `/v1/rangers/{id}/reviews` | A Ranger's review history from customers, newest first |
 | POST | `/v1/requests` | Create a service request. Immediate requests start broadcasting to nearby Rangers at once. |
 | GET | `/v1/requests/{id}` | A request/job as seen by me (customer or matched Ranger) |
 | POST | `/v1/requests/{id}/accept` | Ranger: accept a request. First accept wins; everyone else gets 409 REQUEST_TAKEN. |

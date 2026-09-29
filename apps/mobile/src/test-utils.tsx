@@ -129,6 +129,7 @@ export const makeJob = (over: Partial<JobDto> = {}): JobDto => ({
   broadcast: { wave: 1, deadline: iso(180_000), slaEstimateMinutes: 4 },
   customer: { id: '11111111-1111-4111-8111-111111111111', firstName: 'Asha' },
   worker: null,
+  review: { canReview: false, submitted: false },
   offers: [],
   arrivalCode: null,
   arrivalVerified: false,
@@ -148,6 +149,8 @@ export const rangerParty = {
   kycTier: 2,
   badgeTier: 'SILVER',
   jobsCompleted: 12,
+  ratingAvg: 4.6,
+  ratingCount: 9,
 };
 
 export const offer = (over: Partial<OfferDto> = {}): OfferDto => ({

@@ -90,6 +90,14 @@ function Navigator() {
           options={{ ...header, title: t('deleteAccount.title') }}
         />
         <Stack.Screen name="wallet" options={{ ...header, title: t('wallet.title') }} />
+        <Stack.Screen
+          name="blocked-users"
+          options={{ ...header, title: t('account.blockedUsers') }}
+        />
+        <Stack.Screen
+          name="ranger-reviews/[id]"
+          options={{ ...header, title: t('job.reviewsTitle') }}
+        />
         <Stack.Screen name="request/new" options={{ ...header, title: t('request.title') }} />
         <Stack.Screen name="request/[id]" options={{ ...header, title: t('request.title') }} />
         <Stack.Screen name="job/[id]" options={{ ...header, title: t('job.title') }} />

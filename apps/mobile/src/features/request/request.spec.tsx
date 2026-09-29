@@ -514,6 +514,8 @@ describe('RequestStatusScreen', () => {
           kycTier: 2,
           badgeTier: 'BRONZE',
           jobsCompleted: 0,
+          ratingAvg: null,
+          ratingCount: 0,
         },
       }),
     }));

@@ -12,6 +12,7 @@ import {
 } from '../common/http-errors';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReputationService } from '../reputation/reputation.service';
 import { haversineMeters } from './geo';
 import { CUSTOMER_CANCELLABLE } from './job-state';
 import { JobTransitions } from './job-transitions.service';
@@ -35,6 +36,7 @@ export class LifecycleService {
     private readonly encryption: EncryptionService,
     private readonly cfg: MarketplaceConfig,
     private readonly env: EnvService,
+    private readonly reputation: ReputationService,
   ) {}
 
   private async workerJob(workerId: string, jobId: string) {
@@ -276,7 +278,8 @@ export class LifecycleService {
     return this.done(jobId, workerId);
   }
 
-  /** Customer confirms the work. This is the moment a token is consumed (Phase 3 hooks in here). */
+  /** Customer confirms the work. This is the moment a token is consumed (Phase 3 hooks in here)
+   * and jobsCompleted increments, which can move a Ranger's badge tier even without a new review. */
   async confirm(customerId: string, jobId: string) {
     const job = await this.customerJob(customerId, jobId);
     await this.prisma.$transaction(async (tx) => {
@@ -294,6 +297,7 @@ export class LifecycleService {
           update: { jobsCompleted: { increment: 1 } },
           create: { workerUserId: job.workerId, jobsCompleted: 1 },
         });
+        await this.reputation.recomputeWorkerBadge(tx, job.workerId);
       }
     });
     return this.done(jobId, customerId);

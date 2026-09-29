@@ -6,21 +6,21 @@
 
 ## Counsel review checklist
 
-| #   | Item                                                                          | Engineering status                                                                      | Counsel |
-| --- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------- |
-| 1   | DPDP: explicit consent, purpose limitation, retention, deletion + export      | **Built (Phase 1)**: consent screen, versioned consent records, export, 30-day deletion | ☐       |
-| 2   | Aadhaar: never store the full number; masked copy only                        | **Partly**: see "Aadhaar handling" below. Relies on users uploading the masked copy     | ☐       |
-| 3   | Independent-contractor Terms of Service for Rangers                           | Placeholder screens only                                                                | ☐       |
-| 4   | Terms of Service, Privacy Policy, Refund Policy text                          | Placeholder text, marked in the app "needs counsel review"                              | ☐       |
-| 5   | TDS, GST, invoicing rules for platform fees and payouts                       | Phase 3                                                                                 | ☐       |
-| 6   | Minimum wage by state and trade                                               | Table exists, **empty on purpose**; counsel must supply values                          | ☐       |
-| 7   | Child labour: hard block under 18                                             | **Built for Rangers (Phase 1)**; Contracts/Campus in Phases 6-7                         | ☐       |
-| 8   | Grievance officer name/contact shown in-app                                   | Phase 4                                                                                 | ☐       |
-| 9   | Damage coverage cap and insurer                                               | Config `damage_coverage_cap_paise` = 0 (disabled)                                       | ☐       |
-| 10  | Translations (hi/ta/kn/te) legally accurate where they carry legal text       | Drafts; native review needed                                                            | ☐       |
-| 11  | **Verification is done by people, not a vendor** (D-016): is this acceptable? | Built as specified by the product owner                                                 | ☐       |
-| 12  | **No background check is performed** at Tier 2 (D-016)                        | Tier 2 = address proof + reference call. Counsel to advise on marketing claims          | ☐       |
-| 13  | Aadhaar-image handling by a private entity (UIDAI rules)                      | See below                                                                               | ☐       |
+| #   | Item                                                                          | Engineering status                                                                       | Counsel |
+| --- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------- |
+| 1   | DPDP: explicit consent, purpose limitation, retention, deletion + export      | **Built (Phase 1)**: consent screen, versioned consent records, export, 30-day deletion  | ☐       |
+| 2   | Aadhaar: never store the full number; masked copy only                        | **Partly**: see "Aadhaar handling" below. Relies on users uploading the masked copy      | ☐       |
+| 3   | Independent-contractor Terms of Service for Rangers                           | Placeholder screens only                                                                 | ☐       |
+| 4   | Terms of Service, Privacy Policy, Refund Policy text                          | Placeholder text, marked in the app "needs counsel review"                               | ☐       |
+| 5   | TDS, GST, invoicing rules for platform fees and payouts                       | Phase 3                                                                                  | ☐       |
+| 6   | Minimum wage by state and trade                                               | Table exists, **empty on purpose**; counsel must supply values                           | ☐       |
+| 7   | Child labour: hard block under 18                                             | **Built for Rangers (Phase 1)**; Contracts/Campus in Phases 6-7                          | ☐       |
+| 8   | Grievance officer name/contact shown in-app                                   | **Built (Phase 4)**: Legal > Grievance Officer screen; name/email/phone are placeholders | ☐       |
+| 9   | Damage coverage cap and insurer                                               | Config `damage_coverage_cap_paise` = 0 (disabled)                                        | ☐       |
+| 10  | Translations (hi/ta/kn/te) legally accurate where they carry legal text       | Drafts; native review needed                                                             | ☐       |
+| 11  | **Verification is done by people, not a vendor** (D-016): is this acceptable? | Built as specified by the product owner                                                  | ☐       |
+| 12  | **No background check is performed** at Tier 2 (D-016)                        | Tier 2 = address proof + reference call. Counsel to advise on marketing claims           | ☐       |
+| 13  | Aadhaar-image handling by a private entity (UIDAI rules)                      | See below                                                                                | ☐       |
 
 ## Aadhaar handling (important, needs counsel)
 
@@ -88,5 +88,8 @@ What the product **cannot** guarantee:
 | `wallet_ledger_entries`                                | Append-only token transaction history            | Life of account (financial audit trail)                      | Immutable; ids only, no card/UPI details ever stored here                                                                                                                                                                                     |
 | `token_bundles`                                        | Non-personal SKU/catalog data                    | Indefinite                                                   | Not personal data                                                                                                                                                                                                                             |
 | `payment_orders`                                       | Order amount, status, Razorpay order/payment ids | Life of account                                              | **No card, UPI VPA or bank details are ever stored** — Razorpay Checkout collects those directly; the API only ever sees an order id, a payment id and a signature (D-040/D-041), which keeps this table out of PCI-DSS cardholder-data scope |
+| `reviews`                                              | Rating + free-text comment, both directions      | Life of the job record                                       | Mutable at the schema level (no immutability trigger), but no edit/delete endpoint exists yet — see D-049                                                                                                                                     |
+| `worker_stats`, `customer_stats`                       | Aggregate rating sum/count, badge tier           | Life of account                                              | Deleted with the account; no personal data beyond the user id                                                                                                                                                                                 |
+| `blocks`                                               | Which user blocked which, and an optional reason | Life of account                                              | Deleted with the account; the "reason" text is not shown to the blocked party                                                                                                                                                                 |
 
 Later phases append their tables here (GPS trails, chat, payments, etc.).
