@@ -16,3 +16,4 @@ apps/mobile/ios/
 .claude/
 
 coverage-integration/
+/.*.txt

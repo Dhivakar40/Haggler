@@ -13,6 +13,8 @@ import { CryptoModule } from './common/crypto.module';
 import { EnvModule, EnvService } from './config/env.service';
 import { HealthModule } from './health/health.module';
 import { KycModule } from './kyc/kyc.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
+import { MarketplaceModule } from './marketplace/marketplace.module';
 import { HttpMetricsMiddleware, MetricsModule } from './metrics/metrics';
 import { PrismaModule } from './prisma/prisma.module';
 import { RateLimitModule } from './ratelimit/rate-limit.service';
@@ -90,6 +92,8 @@ export const LOG_REDACT_PATHS = [
     UsersModule,
     WorkerModule,
     KycModule,
+    MarketplaceModule,
+    MaintenanceModule,
     AdminModule,
   ],
   providers: [

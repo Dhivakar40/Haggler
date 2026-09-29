@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useCategories } from '../../api/hooks';
@@ -6,13 +7,10 @@ import { Card, EmptyState, ErrorState, LoadingState, Screen, Text } from '../../
 import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
 
-/**
- * Lists the real service categories from GET /v1/categories.
- * Tapping a category will start a request in Phase 2 (requires sign-in, Phase 1), so the
- * cards are not pressable yet: no button that does nothing.
- */
+/** Lists the real service categories from GET /v1/categories. Tapping one starts a request. */
 export function HomeScreen() {
   const { t } = useTranslation();
+  const router = useRouter();
   const { colors } = useTheme();
   const { data, isLoading, isError, refetch } = useCategories();
 
@@ -29,7 +27,13 @@ export function HomeScreen() {
 
       <View style={styles.grid}>
         {data?.map((c) => (
-          <Card key={c.id} testID={`category-${c.slug}`} style={styles.tile}>
+          <Card
+            key={c.id}
+            testID={`category-${c.slug}`}
+            style={styles.tile}
+            accessibilityLabel={t(c.nameKey)}
+            onPress={() => router.push({ pathname: '/request/new', params: { category: c.slug } })}
+          >
             <Ionicons
               name={c.icon as keyof typeof Ionicons.glyphMap}
               size={28}

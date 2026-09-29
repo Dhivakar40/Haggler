@@ -35,6 +35,19 @@ const envSchema = z
     THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
     THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
 
+    /** Base URL used in links people share (live trip links). */
+    PUBLIC_BASE_URL: z.string().url().default('http://localhost:3000'),
+    /** Set to false to disable BullMQ maintenance jobs (tests run them by hand). */
+    QUEUES_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((v) => v === 'true'),
+    /** Set to false to disable the in-process scheduler (tests drive it by hand). */
+    SCHEDULER_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((v) => v === 'true'),
+
     S3_ENDPOINT: z.string().url().optional(),
     /** Host used in presigned URLs handed to phones (e.g. your LAN IP). Defaults to S3_ENDPOINT. */
     S3_PUBLIC_ENDPOINT: z.string().url().optional(),

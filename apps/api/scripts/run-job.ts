@@ -1,26 +1,23 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
-import { KycService } from '../src/kyc/kyc.service';
-import { AccountLifecycleService } from '../src/users/account-lifecycle.service';
+import {
+  MAINTENANCE_JOBS,
+  type MaintenanceJob,
+  MaintenanceService,
+} from '../src/maintenance/maintenance.service';
 
-/**
- * One-shot maintenance jobs. Schedule these daily (cron / platform scheduler) until BullMQ
- * arrives in Phase 2:
- *   purge-accounts   anonymise accounts past their 30-day deletion grace period
- *   purge-kyc-images delete identity images past the retention period
- */
+/** Run one maintenance job by hand. In normal operation BullMQ runs them on a schedule. */
 async function main(): Promise<void> {
+  // A one-shot run must not also start the recurring scheduler or queue worker.
+  process.env.QUEUES_ENABLED = 'false';
+  process.env.SCHEDULER_ENABLED = 'false';
   const job = process.argv[2];
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
   try {
-    if (job === 'purge-accounts') {
-      console.log(`purged accounts: ${await app.get(AccountLifecycleService).purgeDueDeletions()}`);
-    } else if (job === 'purge-kyc-images') {
-      console.log(`purged images: ${await app.get(KycService).purgeExpiredImages()}`);
-    } else {
-      throw new Error('Usage: run-job <purge-accounts|purge-kyc-images>');
-    }
+    if (!(MAINTENANCE_JOBS as readonly string[]).includes(job ?? ''))
+      throw new Error(`Usage: run-job <${MAINTENANCE_JOBS.join('|')}>`);
+    console.log(`${job}: ${await app.get(MaintenanceService).run(job as MaintenanceJob)}`);
   } finally {
     await app.close();
   }

@@ -17,6 +17,23 @@
 | POST | `/v1/auth/otp/verify` | Verify the code. Creates the account on first sign-in and returns a session. |
 | POST | `/v1/auth/refresh` | Exchange a refresh token for a new pair. The old refresh token stops working. |
 | GET | `/v1/categories` | List active service categories (public) |
+| GET | `/v1/jobs` | My jobs (as customer and/or Ranger), newest first, cursor-paginated |
+| GET | `/v1/jobs/{id}` | One job with everything I am allowed to see |
+| POST | `/v1/jobs/{id}/arrive` | Ranger: I have arrived. Needs GPS within the geofence; generates the customer's 4-digit code. |
+| POST | `/v1/jobs/{id}/cancel` | Cancel the job (either party, until work starts). Fee flag only if the Ranger already travelled far. |
+| POST | `/v1/jobs/{id}/complete` | Ranger: work finished (needs an after photo). Records how the customer will pay. |
+| POST | `/v1/jobs/{id}/confirm` | Customer: confirm the work is done |
+| POST | `/v1/jobs/{id}/en-route` | Ranger: on my way (after the price is agreed) |
+| POST | `/v1/jobs/{id}/offers` | Make an offer (or counter). Max 3 rounds; outside the price band both sides must confirm. |
+| POST | `/v1/jobs/{id}/photos` | Ranger: presigned upload for the BEFORE (required to start) or AFTER (required to finish) photo |
+| POST | `/v1/jobs/{id}/photos/{photoId}/confirm` | Ranger: confirm a job photo upload |
+| POST | `/v1/jobs/{id}/report-no-show` | Report a no-show after the grace period (customer: Ranger; Ranger: customer) |
+| POST | `/v1/jobs/{id}/share-link` | Customer: create a 12-hour live-trip link for a trusted contact |
+| POST | `/v1/jobs/{id}/share-link/revoke` | Customer: revoke all live-trip links for this job |
+| POST | `/v1/jobs/{id}/start` | Ranger: start work. Needs the arrival code verified and a before photo. |
+| GET | `/v1/jobs/{id}/thread` | The chat thread for this job |
+| GET | `/v1/jobs/{id}/track` | Live location and trail of the Ranger while the job is active |
+| POST | `/v1/jobs/{id}/verify-arrival` | Ranger: enter the 4-digit code the customer reads out (max 5 tries) |
 | POST | `/v1/kyc/documents` | Get a presigned URL (valid 5 min) to upload one document straight to private storage |
 | POST | `/v1/kyc/documents/{id}/confirm` | Confirm that the upload finished; verifies the file exists at the declared size |
 | POST | `/v1/kyc/start` | Open a tier 1 (identity) or tier 2 (go-live) verification. Needs KYC consent. |
@@ -38,6 +55,25 @@
 | DELETE | `/v1/me/emergency-contacts/{id}` | Remove an emergency contact |
 | GET | `/v1/me/export` | Download all data we hold about me (DPDP access right) |
 | POST | `/v1/me/roles` | Add a role (Customer, Ranger or Employer). Student arrives with Haggler Campus. |
+| POST | `/v1/offers/{id}/accept` | Accept the other party's offer; the job becomes AGREED at that price |
+| POST | `/v1/offers/{id}/counter` | Counter-offer (next round) |
+| POST | `/v1/offers/{id}/reject` | Reject the offer: ends the negotiation and cancels the job |
 | GET | `/v1/price-bands` | Price band (min/median/max, integer paise) for a category and area |
+| POST | `/v1/requests` | Create a service request. Immediate requests start broadcasting to nearby Rangers at once. |
+| GET | `/v1/requests/{id}` | A request/job as seen by me (customer or matched Ranger) |
+| POST | `/v1/requests/{id}/accept` | Ranger: accept a request. First accept wins; everyone else gets 409 REQUEST_TAKEN. |
+| POST | `/v1/requests/{id}/cancel` | Cancel a request that has not been matched yet |
+| POST | `/v1/requests/{id}/decline` | Ranger: decline a request |
+| POST | `/v1/requests/{id}/rebroadcast` | Try again after a timeout: invites Rangers from wave 1 again |
+| POST | `/v1/requests/media` | Get a presigned URL to upload a request photo (max 5) or a voice note (max 60 s) |
+| POST | `/v1/requests/media/{mediaId}/confirm` | Confirm that a media upload finished |
+| GET | `/v1/threads/{id}/messages` | Messages, newest first, cursor-paginated |
+| POST | `/v1/threads/{id}/messages` | Send a message (idempotent on clientMsgId). The WebSocket event chat.message does the same. |
+| GET | `/v1/track/{token}` | Live trip link contents: status and the Ranger's position. No phone numbers. |
+| GET | `/v1/worker/incoming` | Requests currently waiting for my answer (use after reconnecting) |
+| POST | `/v1/worker/location` | Location heartbeat (every 5-10 s). While on a job it also extends the GPS trail and pushes to the customer. |
+| POST | `/v1/worker/offline` | Go offline: no new requests |
+| POST | `/v1/worker/online` | Go online (needs verification level 2 and at least one category). Sends the first location. |
+| GET | `/v1/worker/presence` | Am I online right now (heartbeat fresh)? |
 | GET | `/v1/worker/profile` | My Ranger profile (verification tier, categories, bio) |
 | PATCH | `/v1/worker/profile` | Update my Ranger profile and the categories I work in (max 5) |

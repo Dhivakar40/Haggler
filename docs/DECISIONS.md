@@ -144,3 +144,88 @@ caught it. The blocking rule now has its own unit tests, including the Redis-dow
 `refresh_tokens`; the two purge jobs are scripts, not yet scheduled; FIELD_ENCRYPTION_KEY rotation is
 not implemented; the admin decision form is covered by unit tests of its parser plus a scripted
 end-to-end run, not by a browser test; the MSG91 adapter is untested against MSG91.
+
+## Phase 2
+
+**D-029 Matching reads PostGIS directly; no Redis geo index yet.** Every accept race is decided by two
+layers: a Redis `SET request:{job}:lock worker:{id} NX PX 10000` (fast, first-writer-wins) and a
+Postgres transaction (`updateMany` guarded by `status = BROADCASTING`, `job_matches UNIQUE(job_id)`,
+and a partial unique index `jobs_one_active_per_worker` so a Ranger can never hold two active jobs).
+Postgres is the source of truth; Redis only shortens the race window. The 2,500-way load test
+(`matching-load.e2e-spec.ts`) passes with Redis both up and forced down, proving the Postgres layer
+alone is correct. A Redis geo index (`GEOADD`/`GEOSEARCH`) would cut wave-building latency at scale
+but adds a second index that can drift from Postgres; deferred until query latency actually requires it.
+
+**D-030 The broadcast/timeout scheduler is a DB poller; BullMQ is reserved for maintenance jobs.**
+`SchedulerService.tick()` runs on an interval, reading `jobs` in `BROADCASTING` whose wave deadline has
+passed and building the next wave (or leaving the job for the customer to rebroadcast/cancel after the
+last wave). This needs no separate worker process and every state change is still funnelled through
+`JobTransitions.move()`. Because scheduled requests, wave timing and rebroadcasts are all read from one
+table, "what will happen next" is answerable with a SQL query — useful for support and hard to get with
+opaque queue jobs. BullMQ is used instead for `purge-accounts`, `purge-kyc-images`,
+`trim-auth-data` and `trim-gps-trails`: batch jobs with real retry/backoff needs and no live-request
+latency requirement, where a dead-letter set on repeated failure matters more than sub-second scheduling.
+Both can be switched off independently (`SCHEDULER_ENABLED`, `QUEUES_ENABLED`) so tests drive them by hand.
+
+**D-031 Socket.IO runs single-instance for now.** The realtime gateway keeps per-user rooms (`user:<id>`)
+in the process's own memory; a second API instance would not see rooms joined on the first, so a
+customer connected to instance A would miss events emitted from instance B. REST remains the source of
+truth (every screen refetches on any realtime hint, never trusts the socket payload alone), so a missed
+event degrades to "arrives on the next poll" rather than silent staleness — but this must not ship to
+production with more than one API instance until the Redis adapter (`@socket.io/redis-adapter`) is
+added. Tracked as a gap, not a workaround, because it's a real scaling limit, not a shortcut with an
+easy undo.
+
+**D-032 In-process `KeyedMutex` plus a wider Postgres transaction window for the accept race.**
+The first load-test run against a _down_ Redis produced `Unable to start a transaction in the given
+time` under 2,500 concurrent accepts: Prisma's transaction pool was starved because every accept for
+the same request serialized inside Postgres anyway (the `updateMany` guard), just later and more
+expensively than necessary. Fix: a per-request in-process mutex (`KeyedMutex`) queues concurrent accept
+attempts for the _same_ `jobId` before they ever open a transaction, and `$transaction` was given
+explicit `maxWait`/`timeout` budgets (10 s / 15 s) instead of Prisma's defaults. A `P2028`/`P2024` that
+still occurs (e.g. many _different_ jobs contending for pool slots at once) is mapped to a `503
+BUSY_RETRY` the client can retry, rather than a raw 500. This does not remove the two authoritative
+layers in D-029 — it only stops them from queueing behind a starved connection pool.
+
+**D-033 Wave-based broadcast with a rebroadcast/cancel choice, not an infinite retry.** Waves go out at
+2 km → 5 km → 10 km (top 5 candidates per wave, radii and wave size configurable via
+`system_config`), ranked on distance (0.4), badge tier (0.2), fairness — jobs done recently count
+against a Ranger so work spreads out (0.2), a smoothed acceptance rate (0.2) and a soft gender-match
+bonus (0.1) when the customer expressed a preference. When the last wave times out with nobody
+accepting, the job is left in `BROADCASTING` with `nextWaveAt = null`: the customer explicitly chooses
+to rebroadcast (bumps an `attempt` counter, restarts from wave 1 with a fresh deadline) or cancel. An
+unattended request auto-cancels after 2 hours so it never sits invisible in the system. A scheduled
+request starts broadcasting 60 minutes before the requested time, using the same wave mechanism.
+
+**D-034 Arrival is proven with a 4-digit code, never with GPS alone.** GPS on a phone can be 20–50 m
+off indoors, so "the Ranger's dot is near the pin" is not proof of arrival — it only gates _when the
+Ranger may attempt_ the code (must be within 500 m, `NOT_AT_LOCATION` otherwise). The code itself is a
+random 4 digits shown only to the customer, stored as an HMAC hash for verification (a stolen DB row
+cannot be used to derive the code) and, separately, AES-GCM encrypted so support tooling could recover
+it if a customer loses their phone before the Ranger arrives. Five wrong tries lock the job
+(`CODE_LOCKED`) rather than allowing a brute force of a 4-digit space. Work cannot start without a
+before-photo and cannot complete without an after-photo (`BEFORE_PHOTO_REQUIRED` /
+`AFTER_PHOTO_REQUIRED`), both taken with the device camera only — `launchImageLibraryAsync` is never
+called from the job screen — so a photo can't be swapped from the gallery after the fact.
+
+**D-035 `expo-audio` instead of `expo-av` for the voice note.** `expo-av`'s `Audio` API is deprecated in
+the Expo SDK this app targets; `expo-audio`'s hook-based recorder (`useAudioRecorder` /
+`useAudioRecorderState`) is the maintained replacement and was already required for a clean upgrade
+path. Recording is capped at `MAX_VOICE_SECONDS` (60 s) — the recorder stops itself once the visible
+timer reaches the limit — mono, 22 kHz, 32 kbps AAC (`.m4a`), which keeps a full-length note under
+roughly 240 KB on a slow connection. Voice playback (letting the Ranger _listen_ to the note, not just
+see "Voice note" and its length) is not implemented yet and is listed as a gap.
+
+**D-036 Known gaps carried forward (Phase 2).** No push notifications — a Ranger must have the app open
+to see an incoming request; FCM arrives in Phase 5, so today's only channel is the open Socket.IO
+connection plus the 15 s `useIncoming` poll as a fallback. The background location task
+(`expo-task-manager`) and MapLibre native rendering are implemented but unverified on a real device —
+MapLibre needs a dev build (`expo run:android` / EAS), not Expo Go, and the fallback text+"open in
+maps" view is what Expo Go actually shows; both are covered by tests that mock the native module in
+and out, not by a device run. Voice note playback is not implemented (D-035). Socket.IO is
+single-instance (D-031). The public OpenStreetMap tile server and the earlier Nominatim geocoder are
+for light development use only, not production traffic. Token consumption on job confirmation is a
+Phase 3 hook (wallet/payments don't exist yet, so `confirm` only records the payment method chosen).
+Customer/Ranger reputation beyond the raw `badgeTier`/`jobsCompleted` fields, and any badge-earning
+logic, are Phase 4. The hi/ta/kn/te strings added this phase are drafts awaiting native-speaker review
+(existing gap, restated because this phase added a large new batch of them).

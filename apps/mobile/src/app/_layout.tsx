@@ -6,9 +6,16 @@ import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSession } from '../auth/session';
+import { TrackerHost } from '../features/work/TrackerHost';
+import { defineBackgroundTask } from '../location/tracker';
+import { RealtimeProvider } from '../realtime/RealtimeProvider';
 import i18n, { deviceLanguage } from '../i18n';
 import { useSettings } from '../store/settings';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
+
+// The OS can wake this task with new positions even when no screen is showing, so it is
+// registered at startup rather than inside a component.
+defineBackgroundTask();
 
 /** Keeps i18next in step with the saved language (or the device language when unset). */
 function useLanguageSync(): void {
@@ -82,6 +89,10 @@ function Navigator() {
           name="delete-account"
           options={{ ...header, title: t('deleteAccount.title') }}
         />
+        <Stack.Screen name="request/new" options={{ ...header, title: t('request.title') }} />
+        <Stack.Screen name="request/[id]" options={{ ...header, title: t('request.title') }} />
+        <Stack.Screen name="job/[id]" options={{ ...header, title: t('job.title') }} />
+        <Stack.Screen name="chat/[jobId]" options={{ ...header, title: t('chat.title') }} />
       </Stack.Protected>
     </Stack>
   );
@@ -113,10 +124,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            <ThemedStatusBar />
-            <Navigator />
-          </ThemeProvider>
+          <RealtimeProvider>
+            <ThemeProvider>
+              <ThemedStatusBar />
+              <TrackerHost />
+              <Navigator />
+            </ThemeProvider>
+          </RealtimeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -13,7 +13,7 @@ jest.mock('expo-secure-store', () => {
   };
 });
 
-jest.mock('expo-crypto', () => ({ randomUUID: () => 'test-device-uuid-0001' }));
+jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'test-device-uuid-0001') }));
 
 // Navigation is exercised through a shared spy router.
 jest.mock('expo-router', () => {

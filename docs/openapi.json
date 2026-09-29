@@ -1165,6 +1165,1332 @@
         ]
       }
     },
+    "/v1/requests/media": {
+      "post": {
+        "operationId": "RequestsController_presign_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "PHOTO",
+                      "VOICE"
+                    ]
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 60
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10485760
+                  },
+                  "durationSeconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60
+                  }
+                },
+                "required": [
+                  "kind",
+                  "contentType",
+                  "sizeBytes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a presigned URL to upload a request photo (max 5) or a voice note (max 60 s)",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests/media/{mediaId}/confirm": {
+      "post": {
+        "operationId": "RequestsController_confirmMedia_v1",
+        "parameters": [
+          {
+            "name": "mediaId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm that a media upload finished",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests": {
+      "post": {
+        "operationId": "RequestsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categorySlug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 5,
+                    "maxLength": 1000
+                  },
+                  "addressId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": [
+                      "IMMEDIATE",
+                      "SCHEDULED"
+                    ]
+                  },
+                  "scheduledFor": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "genderPreference": {
+                    "type": "string",
+                    "enum": [
+                      "ANY",
+                      "FEMALE",
+                      "MALE"
+                    ],
+                    "default": "ANY"
+                  },
+                  "mediaIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 6,
+                    "default": []
+                  }
+                },
+                "required": [
+                  "categorySlug",
+                  "description",
+                  "addressId",
+                  "urgency"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a service request. Immediate requests start broadcasting to nearby Rangers at once.",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests/{id}": {
+      "get": {
+        "operationId": "RequestsController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A request/job as seen by me (customer or matched Ranger)",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests/{id}/cancel": {
+      "post": {
+        "operationId": "RequestsController_cancel_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a request that has not been matched yet",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests/{id}/rebroadcast": {
+      "post": {
+        "operationId": "RequestsController_rebroadcast_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Try again after a timeout: invites Rangers from wave 1 again",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests/{id}/accept": {
+      "post": {
+        "operationId": "RequestsController_accept_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: accept a request. First accept wins; everyone else gets 409 REQUEST_TAKEN.",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests/{id}/decline": {
+      "post": {
+        "operationId": "RequestsController_decline_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: decline a request",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/jobs": {
+      "get": {
+        "operationId": "JobsController_list_v1",
+        "parameters": [
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "CUSTOMER",
+                "WORKER"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My jobs (as customer and/or Ranger), newest first, cursor-paginated",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}": {
+      "get": {
+        "operationId": "JobsController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "One job with everything I am allowed to see",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/offers": {
+      "post": {
+        "operationId": "JobsController_offer_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amountPaise": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 10000000
+                  },
+                  "confirmOutsideBand": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "amountPaise"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Make an offer (or counter). Max 3 rounds; outside the price band both sides must confirm.",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/en-route": {
+      "post": {
+        "operationId": "JobsController_enRoute_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: on my way (after the price is agreed)",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/arrive": {
+      "post": {
+        "operationId": "JobsController_arrive_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: I have arrived. Needs GPS within the geofence; generates the customer's 4-digit code.",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/verify-arrival": {
+      "post": {
+        "operationId": "JobsController_verify_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}$"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: enter the 4-digit code the customer reads out (max 5 tries)",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/photos": {
+      "post": {
+        "operationId": "JobsController_photo_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "BEFORE",
+                      "AFTER"
+                    ]
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 60
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10485760
+                  }
+                },
+                "required": [
+                  "kind",
+                  "contentType",
+                  "sizeBytes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: presigned upload for the BEFORE (required to start) or AFTER (required to finish) photo",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/photos/{photoId}/confirm": {
+      "post": {
+        "operationId": "JobsController_confirmPhoto_v1",
+        "parameters": [
+          {
+            "name": "photoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: confirm a job photo upload",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/start": {
+      "post": {
+        "operationId": "JobsController_start_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: start work. Needs the arrival code verified and a before photo.",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/complete": {
+      "post": {
+        "operationId": "JobsController_complete_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paymentMethod": {
+                    "type": "string",
+                    "enum": [
+                      "CASH",
+                      "UPI"
+                    ]
+                  }
+                },
+                "required": [
+                  "paymentMethod"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ranger: work finished (needs an after photo). Records how the customer will pay.",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/confirm": {
+      "post": {
+        "operationId": "JobsController_confirm_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Customer: confirm the work is done",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "JobsController_cancel_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel the job (either party, until work starts). Fee flag only if the Ranger already travelled far.",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/report-no-show": {
+      "post": {
+        "operationId": "JobsController_noShow_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Report a no-show after the grace period (customer: Ranger; Ranger: customer)",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/track": {
+      "get": {
+        "operationId": "JobsController_track_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Live location and trail of the Ranger while the job is active",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/share-link": {
+      "post": {
+        "operationId": "JobsController_share_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Customer: create a 12-hour live-trip link for a trusted contact",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/share-link/revoke": {
+      "post": {
+        "operationId": "JobsController_revoke_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Customer: revoke all live-trip links for this job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{id}/thread": {
+      "get": {
+        "operationId": "JobsController_thread_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chat thread for this job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/offers/{id}/accept": {
+      "post": {
+        "operationId": "OffersController_accept_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirmOutsideBand": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Accept the other party's offer; the job becomes AGREED at that price",
+        "tags": [
+          "offers"
+        ]
+      }
+    },
+    "/v1/offers/{id}/counter": {
+      "post": {
+        "operationId": "OffersController_counter_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amountPaise": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 10000000
+                  },
+                  "confirmOutsideBand": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "amountPaise"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Counter-offer (next round)",
+        "tags": [
+          "offers"
+        ]
+      }
+    },
+    "/v1/offers/{id}/reject": {
+      "post": {
+        "operationId": "OffersController_reject_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reject the offer: ends the negotiation and cancels the job",
+        "tags": [
+          "offers"
+        ]
+      }
+    },
+    "/v1/threads/{id}/messages": {
+      "get": {
+        "operationId": "ChatController_messages_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Messages, newest first, cursor-paginated",
+        "tags": [
+          "chat"
+        ]
+      },
+      "post": {
+        "operationId": "ChatController_send_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientMsgId": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 64
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "clientMsgId",
+                  "body"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a message (idempotent on clientMsgId). The WebSocket event chat.message does the same.",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/v1/worker/online": {
+      "post": {
+        "operationId": "WorkerPresenceController_online_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "latitude": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  }
+                },
+                "required": [
+                  "latitude",
+                  "longitude"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Go online (needs verification level 2 and at least one category). Sends the first location.",
+        "tags": [
+          "ranger"
+        ]
+      }
+    },
+    "/v1/worker/offline": {
+      "post": {
+        "operationId": "WorkerPresenceController_offline_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Go offline: no new requests",
+        "tags": [
+          "ranger"
+        ]
+      }
+    },
+    "/v1/worker/presence": {
+      "get": {
+        "operationId": "WorkerPresenceController_status_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Am I online right now (heartbeat fresh)?",
+        "tags": [
+          "ranger"
+        ]
+      }
+    },
+    "/v1/worker/location": {
+      "post": {
+        "operationId": "WorkerPresenceController_location_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "latitude": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "accuracyM": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000
+                  }
+                },
+                "required": [
+                  "latitude",
+                  "longitude"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Location heartbeat (every 5-10 s). While on a job it also extends the GPS trail and pushes to the customer.",
+        "tags": [
+          "ranger"
+        ]
+      }
+    },
+    "/v1/worker/incoming": {
+      "get": {
+        "operationId": "WorkerPresenceController_incoming_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Requests currently waiting for my answer (use after reconnecting)",
+        "tags": [
+          "ranger"
+        ]
+      }
+    },
+    "/v1/track/{token}": {
+      "get": {
+        "operationId": "PublicTrackController_view_v1",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Live trip link contents: status and the Ranger's position. No phone numbers.",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
     "/v1/admin/auth/login": {
       "post": {
         "operationId": "AdminController_login_v1",

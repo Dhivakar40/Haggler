@@ -3,10 +3,12 @@
 A mobile marketplace for India: verified local **Rangers** (independent workers) for on-demand
 services, plus long-term contract labour and part-time student jobs, on one trust layer.
 
-> **Status: Phase 1 (Identity and Verification) complete.** You can sign in with a phone OTP,
-> manage your profile, addresses and emergency contacts, become a Ranger, upload verification
-> documents, and an admin can review and approve them in the web console. Requesting and
-> matching services starts in Phase 2.
+> **Status: Phase 2 (Core On-Demand Marketplace) complete.** Everything in Phase 1, plus: a customer
+> can post a service request (photos + optional voice note, price band shown), it broadcasts to nearby
+> Rangers in waves, a Ranger goes online and accepts (first-accept wins, proven race-free under load),
+> either side can negotiate the price, the job moves through arrival (geofenced 4-digit code),
+> before/after photos, live GPS tracking with a shareable link, in-app chat, and completion/confirmation.
+> Payments, wallets and reputation/badges start in Phase 3+.
 
 ## Stack
 
@@ -66,14 +68,14 @@ API keep the name `WORKER` (see [D-003](docs/DECISIONS.md)).
 
 ## Adapters: what is real and what is a stand-in
 
-| Adapter  | Modes              | Today                                                                  |
-| -------- | ------------------ | ---------------------------------------------------------------------- |
-| SMS      | `sandbox` / `live` | Sandbox. The MSG91 adapter exists but is **untested** against MSG91    |
-| KYC      | `manual_admin`     | Humans review documents. No automated eKYC/face-match/background check |
-| Payments | `sandbox` / `test` | Razorpay **test keys only**; there is no live mode                     |
-| Calls    | `disabled`         | Masked calling is not built (in-app chat only, Phase 2)                |
-| Push     | `sandbox` / `live` | Sandbox until Phase 5                                                  |
-| Maps     | `sandbox` / `osm`  | OpenStreetMap; production needs a hosted geocoder/tile provider        |
+| Adapter  | Modes              | Today                                                                                                         |
+| -------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| SMS      | `sandbox` / `live` | Sandbox. The MSG91 adapter exists but is **untested** against MSG91                                           |
+| KYC      | `manual_admin`     | Humans review documents. No automated eKYC/face-match/background check                                        |
+| Payments | `sandbox` / `test` | Razorpay **test keys only**; there is no live mode                                                            |
+| Calls    | `disabled`         | Masked calling is not built; in-app chat only (built in Phase 2)                                              |
+| Push     | `sandbox` / `live` | Sandbox until Phase 5 — a Ranger must have the app open to see requests                                       |
+| Maps     | `sandbox` / `osm`  | OpenStreetMap + MapLibre; public tile server is dev-only (needs a dev build, not Expo Go, to render natively) |
 
 The active modes show at `/health/ready` and in the app's Settings. Production refuses to boot
 with a sandbox adapter.

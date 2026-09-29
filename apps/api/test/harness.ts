@@ -93,7 +93,7 @@ export async function startHarness(): Promise<Harness> {
 
   const baseEnv: Record<string, string> = {
     NODE_ENV: 'test',
-    DATABASE_URL: databaseUrl,
+    DATABASE_URL: `${databaseUrl}&connection_limit=40&pool_timeout=60`, // room for the load test
     REDIS_URL: `redis://${redis.getHost()}:${redis.getMappedPort(6379)}`,
     JWT_ACCESS_SECRET: 'integration-test-secret-integration-test-secret',
     ADMIN_JWT_SECRET: 'integration-admin-secret-integration-admin-secret',
@@ -104,6 +104,8 @@ export async function startHarness(): Promise<Harness> {
     S3_ACCESS_KEY: MINIO_USER,
     S3_SECRET_KEY: MINIO_PASSWORD,
     THROTTLE_LIMIT: '100000', // dedicated tests use a low-limit app instead
+    QUEUES_ENABLED: 'false', // the queue test turns it on explicitly
+    SCHEDULER_ENABLED: 'false', // tests drive the scheduler by hand for deterministic time
     TRUST_PROXY_HOPS: '1', // tests send X-Forwarded-For so each "client" has its own IP
   };
 

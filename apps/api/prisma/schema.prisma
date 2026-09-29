@@ -189,6 +189,7 @@ model ServiceCategory {
 
   priceBands       PriceBand[]
   workerCategories WorkerCategory[]
+  requests         ServiceRequest[]
 
   @@map("service_categories")
 }
@@ -361,17 +362,24 @@ enum ConsentPurpose {
 
 /// The Ranger profile (internal name: worker). Created when a user adds the WORKER role.
 model WorkerProfile {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String   @unique @map("user_id") @db.Uuid
+  id              String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String                                @unique @map("user_id") @db.Uuid
   /// 0 = unverified, 1 = identity verified, 2 = live-ready, 3 = licensed (category specific).
-  kycTier         Int      @default(0) @map("kyc_tier")
+  kycTier         Int                                   @default(0) @map("kyc_tier")
   bio             String?
-  experienceYears Int?     @map("experience_years")
+  experienceYears Int?                                  @map("experience_years")
   /// AES-256-GCM ciphertext (EncryptionService). Never store these in plaintext.
-  aadhaarLast4Enc String?  @map("aadhaar_last4_enc")
-  dateOfBirthEnc  String?  @map("date_of_birth_enc")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  aadhaarLast4Enc String?                               @map("aadhaar_last4_enc")
+  dateOfBirthEnc  String?                               @map("date_of_birth_enc")
+  /// Self-declared. Only used as a soft ranking bonus for customers who ask for a preference.
+  gender          Gender?
+  /// Presence: a Ranger counts as online only while lastLocationAt is fresh (heartbeat).
+  isOnline        Boolean                               @default(false) @map("is_online")
+  /// geography(Point,4326); raw SQL only.
+  lastLocation    Unsupported("geography(Point,4326)")? @map("last_location")
+  lastLocationAt  DateTime?                             @map("last_location_at") @db.Timestamptz(6)
+  createdAt       DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   categories WorkerCategory[]
@@ -528,4 +536,398 @@ model CallSession {
   @@index([callerUserId])
   @@index([calleeUserId])
   @@map("call_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: on-demand marketplace
+// ---------------------------------------------------------------------------
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+
+  @@map("gender")
+}
+
+enum GenderPreference {
+  ANY
+  FEMALE
+  MALE
+
+  @@map("gender_preference")
+}
+
+enum Urgency {
+  IMMEDIATE
+  SCHEDULED
+
+  @@map("urgency")
+}
+
+/// Job lifecycle (D3). Transitions are validated in code (job-state.ts) and recorded in job_events.
+enum JobStatus {
+  REQUESTED
+  BROADCASTING
+  MATCHED
+  NEGOTIATING
+  AGREED
+  EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED_BY_WORKER
+  CONFIRMED_BY_CUSTOMER
+  CANCELLED
+  NO_SHOW_WORKER
+  NO_SHOW_CUSTOMER
+  DISPUTED
+  REFUNDED
+
+  @@map("job_status")
+}
+
+enum MediaKind {
+  PHOTO
+  VOICE
+
+  @@map("media_kind")
+}
+
+enum MediaStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  DELETED
+
+  @@map("media_status")
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  COUNTERED
+  REJECTED
+  EXPIRED
+
+  @@map("offer_status")
+}
+
+enum PartyRole {
+  CUSTOMER
+  WORKER
+
+  @@map("party_role")
+}
+
+enum JobPhotoKind {
+  BEFORE
+  AFTER
+
+  @@map("job_photo_kind")
+}
+
+enum BroadcastResponse {
+  PENDING
+  ACCEPTED
+  DECLINED
+  TAKEN
+  EXPIRED
+
+  @@map("broadcast_response")
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+
+  @@map("payment_method")
+}
+
+enum BadgeTierName {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+
+  @@map("badge_tier")
+}
+
+/// What the customer asked for. Address fields are a SNAPSHOT so later edits never change history.
+model ServiceRequest {
+  id               String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId       String                               @map("customer_id") @db.Uuid
+  categoryId       String                               @map("category_id") @db.Uuid
+  description      String
+  addressLine      String                               @map("address_line")
+  city             String
+  state            String
+  pincode          String
+  location         Unsupported("geography(Point,4326)")
+  urgency          Urgency
+  scheduledFor     DateTime?                            @map("scheduled_for") @db.Timestamptz(6)
+  genderPreference GenderPreference                     @default(ANY) @map("gender_preference")
+  /// Price band shown to both parties, frozen when the request is created.
+  bandScope        PriceBandScope                       @map("band_scope")
+  bandMinPaise     Int                                  @map("band_min_paise")
+  bandMedianPaise  Int                                  @map("band_median_paise")
+  bandMaxPaise     Int                                  @map("band_max_paise")
+  createdAt        DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category ServiceCategory @relation(fields: [categoryId], references: [id])
+  job      Job?
+  media    RequestMedia[]
+
+  @@index([customerId, createdAt(sort: Desc)])
+  @@map("service_requests")
+}
+
+model Job {
+  id                     String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId              String         @unique @map("request_id") @db.Uuid
+  customerId             String         @map("customer_id") @db.Uuid
+  workerId               String?        @map("worker_id") @db.Uuid
+  status                 JobStatus      @default(REQUESTED)
+  agreedPricePaise       Int?           @map("agreed_price_paise")
+  /// Broadcast progress. The scheduler picks up jobs whose next_wave_at has passed.
+  currentWave            Int            @default(0) @map("current_wave")
+  /// Bumped by each re-broadcast so previously invited Rangers can be invited again.
+  broadcastAttempt       Int            @default(1) @map("broadcast_attempt")
+  nextWaveAt             DateTime?      @map("next_wave_at") @db.Timestamptz(6)
+  broadcastDeadline      DateTime?      @map("broadcast_deadline") @db.Timestamptz(6)
+  genderPreferenceMet    Boolean?       @map("gender_preference_met")
+  /// 4-digit arrival code: hashed for checking, encrypted so the customer's app can show it.
+  arrivalCodeHash        String?        @map("arrival_code_hash")
+  arrivalCodeEnc         String?        @map("arrival_code_enc")
+  arrivalCodeTries       Int            @default(0) @map("arrival_code_tries")
+  arrivalVerifiedAt      DateTime?      @map("arrival_verified_at") @db.Timestamptz(6)
+  matchedAt              DateTime?      @map("matched_at") @db.Timestamptz(6)
+  agreedAt               DateTime?      @map("agreed_at") @db.Timestamptz(6)
+  enRouteAt              DateTime?      @map("en_route_at") @db.Timestamptz(6)
+  arrivedAt              DateTime?      @map("arrived_at") @db.Timestamptz(6)
+  startedAt              DateTime?      @map("started_at") @db.Timestamptz(6)
+  completedByWorkerAt    DateTime?      @map("completed_by_worker_at") @db.Timestamptz(6)
+  confirmedAt            DateTime?      @map("confirmed_at") @db.Timestamptz(6)
+  cancelledAt            DateTime?      @map("cancelled_at") @db.Timestamptz(6)
+  cancelledBy            String?        @map("cancelled_by")
+  cancelReason           String?        @map("cancel_reason")
+  /// Set when the Ranger had already travelled a meaningful distance (D3). Charged in Phase 3.
+  cancellationFeeApplies Boolean        @default(false) @map("cancellation_fee_applies")
+  paymentMethod          PaymentMethod? @map("payment_method")
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  request    ServiceRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  match      JobMatch?
+  broadcasts RequestBroadcast[]
+  offers     Offer[]
+  events     JobEvent[]
+  photos     JobPhoto[]
+  locations  JobLocation[]
+  thread     ChatThread?
+  shares     TrustedShare[]
+
+  @@index([customerId, createdAt(sort: Desc)])
+  @@index([workerId, createdAt(sort: Desc)])
+  @@index([status, nextWaveAt])
+  @@map("jobs")
+}
+
+/// The single accepted match per job. UNIQUE(job_id) is the database-level guarantee that two
+/// Rangers can never both win, even if Redis fails or is bypassed (D3).
+model JobMatch {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId      String   @unique @map("job_id") @db.Uuid
+  workerId   String   @map("worker_id") @db.Uuid
+  acceptedAt DateTime @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_matches")
+}
+
+model RequestBroadcast {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String            @map("job_id") @db.Uuid
+  wave        Int
+  attempt     Int               @default(1)
+  workerId    String            @map("worker_id") @db.Uuid
+  distanceM   Int               @map("distance_m")
+  score       Float
+  response    BroadcastResponse @default(PENDING)
+  sentAt      DateTime          @default(now()) @map("sent_at") @db.Timestamptz(6)
+  respondedAt DateTime?         @map("responded_at") @db.Timestamptz(6)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, workerId, attempt])
+  @@index([workerId, response])
+  @@map("request_broadcasts")
+}
+
+model RequestMedia {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId         String      @map("owner_id") @db.Uuid
+  requestId       String?     @map("request_id") @db.Uuid
+  kind            MediaKind
+  bucket          String
+  storageKey      String      @unique @map("storage_key")
+  contentType     String      @map("content_type")
+  sizeBytes       Int         @map("size_bytes")
+  durationSeconds Int?        @map("duration_seconds")
+  status          MediaStatus @default(PENDING_UPLOAD)
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  request ServiceRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([requestId])
+  @@map("request_media")
+}
+
+model Offer {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String      @map("job_id") @db.Uuid
+  round       Int
+  fromRole    PartyRole   @map("from_role")
+  amountPaise Int         @map("amount_paise")
+  /// True when the amount is outside the price band; both parties must explicitly confirm.
+  outsideBand Boolean     @default(false) @map("outside_band")
+  status      OfferStatus @default(PENDING)
+  expiresAt   DateTime    @map("expires_at") @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, round])
+  @@index([status, expiresAt])
+  @@map("offers")
+}
+
+model JobEvent {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String     @map("job_id") @db.Uuid
+  fromStatus  JobStatus? @map("from_status")
+  toStatus    JobStatus  @map("to_status")
+  actorUserId String?    @map("actor_user_id") @db.Uuid
+  meta        Json?
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@map("job_events")
+}
+
+model JobPhoto {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String       @map("job_id") @db.Uuid
+  uploaderId  String       @map("uploader_id") @db.Uuid
+  kind        JobPhotoKind
+  bucket      String
+  storageKey  String       @unique @map("storage_key")
+  contentType String       @map("content_type")
+  sizeBytes   Int          @map("size_bytes")
+  status      MediaStatus  @default(PENDING_UPLOAD)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, kind])
+  @@map("job_photos")
+}
+
+/// GPS trail while a job is active (D3). Retention is in docs/COMPLIANCE.md.
+model JobLocation {
+  id         String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId      String                               @map("job_id") @db.Uuid
+  workerId   String                               @map("worker_id") @db.Uuid
+  location   Unsupported("geography(Point,4326)")
+  accuracyM  Float?                               @map("accuracy_m")
+  recordedAt DateTime                             @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  createdAt  DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime                             @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, recordedAt(sort: Desc)])
+  @@map("job_locations")
+}
+
+model ChatThread {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId     String   @unique @map("job_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job      Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId    String   @map("thread_id") @db.Uuid
+  senderId    String   @map("sender_id") @db.Uuid
+  body        String
+  /// Client-generated id so a retried send after a dropped connection is not duplicated.
+  clientMsgId String   @map("client_msg_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, senderId, clientMsgId])
+  @@index([threadId, createdAt(sort: Desc), id])
+  @@map("chat_messages")
+}
+
+/// Live trip link a customer can send to a trusted contact. Only the hash of the token is stored.
+model TrustedShare {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId     String    @map("job_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("trusted_shares")
+}
+
+/// Blocked pairs never match (either direction). Endpoints and UI arrive in Phase 4.
+model Block {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+model WorkerStats {
+  workerUserId  String        @id @map("worker_user_id") @db.Uuid
+  jobsCompleted Int           @default(0) @map("jobs_completed")
+  badgeTier     BadgeTierName @default(BRONZE) @map("badge_tier")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("worker_stats")
 }

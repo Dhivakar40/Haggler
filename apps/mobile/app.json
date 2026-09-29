@@ -36,9 +36,19 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Haggler uses your location to fill in your address."
+          "locationWhenInUsePermission": "Haggler uses your location to fill in your address and to show where your Ranger is.",
+          "locationAlwaysAndWhenInUsePermission": "Haggler shares your location with the customer while you are on an active job, even when the app is in the background.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Haggler records the voice note you attach to a request."
+        }
+      ],
+      "@maplibre/maplibre-react-native"
     ]
   }
 }

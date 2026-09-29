@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import type { Me } from '@haggler/shared';
+import type { JobDto, Me, OfferDto } from '@haggler/shared';
 import '../src/i18n';
 import { useSession } from './auth/session';
 import { ThemeProvider } from './theme/ThemeProvider';
@@ -104,3 +104,59 @@ export const routerMock = (): { push: jest.Mock; replace: jest.Mock; back: jest.
 
 export const secureStore = (): Map<string, string> =>
   (jest.requireMock('expo-secure-store') as { __store: Map<string, string> }).__store;
+
+const iso = (ms: number) => new Date(Date.now() + ms).toISOString();
+export { iso };
+
+/** A complete JobDto as the server would send it. Override only what a test cares about. */
+export const makeJob = (over: Partial<JobDto> = {}): JobDto => ({
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  viewerRole: 'CUSTOMER',
+  status: 'BROADCASTING',
+  categorySlug: 'electrician',
+  description: 'Ceiling fan is not working',
+  urgency: 'IMMEDIATE',
+  scheduledFor: null,
+  city: 'Chennai',
+  pincode: '600042',
+  addressLine: '12 Gandhi Road, Chennai, Tamil Nadu, 600042',
+  location: { latitude: 13.0827, longitude: 80.2707 },
+  band: { scope: 'DEFAULT', minPaise: 19900, medianPaise: 34900, maxPaise: 69900 },
+  agreedPricePaise: null,
+  genderPreference: 'ANY',
+  genderPreferenceMet: null,
+  broadcast: { wave: 1, deadline: iso(180_000), slaEstimateMinutes: 4 },
+  customer: { id: '11111111-1111-4111-8111-111111111111', firstName: 'Asha' },
+  worker: null,
+  offers: [],
+  arrivalCode: null,
+  arrivalVerified: false,
+  hasBeforePhoto: false,
+  hasAfterPhoto: false,
+  paymentMethod: null,
+  cancellation: null,
+  media: [],
+  threadId: null,
+  createdAt: iso(-60_000),
+  ...over,
+});
+
+export const rangerParty = {
+  id: '22222222-2222-4222-8222-222222222222',
+  firstName: 'Ravi',
+  kycTier: 2,
+  badgeTier: 'SILVER',
+  jobsCompleted: 12,
+};
+
+export const offer = (over: Partial<OfferDto> = {}): OfferDto => ({
+  id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  round: 1,
+  fromRole: 'WORKER',
+  amountPaise: 50000,
+  outsideBand: false,
+  status: 'PENDING',
+  expiresAt: iso(240_000),
+  ...over,
+});

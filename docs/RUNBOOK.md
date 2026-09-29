@@ -33,14 +33,38 @@ Roles: `KYC_REVIEWER`, `DISPUTE_AGENT`, `FINANCE`, `SUPER_ADMIN` (comma-separate
 for the same email resets the password and roles. The password comes from the environment so it
 never appears in shell history.
 
-## Scheduled jobs (run daily until BullMQ arrives in Phase 2)
+## Maintenance jobs (BullMQ, Phase 2)
+
+`purge-accounts`, `purge-kyc-images`, `trim-auth-data` and `trim-gps-trails` run as BullMQ jobs with
+retries/backoff and a failed-job dead-letter set, driven by the API process when `QUEUES_ENABLED=true`
+(default). They can still be triggered by hand for a one-off run or when queues are disabled for a test:
 
 ```bash
 pnpm --filter @haggler/api job purge-accounts     # anonymise accounts whose 30-day deletion grace ended
 pnpm --filter @haggler/api job purge-kyc-images   # delete identity images past kyc_image_retention_days (30)
+pnpm --filter @haggler/api job trim-auth-data     # delete expired refresh tokens / old otp_attempts
+pnpm --filter @haggler/api job trim-gps-trails    # delete job_locations rows past the 90-day retention
 ```
 
-Both are idempotent. If they never run, the retention promises in COMPLIANCE.md are **not** kept.
+All four are idempotent. If they never run, the retention promises in COMPLIANCE.md are **not** kept —
+check the BullMQ failed-job set (below) if a retention deadline looks like it was missed.
+
+## Marketplace scheduler and realtime (Phase 2)
+
+- The broadcast/timeout scheduler (`SchedulerService.tick()`) runs in-process on an interval when
+  `SCHEDULER_ENABLED=true` (default); it needs no separate worker. Set it `false` in a test that drives
+  ticks by hand.
+- `PUBLIC_BASE_URL` is the base used to build the public live-tracking link (`/t/:token`) that customers
+  share; set it to the real public URL before any real deployment.
+- Socket.IO runs single-instance today (D-031): do **not** run more than one API instance in production
+  until the Redis adapter is added, or some clients will miss realtime events (they will still catch up
+  on the next REST poll, but the UI will feel laggy).
+- The public OpenStreetMap raster tile server (`tile.openstreetmap.org`) used by the live map is for
+  light development use only — it has a strict usage policy and will rate-limit or block at production
+  traffic. Replace it with a hosted or self-hosted tile provider before launch.
+- MapLibre native rendering needs a **dev build** (`expo run:android`/EAS), not Expo Go — in Expo Go the
+  map screen falls back to a text readout of the Ranger's coordinates plus an "open in maps" button,
+  which still works but is not the real map.
 
 ## Checks
 

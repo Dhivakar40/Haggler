@@ -20,25 +20,42 @@ export const SUPPORTED_LANGUAGES = ['en', 'hi', 'ta', 'kn', 'te'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export const DEFAULT_LANGUAGE: SupportedLanguage = 'en';
 
-/** Job lifecycle (D3). Transitions are enforced server-side in Phase 2. */
+/** Job lifecycle (D3), exactly as stored in the database. Transitions are enforced server-side. */
 export const JOB_STATES = [
-  'requested',
-  'broadcasting',
-  'matched',
-  'negotiating',
-  'agreed',
-  'en_route',
-  'arrived',
-  'in_progress',
-  'completed_by_worker',
-  'confirmed_by_customer',
-  'cancelled',
-  'no_show_worker',
-  'no_show_customer',
-  'disputed',
-  'refunded',
+  'REQUESTED',
+  'BROADCASTING',
+  'MATCHED',
+  'NEGOTIATING',
+  'AGREED',
+  'EN_ROUTE',
+  'ARRIVED',
+  'IN_PROGRESS',
+  'COMPLETED_BY_WORKER',
+  'CONFIRMED_BY_CUSTOMER',
+  'CANCELLED',
+  'NO_SHOW_WORKER',
+  'NO_SHOW_CUSTOMER',
+  'DISPUTED',
+  'REFUNDED',
 ] as const;
 export type JobState = (typeof JOB_STATES)[number];
+
+/** States in which a Ranger is committed to a job. The database allows one of these per Ranger. */
+export const ACTIVE_JOB_STATES: readonly JobState[] = [
+  'MATCHED',
+  'NEGOTIATING',
+  'AGREED',
+  'EN_ROUTE',
+  'ARRIVED',
+  'IN_PROGRESS',
+];
+export const TERMINAL_JOB_STATES: readonly JobState[] = [
+  'CONFIRMED_BY_CUSTOMER',
+  'CANCELLED',
+  'NO_SHOW_WORKER',
+  'NO_SHOW_CUSTOMER',
+  'REFUNDED',
+];
 
 export const BADGE_TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'] as const;
 export type BadgeTier = (typeof BADGE_TIERS)[number];
@@ -77,6 +94,9 @@ export type KycCheckStatusName = (typeof KYC_CHECK_STATUSES)[number];
 export const MAX_EMERGENCY_CONTACTS = 5;
 export const MAX_ADDRESSES = 10;
 export const MAX_WORKER_CATEGORIES = 5;
+export const MAX_REQUEST_PHOTOS = 5;
+export const MAX_VOICE_SECONDS = 60;
+export const MAX_NEGOTIATION_ROUNDS = 3;
 export const MIN_ADULT_AGE = 18;
 
 /** Machine-readable error codes returned in the error envelope. */

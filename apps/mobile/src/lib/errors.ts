@@ -4,6 +4,12 @@ import { ApiError } from '../api/client';
 /** Turns any thrown error into a message a person can act on, in their language. */
 export function errorMessage(err: unknown, t: TFunction): string {
   if (err instanceof ApiError) {
+    // Domain-specific codes (e.g. REQUEST_TAKEN, NOT_AT_LOCATION) have their own translated messages.
+    const details = err.details as { code?: string; distanceM?: number } | undefined;
+    if (details?.code) {
+      const msg = t(`apiErrors.${details.code}`, { defaultValue: '', distance: details.distanceM });
+      if (msg) return msg;
+    }
     switch (err.code) {
       case 'OTP_INVALID':
         return t('auth.otpInvalid');

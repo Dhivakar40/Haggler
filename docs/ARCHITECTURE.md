@@ -95,3 +95,53 @@ Admin (Next.js, httpOnly cookie) ─ views images side by side (2-min links, eac
 
 Server components and actions call the API; the token lives in an httpOnly, SameSite=Strict cookie
 so page scripts cannot read it. CSP allows images only from this origin and the storage host.
+
+# Phase 2 additions
+
+## Marketplace lifecycle
+
+```
+Customer: create request (media + optional voice, price band shown)
+   │  RequestsService ──▶ status REQUESTED ──▶ BROADCASTING (wave 1 built immediately)
+   ▼
+SchedulerService.tick() [DB poller] ──▶ builds wave 2 (5km) / wave 3 (10km) as deadlines pass
+   │  each wave: top 5 candidates by rankCandidates() (distance .4, badge .2, fairness .2,
+   │             smoothed acceptance .2, soft gender-match bonus .1); pushed over Socket.IO
+   ▼
+Ranger: request.accept ──▶ Redis NX lock (10s) ──▶ KeyedMutex(jobId) ──▶ Postgres txn:
+   │        updateMany(BROADCASTING → MATCHED, guarded by status) + job_matches UNIQUE(job_id)
+   │        + partial unique index jobs_one_active_per_worker (a Ranger can hold only one active job)
+   ▼        (both DB guards are the source of truth; Redis only narrows the race window — D-029)
+NegotiationService: up to 3 rounds of offer/counter/accept/reject; a price outside the usual band
+   │  needs an explicit confirm from whoever is accepting it; either offer or acceptance can expire.
+   ▼
+JobTransitions.move() [the only code that writes jobs.status]: AGREED → EN_ROUTE → ARRIVED
+   │  (geofence 500m to attempt the code) → 4-digit code verified (HMAC hash, 5 tries, D-034)
+   │  → before photo (camera only) → IN_PROGRESS → after photo → COMPLETED_BY_WORKER
+   ▼
+Customer confirms ──▶ CONFIRMED_BY_CUSTOMER (terminal). Every transition appends an
+                       append-only job_events row (DB trigger blocks UPDATE on that table).
+```
+
+Realtime (`realtime.gateway.ts`, Socket.IO, per-user rooms `user:<id>`) delivers
+`request.broadcast/taken/matched/timeout`, `job.updated`, `offer.updated`, `location.update` and
+`chat.message` as **hints only** — every mobile screen re-reads over REST on a hint (or on its own
+poll interval) rather than trusting the socket payload as truth, so a missed event degrades to "catches
+up on the next poll", never silent staleness. Single-instance today (D-031).
+
+## Live tracking and chat
+
+`TrackerHost` (mobile) is the one place that streams the Ranger's GPS: online-with-no-job uses a
+relaxed heartbeat (10s/20m), an active job tightens to 5s/10m en-route and 15s once arrived/in
+progress, each fix sent over the live socket with a REST fallback. A `TrustedShare` link (256-bit
+token, only its hash stored, 12h expiry) exposes the same trip read-only at `/t/:token` with no
+sign-in. Chat (`ChatScreen`) is in-app only — no phone numbers are ever exchanged; messages are saved
+on the server first (REST or socket-with-ack) and a `clientMsgId` makes a retry idempotent, never a
+duplicate.
+
+## Maintenance and scheduling split (D-030)
+
+The broadcast/timeout scheduler is a DB poller (`SchedulerService.tick()`), not a queue: request state
+is read straight from `jobs`, so "what will broadcast next" is one SQL query away. BullMQ is reserved
+for `purge-accounts`, `purge-kyc-images`, `trim-auth-data` and `trim-gps-trails` — batch jobs that need
+real retry/backoff and a dead-letter set, not sub-second latency.
