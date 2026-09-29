@@ -238,6 +238,24 @@ once per session from `_layout.tsx`) using `expo-notifications`' raw device toke
 (`getDevicePushTokenAsync`), not Expo's own hosted push relay — see D-051 for why, and its Android
 only/untested-against-real-Firebase caveats.
 
+## Contract labour (`src/contracts`)
+
+A job board, deliberately separate from the on-demand marketplace's dispatch machinery — no
+`RealtimeGateway`, no `JobTransitions`, no wallet. Money never moves through the app here (D-054):
+
+```
+EmployerProfileService     (businessName only; the whole employer "identity")
+ContractListingsService    create / update / browse (public, OPEN only) / mine (owner)
+ContractApplicationsService apply / withdraw / decide (SHORTLIST | REJECT | HIRE) / mine / forListing
+```
+
+`apply()` requires `WorkerProfile.kycTier >= 1` (D-055) — the same admin-approved identity check
+Rangers already need, reused rather than duplicated, which is also this vertical's under-18 hard
+block (COMPLIANCE.md item 7). A `HIRE` decision calls `ContractListingsService.incrementFilled()`
+inside the same transaction as the status update; once `filledCount` reaches `openings` the listing
+flips to `FILLED` automatically, closing it to further applications. Owner checks return 404 (never 403) for a non-owner's edit/view attempt on a listing or its applications, so a stranger can't even
+learn the listing exists by the shape of the error.
+
 ## Realtime at scale: the Socket.IO Redis adapter (`src/realtime/redis-io.adapter.ts`)
 
 `main.ts` attaches `RedisIoAdapter` at boot, which duplicates the app's Redis connection into a

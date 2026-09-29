@@ -72,15 +72,17 @@ model User {
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  roles             UserRole[]
-  devices           Device[]
-  refreshTokens     RefreshToken[]
-  addresses         Address[]
-  workerProfile     WorkerProfile?
-  emergencyContacts EmergencyContact[]
-  consents          Consent[]
-  kycChecks         KycCheck[]
-  kycDocuments      KycDocument[]
+  roles                UserRole[]
+  devices              Device[]
+  refreshTokens        RefreshToken[]
+  addresses            Address[]
+  workerProfile        WorkerProfile?
+  employerProfile      EmployerProfile?
+  emergencyContacts    EmergencyContact[]
+  consents             Consent[]
+  kycChecks            KycCheck[]
+  kycDocuments         KycDocument[]
+  contractApplications ContractApplication[]
 
   @@map("users")
 }
@@ -190,6 +192,7 @@ model ServiceCategory {
   priceBands       PriceBand[]
   workerCategories WorkerCategory[]
   requests         ServiceRequest[]
+  contractListings ContractListing[]
 
   @@map("service_categories")
 }
@@ -1116,4 +1119,101 @@ model PaymentOrder {
   @@unique([provider, providerOrderId])
   @@index([userId, createdAt(sort: Desc)])
   @@map("payment_orders")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Phase 6: Contract labour (a job board, not on-demand dispatch — see docs/DECISIONS.md D-054).
+// Money never moves through the app here: the employer pays the worker directly, same principle
+// as Rangers never being charged (D-037). No geo column: listings are filtered by city/pincode
+// text, not a radius search, so this phase needs no new raw-SQL/GIST migration edit.
+// ---------------------------------------------------------------------------------------------
+
+enum ContractPayType {
+  ONE_TIME
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ContractListingStatus {
+  OPEN
+  PAUSED
+  FILLED
+  CLOSED
+  CANCELLED
+}
+
+enum ContractApplicationStatus {
+  APPLIED
+  SHORTLISTED
+  REJECTED
+  HIRED
+  WITHDRAWN
+}
+
+/// A light employer identity: a business name is all that is required to post a listing. No
+/// document verification exists yet (D-054 known gap) — same placeholder status as Aadhaar
+/// handling and price bands elsewhere in this project, not a claim that employers are vetted.
+model EmployerProfile {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  businessName String   @map("business_name")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings ContractListing[]
+
+  @@map("employer_profiles")
+}
+
+model ContractListing {
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employerId     String                @map("employer_id") @db.Uuid
+  categoryId     String                @map("category_id") @db.Uuid
+  title          String
+  description    String
+  payType        ContractPayType       @map("pay_type")
+  payAmountPaise Int                   @map("pay_amount_paise")
+  /// How many people this listing will hire in total.
+  openings       Int                   @default(1)
+  /// Incremented on every HIRE decision; the listing auto-closes to FILLED once filled == openings.
+  filledCount    Int                   @default(0) @map("filled_count")
+  city           String
+  state          String
+  pincode        String
+  startDate      DateTime?             @map("start_date") @db.Date
+  status         ContractListingStatus @default(OPEN)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  closedAt       DateTime?             @map("closed_at") @db.Timestamptz(6)
+
+  employer     EmployerProfile       @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  category     ServiceCategory       @relation(fields: [categoryId], references: [id])
+  applications ContractApplication[]
+
+  @@index([status, categoryId, createdAt(sort: Desc)])
+  @@index([employerId, createdAt(sort: Desc)])
+  @@map("contract_listings")
+}
+
+/// One row per (listing, worker). Re-applying after WITHDRAWN is allowed (flips the same row back
+/// to APPLIED); re-applying after REJECTED or HIRED is not — the unique constraint plus that rule
+/// (enforced in ApplicationsService, not the DB) means a worker has at most one live decision per
+/// listing at a time.
+model ContractApplication {
+  id        String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listingId String                    @map("listing_id") @db.Uuid
+  workerId  String                    @map("worker_id") @db.Uuid
+  coverNote String?                   @map("cover_note")
+  status    ContractApplicationStatus @default(APPLIED)
+  appliedAt DateTime                  @default(now()) @map("applied_at") @db.Timestamptz(6)
+  decidedAt DateTime?                 @map("decided_at") @db.Timestamptz(6)
+
+  listing ContractListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  worker  User            @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, workerId])
+  @@index([workerId, appliedAt(sort: Desc)])
+  @@map("contract_applications")
 }

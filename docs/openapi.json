@@ -2924,6 +2924,506 @@
         ]
       }
     },
+    "/v1/employer/profile": {
+      "get": {
+        "operationId": "EmployerProfileController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My employer profile",
+        "tags": [
+          "employer"
+        ]
+      },
+      "patch": {
+        "operationId": "EmployerProfileController_update_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "businessName": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "businessName"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set or update my business name",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/contracts": {
+      "post": {
+        "operationId": "EmployerContractsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categorySlug": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "payType": {
+                    "type": "string",
+                    "enum": [
+                      "ONE_TIME",
+                      "DAILY",
+                      "WEEKLY",
+                      "MONTHLY"
+                    ]
+                  },
+                  "payAmountPaise": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "openings": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 1
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "pincode": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{5}$"
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "categorySlug",
+                  "title",
+                  "description",
+                  "payType",
+                  "payAmountPaise",
+                  "city",
+                  "state",
+                  "pincode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Post a Contract-labour listing",
+        "tags": [
+          "employer"
+        ]
+      },
+      "get": {
+        "operationId": "EmployerContractsController_mine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My listings, newest first",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/contracts/{id}": {
+      "patch": {
+        "operationId": "EmployerContractsController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "payType": {
+                    "type": "string",
+                    "enum": [
+                      "ONE_TIME",
+                      "DAILY",
+                      "WEEKLY",
+                      "MONTHLY"
+                    ]
+                  },
+                  "payAmountPaise": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "openings": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "pincode": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{5}$"
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "OPEN",
+                      "PAUSED",
+                      "CLOSED",
+                      "CANCELLED"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a listing, or change its status (pause/reopen/close/cancel)",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/contracts/{id}/applications": {
+      "get": {
+        "operationId": "EmployerContractsController_listApplications_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every applicant for one of my listings",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/contracts/{id}/applications/{appId}/decision": {
+      "post": {
+        "operationId": "EmployerContractsController_decide_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "appId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "SHORTLIST",
+                      "REJECT",
+                      "HIRE"
+                    ]
+                  }
+                },
+                "required": [
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Shortlist, reject or hire an applicant",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/contracts": {
+      "get": {
+        "operationId": "ContractsController_browse_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Browse open Contract-labour listings",
+        "tags": [
+          "contracts"
+        ]
+      }
+    },
+    "/v1/contracts/{id}": {
+      "get": {
+        "operationId": "ContractsController_detail_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listing detail",
+        "tags": [
+          "contracts"
+        ]
+      }
+    },
+    "/v1/contracts/{id}/apply": {
+      "post": {
+        "operationId": "ContractsController_apply_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "coverNote": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Apply to a listing",
+        "tags": [
+          "contracts"
+        ]
+      },
+      "delete": {
+        "operationId": "ContractsController_withdraw_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Withdraw my application",
+        "tags": [
+          "contracts"
+        ]
+      }
+    },
+    "/v1/me/contract-applications": {
+      "get": {
+        "operationId": "MyContractApplicationsController_mine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My own Contract-labour applications, newest first",
+        "tags": [
+          "contracts"
+        ]
+      }
+    },
     "/v1/admin/auth/login": {
       "post": {
         "operationId": "AdminController_login_v1",

@@ -81,6 +81,48 @@ describe('AccountScreen', () => {
     expect(everyText()).not.toContain('worker');
   });
 
+  it('offers "Become an employer" to an employer-less account, and browsing is open to everyone', async () => {
+    mockApi(() => undefined);
+    await renderWithProviders(<AccountScreen />);
+    expect(screen.getByTestId('become-employer')).toBeTruthy();
+    expect(screen.getByTestId('browse-contracts')).toBeTruthy();
+    expect(screen.queryByTestId('employer-listings')).toBeNull();
+  });
+
+  it('becoming an employer adds the role and opens the employer profile screen', async () => {
+    const { calls } = mockApi((c) => {
+      if (c.path === '/v1/me/roles')
+        return { status: 201, body: makeMe({ roles: ['CUSTOMER', 'EMPLOYER'] }) };
+      if (c.path === '/v1/me') return { body: makeMe({ roles: ['CUSTOMER', 'EMPLOYER'] }) };
+    });
+    await renderWithProviders(<AccountScreen />);
+    await fireEvent.press(screen.getByTestId('become-employer'));
+    await waitFor(() => expect(routerMock().push).toHaveBeenCalledWith('/employer/profile'));
+    expect(calls[0]).toMatchObject({
+      method: 'POST',
+      path: '/v1/me/roles',
+      body: { role: 'EMPLOYER' },
+    });
+  });
+
+  it('an employer sees "My listings" instead of "Become an employer"', async () => {
+    signInAs({ roles: ['CUSTOMER', 'EMPLOYER'] });
+    mockApi(() => undefined);
+    await renderWithProviders(<AccountScreen />);
+    expect(screen.getByTestId('employer-listings')).toBeTruthy();
+    expect(screen.queryByTestId('become-employer')).toBeNull();
+  });
+
+  it('only a Ranger sees "My applications"', async () => {
+    mockApi(() => undefined);
+    await renderWithProviders(<AccountScreen />);
+    expect(screen.queryByTestId('my-contract-applications')).toBeNull();
+
+    signInAs({ roles: ['CUSTOMER', 'WORKER'] });
+    await renderWithProviders(<AccountScreen />);
+    expect(screen.getByTestId('my-contract-applications')).toBeTruthy();
+  });
+
   it('shows Ranger in Tamil too', async () => {
     await i18n.changeLanguage('ta');
     signInAs({ roles: ['CUSTOMER', 'WORKER'] });

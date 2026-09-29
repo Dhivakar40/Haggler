@@ -3,13 +3,13 @@
 A mobile marketplace for India: verified local **Rangers** (independent workers) for on-demand
 services, plus long-term contract labour and part-time student jobs, on one trust layer.
 
-> **Status: Phase 5 (Push notifications & realtime scale-out) complete.** Everything in Phases
-> 1–4, plus: a Ranger no longer needs the app open to see a new job — new broadcasts, matches,
-> status changes and chat messages now reach a backgrounded phone as a real push notification
-> (sandbox by default; FCM in `live` mode) whenever that device has no socket connected right now.
-> Socket.IO also runs the Redis adapter, so realtime events reach every connected client even if
-> more than one API instance is ever run (D-031/D-053). **Rangers are still never charged
-> anything** (D-037, unchanged since Phase 3).
+> **Status: Phase 6 (Contract labour) complete.** Everything in Phases 1–5, plus a first vertical
+> beyond on-demand dispatch: an Employer (a new light role, just a business name) posts long-term
+> job listings; a verified Ranger (`kycTier >= 1`, the same identity/age gate as on-demand work)
+> browses, applies with a cover note, and the employer shortlists/rejects/hires. **No money moves
+> through the app for Contract labour** — the employer pays the worker directly, same principle as
+> Rangers never being charged on-demand (D-037/D-054). Campus (student part-time jobs) is not
+> built yet. **Rangers are still never charged anything** (D-037, unchanged since Phase 3).
 
 ## Stack
 

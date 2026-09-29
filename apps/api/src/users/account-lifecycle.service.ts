@@ -131,6 +131,11 @@ export class AccountLifecycleService {
       await tx.device.deleteMany({ where: { userId } });
       await tx.kycCheck.deleteMany({ where: { userId } }); // cascades documents, reviews, reference
       await tx.workerProfile.deleteMany({ where: { userId } });
+      // Phase 6: a departing employer's job postings go with them (cascades listings ->
+      // applications); a departing worker's own applications to OTHER employers' listings need
+      // their own delete since those listings' employer accounts are untouched.
+      await tx.employerProfile.deleteMany({ where: { userId } });
+      await tx.contractApplication.deleteMany({ where: { workerId: userId } });
       await tx.address.deleteMany({ where: { userId } });
       await tx.emergencyContact.deleteMany({ where: { userId } });
       await tx.consent.deleteMany({ where: { userId } });

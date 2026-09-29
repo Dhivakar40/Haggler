@@ -27,6 +27,7 @@ export function AccountScreen() {
 
   if (!user) return null;
   const isRanger = user.roles.includes('WORKER');
+  const isEmployer = user.roles.includes('EMPLOYER');
 
   async function becomeRanger() {
     setBusy(true);
@@ -35,6 +36,20 @@ export function AccountScreen() {
       await addRole('WORKER');
       await refreshMe();
       router.push('/ranger');
+    } catch (err) {
+      setMessage(errorMessage(err, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function becomeEmployer() {
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      await addRole('EMPLOYER');
+      await refreshMe();
+      router.push('/employer/profile');
     } catch (err) {
       setMessage(errorMessage(err, t));
     } finally {
@@ -93,7 +108,42 @@ export function AccountScreen() {
         </Card>
       )}
 
+      {isEmployer ? (
+        <Button
+          testID="employer-listings"
+          title={t('employer.myListingsTitle')}
+          onPress={go('/employer/listings')}
+        />
+      ) : (
+        <Card>
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="heading">{t('employer.becomeEmployer')}</Text>
+            <Text color="textMuted">{t('employer.becomeEmployerDesc')}</Text>
+            <Button
+              testID="become-employer"
+              title={t('employer.becomeEmployer')}
+              onPress={() => void becomeEmployer()}
+              loading={busy}
+            />
+          </View>
+        </Card>
+      )}
+
       <View style={{ gap: spacing.sm }}>
+        <Button
+          testID="browse-contracts"
+          variant="secondary"
+          title={t('employer.browseTitle')}
+          onPress={go('/contracts')}
+        />
+        {isRanger ? (
+          <Button
+            testID="my-contract-applications"
+            variant="secondary"
+            title={t('employer.myApplicationsTitle')}
+            onPress={go('/contracts/my-applications')}
+          />
+        ) : null}
         <Button testID="open-wallet" title={t('account.wallet')} onPress={go('/wallet')} />
         <Button variant="secondary" title={t('account.editProfile')} onPress={go('/profile')} />
         <Button variant="secondary" title={t('account.addresses')} onPress={go('/addresses')} />

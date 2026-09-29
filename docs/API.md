@@ -17,6 +17,17 @@
 | POST | `/v1/auth/otp/verify` | Verify the code. Creates the account on first sign-in and returns a session. |
 | POST | `/v1/auth/refresh` | Exchange a refresh token for a new pair. The old refresh token stops working. |
 | GET | `/v1/categories` | List active service categories (public) |
+| GET | `/v1/contracts` | Browse open Contract-labour listings |
+| GET | `/v1/contracts/{id}` | Listing detail |
+| POST | `/v1/contracts/{id}/apply` | Apply to a listing |
+| DELETE | `/v1/contracts/{id}/apply` | Withdraw my application |
+| POST | `/v1/employer/contracts` | Post a Contract-labour listing |
+| GET | `/v1/employer/contracts` | My listings, newest first |
+| PATCH | `/v1/employer/contracts/{id}` | Edit a listing, or change its status (pause/reopen/close/cancel) |
+| GET | `/v1/employer/contracts/{id}/applications` | Every applicant for one of my listings |
+| POST | `/v1/employer/contracts/{id}/applications/{appId}/decision` | Shortlist, reject or hire an applicant |
+| GET | `/v1/employer/profile` | My employer profile |
+| PATCH | `/v1/employer/profile` | Set or update my business name |
 | GET | `/v1/jobs` | My jobs (as customer and/or Ranger), newest first, cursor-paginated |
 | GET | `/v1/jobs/{id}` | One job with everything I am allowed to see |
 | POST | `/v1/jobs/{id}/arrive` | Ranger: I have arrived. Needs GPS within the geofence; generates the customer's 4-digit code. |
@@ -54,6 +65,7 @@
 | GET | `/v1/me/consents` | My consent history |
 | POST | `/v1/me/consents` | Give consent for a purpose at the current legal version |
 | DELETE | `/v1/me/consents/{purpose}` | Withdraw consent for a purpose |
+| GET | `/v1/me/contract-applications` | My own Contract-labour applications, newest first |
 | GET | `/v1/me/emergency-contacts` | My emergency contacts (used by SOS and live-trip sharing) |
 | POST | `/v1/me/emergency-contacts` | Add an emergency contact (max 5) |
 | PATCH | `/v1/me/emergency-contacts/{id}` | Edit an emergency contact |

@@ -126,6 +126,16 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - Nothing in this runbook yet actually runs more than one API instance — this closes the
   code-level blocker only; load-balancing multiple instances is still a future ops decision.
 
+## Contract labour (Phase 6)
+
+- A job board, not on-demand dispatch: no money moves through the app (D-054). Employers post
+  listings (`POST /v1/employer/contracts`, needs the `EMPLOYER` role and a business name set via
+  `PATCH /v1/employer/profile` first); Rangers browse (`GET /v1/contracts`) and apply
+  (`POST /v1/contracts/:id/apply`), which needs `kycTier >= 1` (the same identity/age gate Rangers
+  already go through — D-055, closes COMPLIANCE.md item 7 for this vertical).
+- No employer document verification exists (D-056) — anyone can post a listing today. Treat this
+  as an MVP trade-off to revisit once there's real usage, not a settled decision.
+
 ## Production notes (before any real deployment)
 
 - Set `TRUST_PROXY_HOPS` to the number of proxies in front of the API, or per-IP limits will see the
@@ -168,6 +178,8 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
       numbers without a deploy.
 - [ ] Appoint a real Grievance Officer and update the placeholder name/email/phone shown at
       Legal > Grievance Officer in the app (compliance checklist item 8).
+- [ ] Decide on employer verification for Contract labour before launch (D-056) — today any
+      account can add the EMPLOYER role and post a listing with no document check.
 - [ ] Create a real Firebase project, set `PUSH_MODE=live` and `FCM_SERVICE_ACCOUNT_JSON`, and
       verify a push actually arrives on a dev-build Android phone — `FcmPushProvider` has never
       been exercised against a real Firebase project (D-051).

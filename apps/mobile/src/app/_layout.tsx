@@ -105,6 +105,34 @@ function Navigator() {
         <Stack.Screen name="request/[id]" options={{ ...header, title: t('request.title') }} />
         <Stack.Screen name="job/[id]" options={{ ...header, title: t('job.title') }} />
         <Stack.Screen name="chat/[jobId]" options={{ ...header, title: t('chat.title') }} />
+        <Stack.Screen
+          name="contracts/index"
+          options={{ ...header, title: t('employer.browseTitle') }}
+        />
+        <Stack.Screen
+          name="contracts/[id]"
+          options={{ ...header, title: t('employer.listingTitle') }}
+        />
+        <Stack.Screen
+          name="contracts/my-applications"
+          options={{ ...header, title: t('employer.myApplicationsTitle') }}
+        />
+        <Stack.Screen
+          name="employer/profile"
+          options={{ ...header, title: t('employer.profileTitle') }}
+        />
+        <Stack.Screen
+          name="employer/listings/index"
+          options={{ ...header, title: t('employer.myListingsTitle') }}
+        />
+        <Stack.Screen
+          name="employer/listings/new"
+          options={{ ...header, title: t('employer.postListing') }}
+        />
+        <Stack.Screen
+          name="employer/listings/[id]"
+          options={{ ...header, title: t('employer.applicantsTitle') }}
+        />
       </Stack.Protected>
     </Stack>
   );

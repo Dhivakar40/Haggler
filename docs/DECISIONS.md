@@ -409,3 +409,57 @@ default in-memory adapter — today's single-instance behaviour — rather than 
 **Not done**: this makes multi-instance realtime possible, but nothing in the deployment story
 (RUNBOOK) yet actually runs more than one instance; that's still a future ops decision, this only
 removes the code-level blocker.
+
+## Phase 6
+
+**D-054 Contract labour is a job board, not on-demand dispatch — no money moves through the app.**
+The user confirmed the scope explicitly before this phase was built: Contract labour only this
+phase (Campus/student jobs deferred to a future phase). An Employer posts a listing (category,
+title, description, pay type/amount, openings, city/state/pincode, optional start date); a
+verified Ranger browses, applies with an optional cover note, and the employer shortlists/rejects/
+hires. Once hired, **the employer pays the worker directly**, outside the app — same principle as
+Rangers never being charged on-demand (D-037): no `WalletService` code path, no `PaymentOrder`, no
+escrow is involved anywhere in `src/contracts`. `payAmountPaise` on a listing is advertised pay
+information only, never a transaction. This also means the whole vertical needed no new geography
+column/GIST index (listings are filtered by city/pincode text, not a radius search), so this
+migration didn't need the usual manual DROP INDEX cleanup dance most migrations since Phase 2 have.
+
+**D-055 Applying requires `kycTier >= 1`, reusing the existing identity/age gate rather than
+building a new one.** `kycTier >= 1` only exists once an admin has approved a Ranger's identity
+check, which requires a date of birth and blocks under-18 (docs/COMPLIANCE.md item 7: "Contracts/
+Campus in Phases 6-7" — this closes it for Contract labour). No new age-verification code was
+written; `ContractApplicationsService.assertEligibleWorker()` just reads the same `WorkerProfile.
+kycTier` column Rangers already have. A Contract-only worker who never does on-demand jobs still
+has to go through the same Tier-1 KYC flow to unlock applying — there is no separate, lighter path,
+which keeps one age-gate to reason about instead of two.
+
+**D-056 An employer identity is a business name, nothing more (known gap).** `EmployerProfile` has
+exactly one field. No GSTIN, no document upload, no admin review queue — anyone who adds the
+EMPLOYER role and sets a business name can post a listing immediately. This is a deliberate MVP
+trade-off, not an oversight: real employer verification (business registration documents, a review
+queue like KYC's) is a reasonable Phase 7+ addition once there's real usage to justify building
+it, and is called out in COMPLIANCE.md and RUNBOOK's before-launch checklist so it isn't forgotten.
+
+**D-057 A listing's category is fixed at creation; `UpdateContractListingInput` cannot change it.**
+Keeps the edit surface small and avoids re-deriving eligibility/matching-adjacent logic for a
+category switch mid-listing (e.g. an application already in progress for "electrician" work
+suddenly being reinterpreted as "plumber" work). An employer who posted the wrong category cancels
+the listing and posts a new one — cheap, since nothing is paid through the app yet to make that
+costly.
+
+**D-058 Re-applying is allowed only from WITHDRAWN, never from REJECTED or HIRED.** The unique
+`(listingId, workerId)` constraint means a worker has exactly one row per listing; withdrawing
+flips that row back to APPLIED on a later apply (no new row, no unique-constraint violation), but
+a REJECTED decision is final from the app's point of view — an employer who changes their mind can
+only communicate that outside the app (no in-app "un-reject" exists this phase). HIRED can never
+be withdrawn either (`ApplicationsService.withdraw` explicitly refuses it) since it would leave
+`filledCount` silently wrong with no code path decrementing it back.
+
+**D-059 Known gaps carried forward (Phase 6).** No employer document verification (D-056). No
+push/email digest for new listings matching a Ranger's categories (a Ranger has to actively browse
+`GET /contracts`; nothing proactively surfaces a new posting the way an on-demand broadcast does).
+No admin moderation of listings (a bad-faith or scam listing has no reporting/takedown path yet —
+same gap class as reviews, D-049). No mobile screens exist yet for Campus/student jobs (out of
+scope this phase per the user's explicit choice). Money handling (D-054) has no fee/commission
+model built for it either, consistent with the Haggler Plus/Rush-Boost roadmap note (D-036) which
+already named Contract/Campus employer fees as a future item, not built.

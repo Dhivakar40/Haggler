@@ -6,21 +6,21 @@
 
 ## Counsel review checklist
 
-| #   | Item                                                                          | Engineering status                                                                       | Counsel |
-| --- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------- |
-| 1   | DPDP: explicit consent, purpose limitation, retention, deletion + export      | **Built (Phase 1)**: consent screen, versioned consent records, export, 30-day deletion  | ☐       |
-| 2   | Aadhaar: never store the full number; masked copy only                        | **Partly**: see "Aadhaar handling" below. Relies on users uploading the masked copy      | ☐       |
-| 3   | Independent-contractor Terms of Service for Rangers                           | Placeholder screens only                                                                 | ☐       |
-| 4   | Terms of Service, Privacy Policy, Refund Policy text                          | Placeholder text, marked in the app "needs counsel review"                               | ☐       |
-| 5   | TDS, GST, invoicing rules for platform fees and payouts                       | Phase 3                                                                                  | ☐       |
-| 6   | Minimum wage by state and trade                                               | Table exists, **empty on purpose**; counsel must supply values                           | ☐       |
-| 7   | Child labour: hard block under 18                                             | **Built for Rangers (Phase 1)**; Contracts/Campus in Phases 6-7                          | ☐       |
-| 8   | Grievance officer name/contact shown in-app                                   | **Built (Phase 4)**: Legal > Grievance Officer screen; name/email/phone are placeholders | ☐       |
-| 9   | Damage coverage cap and insurer                                               | Config `damage_coverage_cap_paise` = 0 (disabled)                                        | ☐       |
-| 10  | Translations (hi/ta/kn/te) legally accurate where they carry legal text       | Drafts; native review needed                                                             | ☐       |
-| 11  | **Verification is done by people, not a vendor** (D-016): is this acceptable? | Built as specified by the product owner                                                  | ☐       |
-| 12  | **No background check is performed** at Tier 2 (D-016)                        | Tier 2 = address proof + reference call. Counsel to advise on marketing claims           | ☐       |
-| 13  | Aadhaar-image handling by a private entity (UIDAI rules)                      | See below                                                                                | ☐       |
+| #   | Item                                                                          | Engineering status                                                                                         | Counsel |
+| --- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | DPDP: explicit consent, purpose limitation, retention, deletion + export      | **Built (Phase 1)**: consent screen, versioned consent records, export, 30-day deletion                    | ☐       |
+| 2   | Aadhaar: never store the full number; masked copy only                        | **Partly**: see "Aadhaar handling" below. Relies on users uploading the masked copy                        | ☐       |
+| 3   | Independent-contractor Terms of Service for Rangers                           | Placeholder screens only; Contract labour (Phase 6) has no separate ToS yet                                | ☐       |
+| 4   | Terms of Service, Privacy Policy, Refund Policy text                          | Placeholder text, marked in the app "needs counsel review"                                                 | ☐       |
+| 5   | TDS, GST, invoicing rules for platform fees and payouts                       | Phase 3                                                                                                    | ☐       |
+| 6   | Minimum wage by state and trade                                               | Table exists, **empty on purpose**; counsel must supply values                                             | ☐       |
+| 7   | Child labour: hard block under 18                                             | **Built for Rangers (Phase 1) and Contract labour (Phase 6, via `kycTier >= 1`, D-055)**; Campus not built | ☐       |
+| 8   | Grievance officer name/contact shown in-app                                   | **Built (Phase 4)**: Legal > Grievance Officer screen; name/email/phone are placeholders                   | ☐       |
+| 9   | Damage coverage cap and insurer                                               | Config `damage_coverage_cap_paise` = 0 (disabled)                                                          | ☐       |
+| 10  | Translations (hi/ta/kn/te) legally accurate where they carry legal text       | Drafts; native review needed                                                                               | ☐       |
+| 11  | **Verification is done by people, not a vendor** (D-016): is this acceptable? | Built as specified by the product owner                                                                    | ☐       |
+| 12  | **No background check is performed** at Tier 2 (D-016)                        | Tier 2 = address proof + reference call. Counsel to advise on marketing claims                             | ☐       |
+| 13  | Aadhaar-image handling by a private entity (UIDAI rules)                      | See below                                                                                                  | ☐       |
 
 ## Aadhaar handling (important, needs counsel)
 
@@ -91,5 +91,9 @@ What the product **cannot** guarantee:
 | `reviews`                                              | Rating + free-text comment, both directions      | Life of the job record                                       | Mutable at the schema level (no immutability trigger), but no edit/delete endpoint exists yet — see D-049                                                                                                                                     |
 | `worker_stats`, `customer_stats`                       | Aggregate rating sum/count, badge tier           | Life of account                                              | Deleted with the account; no personal data beyond the user id                                                                                                                                                                                 |
 | `blocks`                                               | Which user blocked which, and an optional reason | Life of account                                              | Deleted with the account; the "reason" text is not shown to the blocked party                                                                                                                                                                 |
+
+| `employer_profiles` | Business name only (Phase 6) | Life of account | Deleted with the account; cascades its listings and their applications |
+| `contract_listings` | Job posting text, pay info, location (city/pincode, no geo point) | Life of the employer's account | No card/UPI/bank details ever stored here (D-054: money never moves through the app for Contract labour) |
+| `contract_applications` | A cover note + decision status, per (listing, worker) | Life of account (either side) | Deleted with either party's account (employer deletion cascades via the listing; a worker's own rows are deleted directly) |
 
 Later phases append their tables here (GPS trails, chat, payments, etc.).
