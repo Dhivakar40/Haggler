@@ -272,17 +272,23 @@ jest.setTimeout(240_000);
 describe('matching engine under load', () => {
   it('500 Rangers x 100 concurrent requests, Redis lock + database: no double accepts', async () => {
     const s = await runScenario('redis+postgres', '01', false);
-    expect(s.successfulMatches).toBeGreaterThan(50); // real contention, real winners
+    // successfulMatches is NOT structurally ordered against the postgres-only scenario below: both
+    // depend on the actual interleaving order Promise.all's microtask scheduler happens to pick for
+    // 2,500 concurrent accept attempts, which varies run to run and, more importantly, varies by
+    // runner speed/load (CI's shared runner schedules very differently from a dev machine). Measured
+    // across dev-machine runs and CI runs this settles anywhere from the low-40s to high-80s for
+    // EITHER scenario — one run in CI even saw redis+postgres (44) come in lower than postgres-only
+    // (55) in the very same test file execution. A structural-ordering assumption between the two
+    // scenarios was tried here before and was wrong; do not reintroduce one. The number that must
+    // never move is doubleAccepts === 0 (asserted via I1/I2 above) — this floor is only a sanity
+    // check that matching isn't silently broken (e.g. returning 0 or 1 matches).
+    expect(s.successfulMatches).toBeGreaterThan(30);
     expect(s.successfulMatches).toBeLessThanOrEqual(CUSTOMERS);
   });
 
   it('same load with Redis DOWN: the database alone still allows exactly one winner per request', async () => {
     const s = await runScenario('postgres-only', '02', true);
-    // Structurally lower than the Redis-assisted scenario above, and legitimately so: without the
-    // Redis fast-fail, every one of the 2,500 accept attempts serializes through KeyedMutex + a
-    // Postgres transaction (D-032), so a losing Ranger discovers it slower and gets fewer of their
-    // other invitations tried before the run ends. Measured over several runs on this machine this
-    // settles in the mid-40s to high-70s; the number that must never move is doubleAccepts === 0.
+    // See the comment on the scenario above: no structural ordering is assumed between the two.
     expect(s.successfulMatches).toBeGreaterThan(30);
     expect(s.successfulMatches).toBeLessThanOrEqual(CUSTOMERS);
   });
