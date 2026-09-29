@@ -77,6 +77,15 @@ const FEATURE_FLAGS = [
   { key: 'promoted_listings_enabled', description: 'Promoted placement for Rangers' },
 ];
 
+// Customer-only token bundles (Phase 3, D-037): Rangers are never charged. One token is spent
+// only when a job is confirmed complete. Prices are placeholders for ops/finance to review, same
+// as the DEFAULT price bands above.
+const TOKEN_BUNDLES = [
+  { slug: 'starter-3', name: '3 tokens', tokens: 3, priceRupees: 49 },
+  { slug: 'value-10', name: '10 tokens', tokens: 10, priceRupees: 149 },
+  { slug: 'saver-25', name: '25 tokens', tokens: 25, priceRupees: 329 },
+];
+
 async function main(): Promise<void> {
   let order = 0;
   for (const c of CATEGORIES) {
@@ -124,11 +133,29 @@ async function main(): Promise<void> {
     });
   }
 
-  const [cats, bands] = await Promise.all([
+  let bundleOrder = 0;
+  for (const b of TOKEN_BUNDLES) {
+    bundleOrder += 10;
+    await prisma.tokenBundle.upsert({
+      where: { slug: b.slug },
+      // Never overwrite pricing/tokens an admin has since changed; only set what's missing.
+      update: { name: b.name, sortOrder: bundleOrder },
+      create: {
+        slug: b.slug,
+        name: b.name,
+        tokens: b.tokens,
+        pricePaise: rupees(b.priceRupees),
+        sortOrder: bundleOrder,
+      },
+    });
+  }
+
+  const [cats, bands, bundles] = await Promise.all([
     prisma.serviceCategory.count(),
     prisma.priceBand.count(),
+    prisma.tokenBundle.count(),
   ]);
-  console.log(`Seed complete: ${cats} categories, ${bands} price bands`);
+  console.log(`Seed complete: ${cats} categories, ${bands} price bands, ${bundles} token bundles`);
 }
 
 main()

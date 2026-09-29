@@ -21,6 +21,7 @@ import { RateLimitModule } from './ratelimit/rate-limit.service';
 import { RedisThrottlerStorage } from './ratelimit/redis-throttler.storage';
 import { RedisModule, RedisService } from './redis/redis.service';
 import { UsersModule } from './users/users.module';
+import { WalletModule } from './wallet/wallet.module';
 import { WorkerModule } from './worker/worker.module';
 
 /** Fields that must never reach a log line (D: never log secrets or Aadhaar numbers). */
@@ -92,6 +93,7 @@ export const LOG_REDACT_PATHS = [
     UsersModule,
     WorkerModule,
     KycModule,
+    WalletModule,
     MarketplaceModule,
     MaintenanceModule,
     AdminModule,

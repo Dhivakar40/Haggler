@@ -16,10 +16,16 @@ export const sha256Hex = (value: string): string =>
 export const hmacHex = (secret: string, value: string): string =>
   createHmac('sha256', secret).update(value).digest('hex');
 
+const HEX_RE = /^[0-9a-f]+$/i;
+
 export function safeEqualHex(a: string, b: string): boolean {
-  const ba = Buffer.from(a, 'hex');
-  const bb = Buffer.from(b, 'hex');
-  return ba.length === bb.length && timingSafeEqual(ba, bb);
+  // Buffer.from(str, 'hex') silently stops at the first byte it cannot decode instead of
+  // throwing (e.g. Buffer.from('deadbeefx', 'hex') is just `deadbeef`), so a tampered value with
+  // trailing garbage can otherwise come out the same length and falsely compare equal. Reject
+  // anything that is not pure, even-length hex before ever comparing bytes.
+  if (a.length !== b.length || a.length % 2 !== 0 || !HEX_RE.test(a) || !HEX_RE.test(b))
+    return false;
+  return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
 }
 
 /**

@@ -45,6 +45,13 @@ describe('AccountScreen', () => {
     expect(everyText()).not.toContain('worker');
   });
 
+  it('opens the wallet', async () => {
+    mockApi(() => undefined);
+    await renderWithProviders(<AccountScreen />);
+    await fireEvent.press(screen.getByTestId('open-wallet'));
+    expect(routerMock().push).toHaveBeenCalledWith('/wallet');
+  });
+
   it('becoming a Ranger adds the role on the server, refreshes the account and opens verification', async () => {
     const { calls } = mockApi((c) => {
       if (c.path === '/v1/me/roles')

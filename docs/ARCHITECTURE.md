@@ -145,3 +145,41 @@ The broadcast/timeout scheduler is a DB poller (`SchedulerService.tick()`), not 
 is read straight from `jobs`, so "what will broadcast next" is one SQL query away. BullMQ is reserved
 for `purge-accounts`, `purge-kyc-images`, `trim-auth-data` and `trim-gps-trails` — batch jobs that need
 real retry/backoff and a dead-letter set, not sub-second latency.
+
+# Phase 3 additions
+
+## Customer wallet: hold, consume, release (D-037/D-038)
+
+```
+Customer buys a token bundle ──▶ PaymentsProvider.createOrder() ──▶ payment_orders row (CREATED)
+   │  paid via Razorpay Checkout (test mode) or the sandbox screen
+   ▼
+WalletService.credit() [race-safe: client /verify AND the webhook both call this, whichever
+   │  arrives first wins via an updateMany(status: CREATED) guard] ──▶ balance_tokens += N,
+   ▼     a PURCHASE wallet_ledger_entries row
+
+RequestsService.create() [same transaction as the request/job insert]:
+   │  WalletService.hold() ──▶ balance -1, held +1, a wallet_holds row (status HELD, UNIQUE job_id)
+   ▼  throws INSUFFICIENT_TOKENS (422) if balance_tokens < 1
+
+JobTransitions.move() [the one place jobs.status changes — see Phase 2]:
+   │  to CONFIRMED_BY_CUSTOMER      ──▶ WalletService.consume(): held -1 (permanently spent)
+   │  to CANCELLED / NO_SHOW_*      ──▶ WalletService.release(): held -1, balance +1 (given back)
+   ▼  every other transition: no wallet effect
+```
+
+Rangers are never part of this diagram (D-037): the Ranger's own payment (cash/UPI, direct from the
+customer, in full) from Phase 2 is completely untouched. `wallet_ledger_entries` is append-only (same
+DB-trigger pattern as `job_events`) and each row records both `tokensDelta` (balance) and `heldDelta`
+(held), so the ledger alone can reconstruct the wallet's counters — checked directly by an
+integration test.
+
+## Payments adapter (`adapters/payments`)
+
+`PaymentsProvider` has two implementations picked by `PAYMENTS_MODE` (D-020): `sandbox` (no gateway
+called; signs with a fixed dev secret using the real HMAC algorithm, so signature verification is
+genuinely exercised even without Razorpay) and `razorpay` (`test` mode only, `rzp_test_` keys). Both
+implement the same interface: create an order, verify a Checkout callback's signature, verify a
+webhook's signature. Two independent paths can settle a top-up — `POST /wallet/topup/:id/verify`
+(client callback, fast) and `POST /webhooks/razorpay` (server-to-server, authoritative) — and both
+funnel through the same guarded `credit()` so a double-credit is structurally impossible (D-041).

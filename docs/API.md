@@ -70,6 +70,12 @@
 | GET | `/v1/threads/{id}/messages` | Messages, newest first, cursor-paginated |
 | POST | `/v1/threads/{id}/messages` | Send a message (idempotent on clientMsgId). The WebSocket event chat.message does the same. |
 | GET | `/v1/track/{token}` | Live trip link contents: status and the Ranger's position. No phone numbers. |
+| GET | `/v1/wallet` | My token balance, held tokens, and the last 20 ledger entries |
+| GET | `/v1/wallet/bundles` | Purchasable token bundles |
+| GET | `/v1/wallet/orders` | My top-up purchase history, newest first |
+| POST | `/v1/wallet/topup` | Start a top-up: creates a payment order for a token bundle |
+| POST | `/v1/wallet/topup/{orderId}/sandbox-pay` | Dev/test only: complete a sandbox order instantly (refused when PAYMENTS_MODE=test) |
+| POST | `/v1/wallet/topup/{orderId}/verify` | Verify Razorpay Checkout's success callback and credit the wallet (idempotent) |
 | GET | `/v1/worker/incoming` | Requests currently waiting for my answer (use after reconnecting) |
 | POST | `/v1/worker/location` | Location heartbeat (every 5-10 s). While on a job it also extends the GPS trail and pushes to the customer. |
 | POST | `/v1/worker/offline` | Go offline: no new requests |

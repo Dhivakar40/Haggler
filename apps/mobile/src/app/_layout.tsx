@@ -89,6 +89,7 @@ function Navigator() {
           name="delete-account"
           options={{ ...header, title: t('deleteAccount.title') }}
         />
+        <Stack.Screen name="wallet" options={{ ...header, title: t('wallet.title') }} />
         <Stack.Screen name="request/new" options={{ ...header, title: t('request.title') }} />
         <Stack.Screen name="request/[id]" options={{ ...header, title: t('request.title') }} />
         <Stack.Screen name="job/[id]" options={{ ...header, title: t('job.title') }} />

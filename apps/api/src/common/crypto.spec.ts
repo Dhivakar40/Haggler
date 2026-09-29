@@ -76,4 +76,16 @@ describe('hash helpers', () => {
     expect(safeEqualHex(sha256Hex('a'), sha256Hex('b'))).toBe(false);
     expect(safeEqualHex('aa', 'aabb')).toBe(false);
   });
+  it('rejects a value with trailing garbage appended to an otherwise-correct hex string', () => {
+    // Buffer.from(str, 'hex') silently stops at the first byte it cannot decode (e.g.
+    // Buffer.from('deadbeefx', 'hex') is just `deadbeef`), so comparing raw Buffers alone would
+    // let a tampered signature with garbage appended pass as if it were the real one.
+    const real = sha256Hex('secret');
+    expect(safeEqualHex(real, `${real}x`)).toBe(false);
+    expect(safeEqualHex(real, `x${real}`)).toBe(false);
+  });
+  it('rejects non-hex characters even at matching length', () => {
+    expect(safeEqualHex('zz', 'zz')).toBe(false);
+    expect(safeEqualHex('gg112233', 'gg112233')).toBe(false);
+  });
 });

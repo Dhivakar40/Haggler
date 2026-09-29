@@ -115,7 +115,7 @@ export async function startHarness(): Promise<Harness> {
     const { AppModule } = await import('../src/app.module');
     const { configureApp } = await import('../src/app.setup');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    const app = moduleRef.createNestApplication();
+    const app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
     await app.init();
     Object.assign(process.env, baseEnv); // restore defaults for the next createApp

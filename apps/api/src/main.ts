@@ -7,7 +7,9 @@ import { adapterModes } from './config/env';
 import { EnvService } from './config/env.service';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody: true keeps the exact request bytes on req.rawBody, needed to verify the Razorpay
+  // webhook signature (HMAC over the raw payload, not a re-serialised copy of the parsed JSON).
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   configureApp(app);
   mountSwagger(app);
 

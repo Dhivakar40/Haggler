@@ -229,3 +229,84 @@ Phase 3 hook (wallet/payments don't exist yet, so `confirm` only records the pay
 Customer/Ranger reputation beyond the raw `badgeTier`/`jobsCompleted` fields, and any badge-earning
 logic, are Phase 4. The hi/ta/kn/te strings added this phase are drafts awaiting native-speaker review
 (existing gap, restated because this phase added a large new batch of them).
+
+## Phase 3
+
+**D-037 ⚠ Rangers are never charged. Ever.** This was confirmed explicitly before building Phase 3.
+Phase 2's cash/UPI-direct-to-Ranger model (the customer pays the Ranger the full negotiated price,
+in person, by cash or UPI) stays completely unchanged — Rangers, Campus students and Contract
+workers keep 100% of what they agree with the customer, at every tier, with no commission, no lead
+fee, no deduction, and no escrow-with-a-cut. Phase 3's wallet and payments system exists only to
+move money on the customer/employer side. This is a hard boundary: no code in `WalletService` ever
+reads or writes anything keyed by a Ranger's user id, and there is no Ranger-facing top-up or
+deduction endpoint. A `worker_stats`-style "Ranger wallet" is left for a possible future bonus
+program, never for fee collection.
+
+**D-038 A customer wallet holds tokens, one token per confirmed job.** A customer buys a token
+bundle (a DB-seeded SKU, `token_bundles`, editable without a deploy — same pattern as `PriceBand`)
+via Razorpay (D-020: test mode only). One token is reserved (`HOLD`) the moment they create a
+request — not spent yet, just reserved, so a customer can never end up confirming more jobs than
+they've paid for even if they open several requests at once. The token is permanently spent
+(`CONSUME`) only when the job reaches `CONFIRMED_BY_CUSTOMER`; if the job ends any other way
+(`CANCELLED`, `NO_SHOW_WORKER`, `NO_SHOW_CUSTOMER`) the hold is given back (`RELEASE`). Both the
+hold-on-create and the settle-on-transition are wired into the SAME code paths Phase 2 already
+funnelled everything through: `RequestsService.create()`'s transaction (hold) and
+`JobTransitions.move()` (consume/release, based on the `to` status) — so every existing cancel/
+no-show/auto-cancel path gets correct wallet behaviour for free, with no new call sites to get
+wrong. `wallet_holds` has `UNIQUE(job_id)` and an optimistic `status = 'HELD'` guard on release/
+consume, the same idempotency pattern as `job_matches`/`JobTransitions.move()` in Phase 2.
+
+**D-039 The wallet ledger is append-only and self-auditing.** `wallet_ledger_entries` has the same
+DB trigger that blocks `UPDATE`/`DELETE` as `job_events` (D-011-era pattern). Every entry records
+both a `tokensDelta` (the change to spendable balance) and a `heldDelta` (the change to reserved
+tokens), so summing either column for a wallet reproduces its current counters exactly — proven by
+an integration test that does that sum after a purchase, a hold and a release and checks it against
+the live row. `CustomerWallet.balanceTokens`/`heldTokens` are the fast-read cache; the ledger is the
+source of truth, and both are always written in the same transaction so they can never drift.
+
+**D-040 Payments: real Razorpay signature math even in sandbox.** Following the existing sandbox
+pattern (the sandbox SMS provider prints a real, randomly generated OTP instead of skipping
+verification), `SandboxPaymentsProvider` signs and verifies with a genuine HMAC-SHA256 — the same
+algorithm Razorpay's real Checkout callback (`HMAC(order_id|payment_id, key_secret)`) and webhooks
+(`HMAC(raw body, webhook_secret)`) use — just with a fixed dev-only secret instead of a real
+gateway. This means the whole signature-checking code path (including rejecting a tampered
+signature) is genuinely exercised in every environment, including CI, rather than being stubbed to
+"always true". `RazorpayPaymentsProvider` (real Orders API, `test` mode, `rzp_test_` keys only per
+D-020) is implemented but **not verified against the real Razorpay service** — no live test account
+was used this session — same honesty as the MSG91 SMS adapter (D-016-era).
+
+**D-041 Two settlement paths for a top-up, race-safe against each other.** A payment can be
+confirmed by the client's own callback (`POST /wallet/topup/:id/verify`, fast, good for UI) or by
+Razorpay's server-to-server webhook (`POST /webhooks/razorpay`, slower but authoritative, works even
+if the phone loses its connection right after paying). Whichever arrives first wins: crediting is a
+single `updateMany(where: { status: 'CREATED' })` guarded update inside a transaction, so a
+double-credit is structurally impossible, proven by an integration test that fires both paths for
+the same order and checks the wallet is credited exactly once. `payment_orders.provider_payment_id`
+is also globally unique, so even a maliciously replayed webhook payload for an already-processed
+payment id cannot credit a second order.
+
+**D-042 A found bug: `safeEqualHex` could accept a tampered signature.** Writing a test for "a
+signature with garbage appended is rejected" caught a real bug in the shared crypto helper (used
+for OTP hashes, the arrival code, and now payment signatures): `Buffer.from(str, 'hex')` silently
+**stops** at the first character it cannot decode instead of throwing, so
+`Buffer.from('deadbeefx', 'hex')` is quietly just `deadbeef` — meaning a signature with trailing
+garbage appended could come out the same length and compare equal. Fixed by rejecting any value
+that is not strictly even-length, pure hex before ever comparing bytes. All prior callers
+(OTP verification, arrival-code verification) were unaffected in practice, because both sides of
+those particular comparisons are always server-generated, equal-length hashes — but the helper
+itself was wrong, and now has regression tests for exactly this.
+
+**D-043 Known gaps carried forward (Phase 3).** No mobile Razorpay Checkout integration yet — the
+server-side order creation, signature verification and webhook handling are complete and tested,
+but the app's "pay now" screen only offers the sandbox path (fully working, fully tested); a real
+card/UPI payment in `test` mode needs either the native Razorpay Checkout SDK (a dev build, same
+constraint as MapLibre) or an embedded Checkout.js WebView, neither built this phase. No PDF/emailed
+receipts — the purchase history endpoint (`GET /wallet/orders`) is the receipt today.
+`RazorpayPaymentsProvider` is untested against the real Razorpay API (D-040). No admin UI or
+endpoint for a manual wallet `ADJUSTMENT` (e.g. a goodwill token after a dispute) — the ledger type
+and the `WalletService` bookkeeping exist and are tested via a direct DB grant in the test helpers,
+but there is no admin-facing way to trigger one yet. **Roadmap, explicitly out of scope for Phase
+3** (recorded per the user's instruction so it is not forgotten): a "Haggler Plus" customer/employer
+subscription (discounted token bundles, priority broadcast) and optional Rush/Boost fees paid by the
+hirer (an urgent-broadcast fee for customers, a boosted-listing fee for Contract/Campus employers).
+Neither charges Rangers, students or contract workers, consistent with D-037.

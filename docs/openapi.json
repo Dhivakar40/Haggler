@@ -1165,6 +1165,189 @@
         ]
       }
     },
+    "/v1/wallet": {
+      "get": {
+        "operationId": "WalletController_summary_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My token balance, held tokens, and the last 20 ledger entries",
+        "tags": [
+          "wallet"
+        ]
+      }
+    },
+    "/v1/wallet/bundles": {
+      "get": {
+        "operationId": "WalletController_bundles_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Purchasable token bundles",
+        "tags": [
+          "wallet"
+        ]
+      }
+    },
+    "/v1/wallet/orders": {
+      "get": {
+        "operationId": "WalletController_orders_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My top-up purchase history, newest first",
+        "tags": [
+          "wallet"
+        ]
+      }
+    },
+    "/v1/wallet/topup": {
+      "post": {
+        "operationId": "WalletController_createOrder_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bundleId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "bundleId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start a top-up: creates a payment order for a token bundle",
+        "tags": [
+          "wallet"
+        ]
+      }
+    },
+    "/v1/wallet/topup/{orderId}/verify": {
+      "post": {
+        "operationId": "WalletController_verify_v1",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "razorpayPaymentId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "razorpaySignature": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "razorpayPaymentId",
+                  "razorpaySignature"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Verify Razorpay Checkout's success callback and credit the wallet (idempotent)",
+        "tags": [
+          "wallet"
+        ]
+      }
+    },
+    "/v1/wallet/topup/{orderId}/sandbox-pay": {
+      "post": {
+        "operationId": "WalletController_sandboxPay_v1",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Dev/test only: complete a sandbox order instantly (refused when PAYMENTS_MODE=test)",
+        "tags": [
+          "wallet"
+        ]
+      }
+    },
     "/v1/requests/media": {
       "post": {
         "operationId": "RequestsController_presign_v1",

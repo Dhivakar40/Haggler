@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { MatchingService } from '../src/marketplace/matching.service';
 import { MarketplaceConfig } from '../src/marketplace/marketplace-config.service';
 import { SchedulerService } from '../src/marketplace/scheduler.service';
+import { WalletService } from '../src/wallet/wallet.service';
 import { Api, type Session } from './helpers';
 
 /** Chennai Central. 0.001 degrees of latitude is about 111 m. */
@@ -39,7 +40,7 @@ export class Market {
   }
 
   async customer(
-    over: { at?: { lat: number; lng: number }; located?: boolean } = {},
+    over: { at?: { lat: number; lng: number }; located?: boolean; tokens?: number } = {},
   ): Promise<Customer> {
     const s = await this.api.signIn();
     const at = over.at ?? CENTER;
@@ -58,7 +59,33 @@ export class Market {
     if (res.status !== 201)
       throw new Error(`address failed ${res.status} ${JSON.stringify(res.body)}`);
     await this.api.patch(s, '/v1/me', { fullName: 'Asha Raman' });
+    // Plenty of tokens by default (Phase 3, D-037/D-038) so marketplace tests don't have to think
+    // about the wallet unless they are specifically testing it; pass tokens: 0 to opt out.
+    await this.grantTokens(s.userId, over.tokens ?? 1000);
     return { ...s, addressId: res.body.id };
+  }
+
+  /** Credit tokens directly (an admin ADJUSTMENT, not a real purchase) so tests can set up quickly. */
+  async grantTokens(userId: string, tokens: number): Promise<void> {
+    if (tokens <= 0) return;
+    const wallet = await this.prisma.customerWallet.upsert({
+      where: { userId },
+      update: { balanceTokens: { increment: tokens } },
+      create: { userId, balanceTokens: tokens },
+    });
+    await this.prisma.walletLedgerEntry.create({
+      data: {
+        walletId: wallet.id,
+        type: 'ADJUSTMENT',
+        tokensDelta: tokens,
+        heldDelta: 0,
+        note: 'test grant',
+      },
+    });
+  }
+
+  get wallet() {
+    return this.app.get(WalletService);
   }
 
   /** A verified (tier 2), categorised Ranger, online at a point. Built directly so tests stay fast. */
@@ -83,6 +110,9 @@ export class Market {
     await this.api.patch(s, '/v1/worker/profile', {
       categorySlugs: over.categories ?? ['electrician'],
     });
+    // Rangers can also be customers on the same account, so grant tokens too (D-037), matching
+    // Market.customer(); tests that open a request as this Ranger don't need to think about it.
+    await this.grantTokens(s.userId, 1000);
     const r: Ranger = { ...s, lat: at.lat, lng: at.lng };
     if (over.online !== false) {
       const res = await this.api.post(r, '/v1/worker/online', {

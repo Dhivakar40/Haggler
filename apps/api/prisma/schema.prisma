@@ -931,3 +931,142 @@ model WorkerStats {
 
   @@map("worker_stats")
 }
+
+// ---------------------------------------------------------------------------------------------
+// Phase 3: customer token wallet + Razorpay (test mode) top-ups.
+//
+// The platform NEVER touches job money: Rangers are paid cash/UPI, directly, in full, always
+// (D-037). The wallet only holds TOKENS the customer buys, and one token is consumed only when a
+// job reaches CONFIRMED_BY_CUSTOMER. A token is HELD (reserved, not yet spent) the moment a
+// request is created, so a customer can never confirm more jobs than tokens they hold, and is
+// RELEASED back if the job never completes. WalletHold has one row per job (unique job_id), so
+// hold -> consume/release is race-safe the same way JobMatch/job_matches makes accept race-safe.
+// ---------------------------------------------------------------------------------------------
+
+enum WalletLedgerType {
+  PURCHASE
+  HOLD
+  RELEASE
+  CONSUME
+  ADJUSTMENT
+
+  @@map("wallet_ledger_type")
+}
+
+enum WalletHoldStatus {
+  HELD
+  CONSUMED
+  RELEASED
+
+  @@map("wallet_hold_status")
+}
+
+enum PaymentOrderStatus {
+  CREATED
+  PAID
+  FAILED
+  CANCELLED
+
+  @@map("payment_order_status")
+}
+
+/// One row per customer. Created on first use (top-up or first request). balance_tokens is what
+/// can still be spent; held_tokens is reserved against open jobs (see WalletHold).
+model CustomerWallet {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @unique @map("user_id") @db.Uuid
+  balanceTokens Int      @default(0) @map("balance_tokens")
+  heldTokens    Int      @default(0) @map("held_tokens")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  ledger WalletLedgerEntry[]
+  holds  WalletHold[]
+
+  @@map("customer_wallets")
+}
+
+/// Append-only (DB trigger blocks UPDATE, same pattern as job_events). This is the audit trail;
+/// CustomerWallet's counters are the fast-read cache, always kept in sync in the same transaction.
+model WalletLedgerEntry {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  walletId       String           @map("wallet_id") @db.Uuid
+  type           WalletLedgerType
+  /// Signed change to balance_tokens this entry caused. PURCHASE +N, HOLD -1, RELEASE +1,
+  /// CONSUME 0 (a consume never touches balance, only held), ADJUSTMENT +/-N (admin correction).
+  tokensDelta    Int              @map("tokens_delta")
+  /// Signed change to held_tokens this entry caused: HOLD +1, RELEASE -1, CONSUME -1, others 0.
+  /// Together with tokensDelta this makes every row a complete, replayable record of both buckets.
+  heldDelta      Int              @default(0) @map("held_delta")
+  jobId          String?          @map("job_id") @db.Uuid
+  paymentOrderId String?          @map("payment_order_id") @db.Uuid
+  note           String?
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  wallet CustomerWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt(sort: Desc)])
+  @@index([jobId])
+  @@map("wallet_ledger_entries")
+}
+
+/// One row per job that has ever held a token. Unique(job_id) + the HELD-guarded update is what
+/// makes consume/release idempotent even if two code paths race (e.g. scheduler auto-cancel and a
+/// customer's manual cancel arriving together).
+model WalletHold {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  walletId  String           @map("wallet_id") @db.Uuid
+  jobId     String           @unique @map("job_id") @db.Uuid
+  tokens    Int              @default(1)
+  status    WalletHoldStatus @default(HELD)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  wallet CustomerWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_holds")
+}
+
+/// A purchasable token bundle (SKU). A DB table, not hardcoded config, so bundles can change
+/// without a deploy (mirrors PriceBand: catalog data, not application logic).
+model TokenBundle {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug       String   @unique
+  name       String
+  tokens     Int
+  pricePaise Int      @map("price_paise")
+  isActive   Boolean  @default(true) @map("is_active")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  orders PaymentOrder[]
+
+  @@map("token_bundles")
+}
+
+/// One row per top-up attempt. provider_payment_id is unique and only set once a payment is
+/// actually captured, so a replayed webhook (or a client hitting verify twice) can never credit
+/// the wallet twice for the same payment (D-039).
+model PaymentOrder {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  bundleId          String             @map("bundle_id") @db.Uuid
+  tokens            Int
+  amountPaise       Int                @map("amount_paise")
+  provider          String
+  providerOrderId   String             @map("provider_order_id")
+  providerPaymentId String?            @unique @map("provider_payment_id")
+  status            PaymentOrderStatus @default(CREATED)
+  paidAt            DateTime?          @map("paid_at") @db.Timestamptz(6)
+  failedReason      String?            @map("failed_reason")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  bundle TokenBundle @relation(fields: [bundleId], references: [id])
+
+  @@unique([provider, providerOrderId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("payment_orders")
+}

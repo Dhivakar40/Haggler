@@ -94,6 +94,7 @@ export function AccountScreen() {
       )}
 
       <View style={{ gap: spacing.sm }}>
+        <Button testID="open-wallet" title={t('account.wallet')} onPress={go('/wallet')} />
         <Button variant="secondary" title={t('account.editProfile')} onPress={go('/profile')} />
         <Button variant="secondary" title={t('account.addresses')} onPress={go('/addresses')} />
         <Button variant="secondary" title={t('account.contacts')} onPress={go('/contacts')} />

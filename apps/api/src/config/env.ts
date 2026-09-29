@@ -75,6 +75,9 @@ const envSchema = z
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+    /** HMAC secret the sandbox payments provider signs with (never used when PAYMENTS_MODE=test,
+     * and PAYMENTS_MODE=sandbox is refused in production above, so a fixed dev default is safe). */
+    PAYMENTS_SANDBOX_SECRET: z.string().default('sandbox-payments-secret-dev-only'),
     FCM_SERVICE_ACCOUNT_JSON: z.string().optional(),
     NOMINATIM_URL: z.string().url().default('https://nominatim.openstreetmap.org'),
     NOMINATIM_USER_AGENT: z.string().optional(),

@@ -82,6 +82,24 @@ docker compose down -v    # deletes the volumes (all local data, including uploa
 pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 ```
 
+## Wallet and payments (Phase 3)
+
+- Default `PAYMENTS_MODE=sandbox`: no gateway is called; `POST /wallet/topup/:id/sandbox-pay`
+  completes a top-up instantly (refused when `PAYMENTS_MODE=test`). This is the only path exercised
+  by the mobile app's own tests and by hand in Expo Go — see D-043 for the real-Checkout gap.
+- To try real Razorpay TEST payments, set `PAYMENTS_MODE=test` and fill `RAZORPAY_KEY_ID` (must
+  start with `rzp_test_`), `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` from your Razorpay TEST
+  dashboard. The API refuses to boot with a live key (D-020).
+- Point Razorpay's webhook (test dashboard → Webhooks) at
+  `https://<your-host>/v1/webhooks/razorpay`, subscribed to `payment.captured`, using
+  `RAZORPAY_WEBHOOK_SECRET` as the signing secret. Locally, use a tunnel (ngrok or similar) since
+  Razorpay cannot reach `localhost`.
+- Token bundles (`token_bundles` table, prices in paise) are seeded by `pnpm db:seed`
+  (`starter-3`/`value-10`/`saver-25`, placeholder prices) — review before launch, same as the
+  DEFAULT price bands.
+- `PAYMENTS_SANDBOX_SECRET` signs sandbox payments; it has a fixed dev default and is never used
+  when `PAYMENTS_MODE=test`, so it does not need to be set for a real deployment.
+
 ## Production notes (before any real deployment)
 
 - Set `TRUST_PROXY_HOPS` to the number of proxies in front of the API, or per-IP limits will see the
@@ -116,3 +134,6 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - [ ] Fill `minimum_wage_rules` with counsel-confirmed values (intentionally empty).
 - [ ] Schedule the two daily jobs above and alert if they fail.
 - [ ] Decide who the KYC reviewers are, and train them on the masked-Aadhaar rule.
+- [ ] Review the seeded token bundle prices (`token_bundles`, placeholders) before customers can buy.
+- [ ] Switch `PAYMENTS_MODE` to `test` with real Razorpay TEST keys and a real webhook subscription
+      before any non-sandbox testing; there is still no `live` mode anywhere (D-020).

@@ -3,12 +3,13 @@
 A mobile marketplace for India: verified local **Rangers** (independent workers) for on-demand
 services, plus long-term contract labour and part-time student jobs, on one trust layer.
 
-> **Status: Phase 2 (Core On-Demand Marketplace) complete.** Everything in Phase 1, plus: a customer
-> can post a service request (photos + optional voice note, price band shown), it broadcasts to nearby
-> Rangers in waves, a Ranger goes online and accepts (first-accept wins, proven race-free under load),
-> either side can negotiate the price, the job moves through arrival (geofenced 4-digit code),
-> before/after photos, live GPS tracking with a shareable link, in-app chat, and completion/confirmation.
-> Payments, wallets and reputation/badges start in Phase 3+.
+> **Status: Phase 3 (Customer Wallet & Payments) complete.** Everything in Phases 1–2, plus: a
+> customer buys token bundles via Razorpay (test mode) into a wallet, one token is reserved the
+> moment they post a request and permanently spent only once the job is confirmed complete (given
+> back if the job is cancelled or a no-show). **Rangers are never charged anything** — the
+> cash/UPI-direct payment between customer and Ranger from Phase 2 is completely unchanged; the
+> wallet exists purely for the customer/employer side. Reputation/badges beyond the raw
+> jobs-completed count start in Phase 4.
 
 ## Stack
 
@@ -72,7 +73,7 @@ API keep the name `WORKER` (see [D-003](docs/DECISIONS.md)).
 | -------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | SMS      | `sandbox` / `live` | Sandbox. The MSG91 adapter exists but is **untested** against MSG91                                           |
 | KYC      | `manual_admin`     | Humans review documents. No automated eKYC/face-match/background check                                        |
-| Payments | `sandbox` / `test` | Razorpay **test keys only**; there is no live mode                                                            |
+| Payments | `sandbox` / `test` | Razorpay **test keys only** (no live mode); mobile Checkout UI only wired up for `sandbox`                    |
 | Calls    | `disabled`         | Masked calling is not built; in-app chat only (built in Phase 2)                                              |
 | Push     | `sandbox` / `live` | Sandbox until Phase 5 — a Ranger must have the app open to see requests                                       |
 | Maps     | `sandbox` / `osm`  | OpenStreetMap + MapLibre; public tile server is dev-only (needs a dev build, not Expo Go, to render natively) |

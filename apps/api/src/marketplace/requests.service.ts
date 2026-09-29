@@ -19,6 +19,7 @@ import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { isInIndia } from '../users/addresses.service';
+import { WalletService } from '../wallet/wallet.service';
 import { JobTransitions } from './job-transitions.service';
 import { JobViewService } from './job-view.service';
 import { MarketplaceConfig } from './marketplace-config.service';
@@ -62,6 +63,7 @@ export class RequestsService {
     private readonly transitions: JobTransitions,
     private readonly view: JobViewService,
     private readonly realtime: RealtimeService,
+    private readonly wallet: WalletService,
   ) {}
 
   // ---- media: photos (max 5) and one voice note (max 60 s) -------------------------------------
@@ -198,6 +200,9 @@ export class RequestsService {
                 ${input.urgency}::urgency, ${scheduledFor}, ${input.genderPreference}::gender_preference,
                 ${band.scope}::price_band_scope, ${band.minPaise}, ${band.medianPaise}, ${band.maxPaise}, now())`;
       const job = await tx.job.create({ data: { requestId: id, customerId, nextWaveAt: startAt } });
+      // D-037/D-038: reserve one token now, before the request can broadcast, so a customer can
+      // never end up confirming more jobs than they have paid for. Throws INSUFFICIENT_TOKENS.
+      await this.wallet.hold(tx, customerId, job.id);
       if (input.mediaIds.length)
         await tx.requestMedia.updateMany({
           where: { id: { in: input.mediaIds } },
