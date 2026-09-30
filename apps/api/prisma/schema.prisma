@@ -78,11 +78,13 @@ model User {
   addresses            Address[]
   workerProfile        WorkerProfile?
   employerProfile      EmployerProfile?
+  studentProfile       StudentProfile?
   emergencyContacts    EmergencyContact[]
   consents             Consent[]
   kycChecks            KycCheck[]
   kycDocuments         KycDocument[]
   contractApplications ContractApplication[]
+  campusApplications   CampusApplication[]
 
   @@map("users")
 }
@@ -193,6 +195,7 @@ model ServiceCategory {
   workerCategories WorkerCategory[]
   requests         ServiceRequest[]
   contractListings ContractListing[]
+  campusListings   CampusListing[]
 
   @@map("service_categories")
 }
@@ -1154,15 +1157,22 @@ enum ContractApplicationStatus {
 /// A light employer identity: a business name is all that is required to post a listing. No
 /// document verification exists yet (D-054 known gap) — same placeholder status as Aadhaar
 /// handling and price bands elsewhere in this project, not a claim that employers are vetted.
+/// `verified` (Phase 7) gates Campus listings only — see D-062; Contract listings still need no
+/// verification (D-056 known gap, deliberately not closed retroactively this phase).
 model EmployerProfile {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId       String   @unique @map("user_id") @db.Uuid
-  businessName String   @map("business_name")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @unique @map("user_id") @db.Uuid
+  businessName String    @map("business_name")
+  /// An admin has confirmed this is a real business. Required before any Campus listing can be
+  /// created (D-062). Never set by the employer themselves.
+  verified     Boolean   @default(false)
+  verifiedAt   DateTime? @map("verified_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  listings ContractListing[]
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings       ContractListing[]
+  campusListings CampusListing[]
 
   @@map("employer_profiles")
 }
@@ -1216,4 +1226,84 @@ model ContractApplication {
   @@unique([listingId, workerId])
   @@index([workerId, appliedAt(sort: Desc)])
   @@map("contract_applications")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Phase 7: Campus (part-time student jobs). Shares its mechanics and enums with Phase 6's
+// Contract labour (same statuses, same job-board-not-dispatch shape, same no-money-through-the-
+// app principle, D-054) but with Campus-specific safeguards the user required explicitly:
+// a hard 18+ age gate (D-060), a weekly hours cap (D-061), a night-shift opt-in gate that also
+// requires a verified employer (D-062), and employer verification as a prerequisite to posting
+// at all (D-062). See docs/DECISIONS.md.
+// ---------------------------------------------------------------------------------------------
+
+/// A student's age is captured once, encrypted, and never re-enterable to a lower value once an
+/// account exists below the cutoff (D-060: an under-18 signup is refused outright, no row is
+/// created). Self-declared, not admin-reviewed like Ranger KYC (D-063 known gap) — the age gate
+/// is still a hard block in code, not a checkbox someone can tick past.
+model StudentProfile {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @unique @map("user_id") @db.Uuid
+  /// AES-256-GCM ciphertext (EncryptionService), same pattern as WorkerProfile.dateOfBirthEnc.
+  dateOfBirthEnc String   @map("date_of_birth_enc")
+  instituteName  String?  @map("institute_name")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("student_profiles")
+}
+
+model CampusListing {
+  id              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employerId      String                @map("employer_id") @db.Uuid
+  categoryId      String                @map("category_id") @db.Uuid
+  title           String
+  description     String
+  hourlyRatePaise Int                   @map("hourly_rate_paise")
+  /// Declared weekly commitment for this listing; summed against a student's other HIRED Campus
+  /// jobs and checked against the configurable weekly cap (default 20 h, D-061) at apply and hire.
+  hoursPerWeek    Int                   @map("hours_per_week")
+  /// True if any shift overlaps 22:00-06:00. Creating one requires a verified employer (D-062);
+  /// applying to one requires the student's explicit opt-in (CampusApplication.acceptsNightShift).
+  isNightShift    Boolean               @default(false) @map("is_night_shift")
+  openings        Int                   @default(1)
+  filledCount     Int                   @default(0) @map("filled_count")
+  city            String
+  state           String
+  pincode         String
+  status          ContractListingStatus @default(OPEN)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  closedAt        DateTime?             @map("closed_at") @db.Timestamptz(6)
+
+  employer     EmployerProfile     @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  category     ServiceCategory     @relation(fields: [categoryId], references: [id])
+  applications CampusApplication[]
+
+  @@index([status, categoryId, createdAt(sort: Desc)])
+  @@index([employerId, createdAt(sort: Desc)])
+  @@map("campus_listings")
+}
+
+/// Mirrors ContractApplication's re-apply rule: only WITHDRAWN can be re-applied to, never
+/// REJECTED or HIRED (D-058, same reasoning reused here).
+model CampusApplication {
+  id                String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listingId         String                    @map("listing_id") @db.Uuid
+  studentId         String                    @map("student_id") @db.Uuid
+  coverNote         String?                   @map("cover_note")
+  /// Required true to apply to a night-shift listing (D-062); meaningless (and ignored) otherwise.
+  acceptsNightShift Boolean                   @default(false) @map("accepts_night_shift")
+  status            ContractApplicationStatus @default(APPLIED)
+  appliedAt         DateTime                  @default(now()) @map("applied_at") @db.Timestamptz(6)
+  decidedAt         DateTime?                 @map("decided_at") @db.Timestamptz(6)
+
+  listing CampusListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  student User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, studentId])
+  @@index([studentId, appliedAt(sort: Desc)])
+  @@map("campus_applications")
 }

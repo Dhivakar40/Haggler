@@ -256,6 +256,36 @@ inside the same transaction as the status update; once `filledCount` reaches `op
 flips to `FILLED` automatically, closing it to further applications. Owner checks return 404 (never 403) for a non-owner's edit/view attempt on a listing or its applications, so a stranger can't even
 learn the listing exists by the shape of the error.
 
+## Campus (`src/campus`)
+
+Shares Contract labour's job-board shape (D-054) and reuses its enums (`ContractListingStatus`,
+`ContractApplicationStatus`) directly rather than duplicating them, but with three safeguards the
+user required by name:
+
+```
+StudentProfileService       create() [DOB set once, hard 18+ block, D-060] / assertEligible()
+CampusListingsService       create() [needs a *verified* employer, D-062] / update / browse / mine
+CampusApplicationsService   apply / withdraw / decide, both checking the weekly hours cap (D-061)
+```
+
+```
+apply(studentId, listingId, input)
+   │  StudentProfileService.assertEligible()  [profile exists AND currently 18+]
+   │  listing.isNightShift && !input.acceptsNightShift  ──▶ refuse (D-062)
+   │  committedWeeklyHours(studentId) + listing.hoursPerWeek > cap  ──▶ refuse (D-061)
+   ▼
+decide(..., HIRE)
+   │  same committedWeeklyHours() re-check  [other applications may have been hired meanwhile]
+   ▼
+   listing.filledCount += 1  [same incrementFilled() as Contract, auto-FILLED at openings]
+```
+
+`EmployerProfile.verified` (new Phase 7 column) gates **Campus** listing creation only — Contract
+labour still needs no verification (D-056 stays an open gap, not silently closed). An admin sets
+it via `AdminEmployerService` (`GET/POST /admin/employers/...`, reusing the `KYC_REVIEWER` role
+rather than adding a new one); no admin UI page exists for this queue yet, only the REST endpoints
+(D-063).
+
 ## Realtime at scale: the Socket.IO Redis adapter (`src/realtime/redis-io.adapter.ts`)
 
 `main.ts` attaches `RedisIoAdapter` at boot, which duplicates the app's Redis connection into a

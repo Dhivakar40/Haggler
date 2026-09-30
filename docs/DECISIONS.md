@@ -130,8 +130,9 @@ DISPUTE_AGENT, FINANCE, SUPER_ADMIN; KYC decisions need KYC_REVIEWER or SUPER_AD
 
 **D-026 Only some profile tables in Phase 1.** `worker_profiles`, `worker_categories`,
 `emergency_contacts`, `consents`, `professional_references` are created. `customer_profiles` would be
-an empty table today (name/photo live on `users`), so it waits until it has fields. `employer_profiles`
-and `student_profiles` arrive in Phases 6-7. Role `STUDENT` cannot be added yet.
+an empty table today (name/photo live on `users`), so it waits until it has fields.
+`employer_profiles` arrived in Phase 6 and `student_profiles` in Phase 7 — role `STUDENT` can now
+be added (see D-060).
 
 **D-027 Two layers of rate limiting on auth routes.** A coarse per-IP flood guard (30 requests/min,
 Redis-backed) sits above the precise OTP quotas (30 s cooldown, 5/hour/phone, 20/hour/IP, lockout).
@@ -463,3 +464,68 @@ same gap class as reviews, D-049). No mobile screens exist yet for Campus/studen
 scope this phase per the user's explicit choice). Money handling (D-054) has no fee/commission
 model built for it either, consistent with the Haggler Plus/Rush-Boost roadmap note (D-036) which
 already named Contract/Campus employer fees as a future item, not built.
+
+## Phase 7
+
+Scope confirmed explicitly by the user: Campus (part-time student jobs), reusing Phase 6's job-
+board mechanics (D-054), plus four Campus-specific safeguards the user required by name — not
+just "build Campus," but "enforce the Campus-specific safeguards from the original spec, not just
+Phase 6's mechanics."
+
+**D-060 A hard 18+ block for students, self-declared but enforced in code, not admin-reviewed.**
+`StudentProfileService.create()` computes age from a typed-in date of birth (reusing
+`kyc.rules.ts::isAdult`/`ageInYears`, the exact same pure functions Ranger KYC already uses — one
+age-gate implementation, not two) and refuses outright (`UNPROCESSABLE`, code `UNDER_18`) if under
+18: **no row is ever created** for a refused signup, so there's no half-created under-18 profile
+sitting in the database to clean up or accidentally trust later. Unlike Ranger KYC (D-055's
+`kycTier >= 1`), this is **not admin-reviewed** — no document upload, no human checking the claimed
+date of birth against an ID. That is a deliberate, disclosed simplification (D-063), not a claim
+that a Campus student's age is verified to the same standard as a Ranger's. The DOB, once set,
+cannot be resubmitted (`STUDENT_PROFILE_EXISTS` on a second `POST`) — closing the obvious way
+someone could try a later, older-looking date after an honest first attempt failed.
+
+**D-061 A weekly hours cap, enforced at both apply and hire, not just one.** `CampusConfig`
+(`campus_settings.weekly_hours_cap` in `system_config`, default 20h, same DB-overridable-without-
+a-deploy pattern as `MarketplaceConfig`/`ReputationConfig`) caps how many hours a student can be
+committed to across every Campus job they currently hold a **HIRED** application for.
+`ContractApplicationsService`-equivalent for Campus checks this sum twice: once when a student
+_applies_ (so they aren't wasting an employer's time applying for hours they couldn't legally take
+even if hired), and again when the employer _decides to hire_ (because other applications the
+student made in parallel may have been hired in the meantime — the apply-time check alone cannot
+see the future). Only **HIRED** applications count toward the cap; APPLIED/SHORTLISTED ones don't,
+since nothing is committed yet.
+
+**D-062 Night shifts require both a verified employer and the student's explicit opt-in.**
+`CampusListing.isNightShift` is a plain boolean the employer sets when posting (no shift-time
+range modeling — "does this job involve 10 PM-6 AM work, yes or no" is enough to satisfy the
+safeguard without building a full scheduling system this phase). Two independent gates apply: (1)
+**posting** any Campus listing at all — night-shift or not — requires `EmployerProfile.verified
+== true` (see below); this happens to satisfy "night shifts need a verified business" as a special
+case of the broader "all Campus listings need a verified employer" rule, rather than two separate
+checks. (2) **Applying** to a night-shift listing requires `acceptsNightShift: true` in the apply
+body — a student who doesn't opt in gets a clear `NIGHT_SHIFT_OPT_IN_REQUIRED` refusal, never a
+silent default. The employer verification gate itself: `EmployerProfile.verified` (new column,
+Phase 7) plus an admin-only `GET /admin/employers/queue` / `POST /admin/employers/:id/verify` pair
+(`AdminEmployerService`, reusing the `KYC_REVIEWER` admin role rather than adding a new one — see
+D-063) — no document upload, just a human confirming the business is real, audit-logged like every
+other admin decision. **This verification requirement applies to Campus listings only.** Contract
+labour (Phase 6) still needs no employer verification at all (D-056) — the same `EmployerProfile`
+row now carries a `verified` flag that Campus checks and Contract doesn't, rather than two
+separate employer identities. This was a deliberate reading of the user's Phase 7 brief: it asked
+for Campus employer verification "same as Contracts," but Contract labour was never actually built
+with employer verification (D-056 lists it as a known gap) — rather than silently retrofitting
+Contract too (an unrequested, unscoped change), the verification infrastructure was built shared
+and reusable, but the enforcement gate was added only where explicitly asked for.
+
+**D-063 Known gaps carried forward (Phase 7), named explicitly rather than silently accepted.**
+Student age is self-declared, not admin-reviewed against an ID the way Ranger KYC is (D-060) —
+a determined 17-year-old typing a false birth year would not be caught. Employer verification
+(D-062) is a human clicking "verify," not a business-registry or GSTIN check — same placeholder
+status as most compliance items in this project (see docs/COMPLIANCE.md). No admin mobile/web UI
+was built for the employer-verification queue beyond the two REST endpoints — an admin can call
+them directly (e.g. via `/docs` Swagger UI) but there is no `apps/admin` page yet, unlike the KYC
+queue which has one; this is a scope trim to keep Phase 7 focused on the four required safeguards
+plus the student-facing mobile app rather than also building admin tooling. Night-shift modeling
+is a single yes/no flag, not actual shift start/end times — good enough to gate the two required
+safeguards, not a real scheduling feature. Money handling is unchanged from Phase 6 (D-054): no
+fee/commission model exists for Campus either.

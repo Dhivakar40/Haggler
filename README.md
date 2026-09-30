@@ -3,13 +3,14 @@
 A mobile marketplace for India: verified local **Rangers** (independent workers) for on-demand
 services, plus long-term contract labour and part-time student jobs, on one trust layer.
 
-> **Status: Phase 6 (Contract labour) complete.** Everything in Phases 1–5, plus a first vertical
-> beyond on-demand dispatch: an Employer (a new light role, just a business name) posts long-term
-> job listings; a verified Ranger (`kycTier >= 1`, the same identity/age gate as on-demand work)
-> browses, applies with a cover note, and the employer shortlists/rejects/hires. **No money moves
-> through the app for Contract labour** — the employer pays the worker directly, same principle as
-> Rangers never being charged on-demand (D-037/D-054). Campus (student part-time jobs) is not
-> built yet. **Rangers are still never charged anything** (D-037, unchanged since Phase 3).
+> **Status: Phase 7 (Campus) complete.** Everything in Phases 1–6, plus the second job-board
+> vertical: a Student (a new light role) browses part-time listings a verified Employer posts and
+> applies. Three safeguards the original spec required, on top of Phase 6's mechanics: a hard
+> 18+ block (self-declared, enforced in code, not admin-reviewed — D-060), a weekly hours cap
+> checked at both apply and hire (default 20h, D-061), and night shifts that need both a verified
+> employer and the student's explicit opt-in (D-062). **No money moves through the app for
+> Campus, same as Contract labour** — the employer pays the student directly (D-037/D-054/D-062).
+> **Rangers are still never charged anything** (D-037, unchanged since Phase 3).
 
 ## Stack
 

@@ -79,7 +79,9 @@ export const profileUpdateSchema = z
   .strict();
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;
 
-export const addRoleSchema = z.object({ role: z.enum(['CUSTOMER', 'WORKER', 'EMPLOYER']) });
+export const addRoleSchema = z.object({
+  role: z.enum(['CUSTOMER', 'WORKER', 'EMPLOYER', 'STUDENT']),
+});
 
 export const consentInputSchema = z.object({
   purpose: z.enum(CONSENT_PURPOSES),

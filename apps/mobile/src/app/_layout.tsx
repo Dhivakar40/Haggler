@@ -133,6 +133,28 @@ function Navigator() {
           name="employer/listings/[id]"
           options={{ ...header, title: t('employer.applicantsTitle') }}
         />
+        <Stack.Screen name="campus/index" options={{ ...header, title: t('campus.browseTitle') }} />
+        <Stack.Screen name="campus/[id]" options={{ ...header, title: t('campus.listingTitle') }} />
+        <Stack.Screen
+          name="campus/my-applications"
+          options={{ ...header, title: t('employer.myApplicationsTitle') }}
+        />
+        <Stack.Screen
+          name="student/profile"
+          options={{ ...header, title: t('campus.profileTitle') }}
+        />
+        <Stack.Screen
+          name="employer/campus/index"
+          options={{ ...header, title: t('campus.myListingsTitle') }}
+        />
+        <Stack.Screen
+          name="employer/campus/new"
+          options={{ ...header, title: t('employer.postListing') }}
+        />
+        <Stack.Screen
+          name="employer/campus/[id]"
+          options={{ ...header, title: t('employer.applicantsTitle') }}
+        />
       </Stack.Protected>
     </Stack>
   );

@@ -7,3 +7,4 @@ export * from './wallet-schemas';
 export * from './reputation-schemas';
 export * from './push-schemas';
 export * from './contract-schemas';
+export * from './campus-schemas';

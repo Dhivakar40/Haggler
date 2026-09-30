@@ -56,7 +56,7 @@ export const registerPushToken = (body: RegisterPushTokenInput) =>
     schema: z.object({ ok: z.literal(true) }),
   });
 
-export const addRole = (role: 'CUSTOMER' | 'WORKER' | 'EMPLOYER') =>
+export const addRole = (role: 'CUSTOMER' | 'WORKER' | 'EMPLOYER' | 'STUDENT') =>
   apiRequest('/v1/me/roles', { method: 'POST', body: { role }, schema: meSchema });
 
 export const grantConsent = (body: ConsentInput) =>

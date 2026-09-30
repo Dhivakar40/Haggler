@@ -10,6 +10,7 @@ import { JwtAuthGuard, RolesGuard } from './auth/auth.guards';
 import { SessionModule } from './auth/session.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CryptoModule } from './common/crypto.module';
+import { CampusModule } from './campus/campus.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { EnvModule, EnvService } from './config/env.service';
 import { HealthModule } from './health/health.module';
@@ -101,6 +102,7 @@ export const LOG_REDACT_PATHS = [
     NotificationsModule,
     MarketplaceModule,
     ContractsModule,
+    CampusModule,
     MaintenanceModule,
     AdminModule,
   ],

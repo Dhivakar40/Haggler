@@ -13,12 +13,17 @@ import {
 } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { AdminAuthGuard, AdminAuthService } from './admin-auth';
+import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
 
 const queueQuery = z.object({
   status: z
     .enum(['PENDING_REVIEW', 'NEEDS_INFO', 'APPROVED', 'REJECTED'])
     .default('PENDING_REVIEW'),
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+const listQuery = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
@@ -30,6 +35,7 @@ export class AdminController {
   constructor(
     private readonly auth: AdminAuthService,
     private readonly kyc: AdminKycService,
+    private readonly employers: AdminEmployerService,
   ) {}
 
   @Post('auth/login')
@@ -100,5 +106,31 @@ export class AdminController {
     @ClientIp() ip?: string,
   ) {
     return this.kyc.decide(id, admin, body, ip);
+  }
+
+  @Get('employers/queue')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('KYC_REVIEWER')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Unverified employers, oldest first (Phase 7 gate for Campus listings, D-062)',
+  })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  employerQueue(@Query(new ZodPipe(listQuery)) q: z.infer<typeof listQuery>) {
+    return this.employers.queue(q.cursor, q.limit);
+  }
+
+  @Post('employers/:id/verify')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('KYC_REVIEWER')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirm this is a real business (unlocks Campus listings for them)' })
+  verifyEmployer(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.employers.verify(id, admin);
   }
 }

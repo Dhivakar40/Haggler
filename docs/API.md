@@ -8,6 +8,8 @@
 | GET | `/health/live` | Liveness probe |
 | GET | `/health/ready` | Readiness probe; also reports which adapters are sandbox vs live |
 | POST | `/v1/admin/auth/login` | Admin sign-in (email + password). 5 wrong attempts per email locks it for 15 minutes. |
+| POST | `/v1/admin/employers/{id}/verify` | Confirm this is a real business (unlocks Campus listings for them) |
+| GET | `/v1/admin/employers/queue` | Unverified employers, oldest first (Phase 7 gate for Campus listings, D-062) |
 | GET | `/v1/admin/kyc/{id}` | One verification with short-lived image links. Each view is audit-logged. |
 | POST | `/v1/admin/kyc/{id}/decision` | Approve, reject (reason required) or request more information |
 | GET | `/v1/admin/kyc/queue` | KYC review queue, oldest first, cursor-paginated |
@@ -16,11 +18,20 @@
 | POST | `/v1/auth/otp/send` | Send a 6-digit code by SMS. Limits: 30 s between codes, 5/hour per phone, 20/hour per IP. |
 | POST | `/v1/auth/otp/verify` | Verify the code. Creates the account on first sign-in and returns a session. |
 | POST | `/v1/auth/refresh` | Exchange a refresh token for a new pair. The old refresh token stops working. |
+| GET | `/v1/campus` | Browse open Campus listings |
+| GET | `/v1/campus/{id}` | Listing detail |
+| POST | `/v1/campus/{id}/apply` | Apply to a listing (opt into night shifts explicitly if it has any) |
+| DELETE | `/v1/campus/{id}/apply` | Withdraw my application |
 | GET | `/v1/categories` | List active service categories (public) |
 | GET | `/v1/contracts` | Browse open Contract-labour listings |
 | GET | `/v1/contracts/{id}` | Listing detail |
 | POST | `/v1/contracts/{id}/apply` | Apply to a listing |
 | DELETE | `/v1/contracts/{id}/apply` | Withdraw my application |
+| POST | `/v1/employer/campus` | Post a Campus (part-time student) listing — needs a verified employer |
+| GET | `/v1/employer/campus` | My Campus listings, newest first |
+| PATCH | `/v1/employer/campus/{id}` | Edit a listing, or change its status (pause/reopen/close/cancel) |
+| GET | `/v1/employer/campus/{id}/applications` | Every applicant for one of my Campus listings |
+| POST | `/v1/employer/campus/{id}/applications/{appId}/decision` | Shortlist, reject or hire an applicant (re-checks the weekly hours cap on hire) |
 | POST | `/v1/employer/contracts` | Post a Contract-labour listing |
 | GET | `/v1/employer/contracts` | My listings, newest first |
 | PATCH | `/v1/employer/contracts/{id}` | Edit a listing, or change its status (pause/reopen/close/cancel) |
@@ -62,6 +73,7 @@
 | GET | `/v1/me/blocks` | People I have blocked |
 | POST | `/v1/me/blocks` | Block someone: they will never be matched with me again, in either direction |
 | DELETE | `/v1/me/blocks/{userId}` | Unblock someone |
+| GET | `/v1/me/campus-applications` | My own Campus applications, newest first |
 | GET | `/v1/me/consents` | My consent history |
 | POST | `/v1/me/consents` | Give consent for a purpose at the current legal version |
 | DELETE | `/v1/me/consents/{purpose}` | Withdraw consent for a purpose |
@@ -86,6 +98,9 @@
 | POST | `/v1/requests/{id}/rebroadcast` | Try again after a timeout: invites Rangers from wave 1 again |
 | POST | `/v1/requests/media` | Get a presigned URL to upload a request photo (max 5) or a voice note (max 60 s) |
 | POST | `/v1/requests/media/{mediaId}/confirm` | Confirm that a media upload finished |
+| GET | `/v1/student/profile` | My student profile |
+| POST | `/v1/student/profile` | Set my date of birth once (hard-blocked under 18) and my institute name |
+| PATCH | `/v1/student/profile` | Update my institute name (the date of birth cannot be changed here) |
 | GET | `/v1/threads/{id}/messages` | Messages, newest first, cursor-paginated |
 | POST | `/v1/threads/{id}/messages` | Send a message (idempotent on clientMsgId). The WebSocket event chat.message does the same. |
 | GET | `/v1/track/{token}` | Live trip link contents: status and the Ranger's position. No phone numbers. |

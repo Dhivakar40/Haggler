@@ -136,6 +136,20 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - No employer document verification exists (D-056) — anyone can post a listing today. Treat this
   as an MVP trade-off to revisit once there's real usage, not a settled decision.
 
+## Campus (Phase 7)
+
+- Same job-board shape as Contract labour, plus three safeguards: a hard 18+ block (D-060), a
+  weekly hours cap across a student's HIRED jobs (default 20h, D-061, tunable via
+  `system_config.campus_settings.weekly_hours_cap` without a deploy), and night shifts that
+  require both a verified employer and the student's opt-in (D-062).
+- A Campus listing needs a **verified** employer — stricter than Contract, which needs none
+  (D-056). Verify one via `GET /v1/admin/employers/queue` and `POST
+/v1/admin/employers/:id/verify` (needs the `KYC_REVIEWER` admin role; no dedicated admin UI page
+  exists yet, D-063 — use `/docs` Swagger UI or a REST client).
+- A student sets their date of birth once via `POST /v1/student/profile` (needs the `STUDENT`
+  role first); it cannot be resubmitted. This is self-declared, not admin-reviewed against an ID
+  the way Ranger KYC is (D-060/D-063).
+
 ## Production notes (before any real deployment)
 
 - Set `TRUST_PROXY_HOPS` to the number of proxies in front of the API, or per-IP limits will see the
@@ -179,7 +193,14 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - [ ] Appoint a real Grievance Officer and update the placeholder name/email/phone shown at
       Legal > Grievance Officer in the app (compliance checklist item 8).
 - [ ] Decide on employer verification for Contract labour before launch (D-056) — today any
-      account can add the EMPLOYER role and post a listing with no document check.
+      account can add the EMPLOYER role and post a listing with no document check. (Campus
+      listings already require a human admin to click "verify" — D-062 — but that check is a
+      business-name claim, not a registry lookup; decide if that bar is high enough to launch on.)
+- [ ] Build an admin UI page for the employer-verification queue (D-063) — today it's REST-only
+      (`GET/POST /admin/employers/...`), unlike the KYC queue which has a page in `apps/admin`.
+- [ ] Review the Campus weekly hours cap (`campus-config.service.ts::DEFAULT_CAMPUS_SETTINGS`,
+      placeholder 20h) and decide if student age verification needs to move from self-declared to
+      admin-reviewed (D-060/D-063) before launch.
 - [ ] Create a real Firebase project, set `PUSH_MODE=live` and `FCM_SERVICE_ACCOUNT_JSON`, and
       verify a push actually arrives on a dev-build Android phone — `FcmPushProvider` has never
       been exercised against a real Firebase project (D-051).

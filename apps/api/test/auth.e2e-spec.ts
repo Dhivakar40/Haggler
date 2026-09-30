@@ -294,8 +294,8 @@ describe('roles and profile', () => {
     expect(await api.prisma().userRole.count({ where: { userId: s.userId } })).toBe(2);
   });
 
-  it('Student cannot be added yet, and unknown roles are rejected', async () => {
-    await api.post(s, '/v1/me/roles', { role: 'STUDENT' }).expect(400);
+  it('Student can be added (Phase 7), and unknown roles are rejected', async () => {
+    await api.post(s, '/v1/me/roles', { role: 'STUDENT' }).expect(201);
     await api.post(s, '/v1/me/roles', { role: 'ADMIN' }).expect(400);
   });
 

@@ -13,7 +13,7 @@ const ROLE_KEY = {
   CUSTOMER: 'account.roleCustomer',
   WORKER: 'account.roleWorker',
   EMPLOYER: 'account.roleEmployer',
-  STUDENT: 'account.roleCustomer',
+  STUDENT: 'account.roleStudent',
 } as const;
 
 export function AccountScreen() {
@@ -28,6 +28,7 @@ export function AccountScreen() {
   if (!user) return null;
   const isRanger = user.roles.includes('WORKER');
   const isEmployer = user.roles.includes('EMPLOYER');
+  const isStudent = user.roles.includes('STUDENT');
 
   async function becomeRanger() {
     setBusy(true);
@@ -50,6 +51,20 @@ export function AccountScreen() {
       await addRole('EMPLOYER');
       await refreshMe();
       router.push('/employer/profile');
+    } catch (err) {
+      setMessage(errorMessage(err, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function becomeStudent() {
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      await addRole('STUDENT');
+      await refreshMe();
+      router.push('/student/profile');
     } catch (err) {
       setMessage(errorMessage(err, t));
     } finally {
@@ -129,6 +144,27 @@ export function AccountScreen() {
         </Card>
       )}
 
+      {isStudent ? (
+        <Button
+          testID="student-profile"
+          title={t('campus.profileTitle')}
+          onPress={go('/student/profile')}
+        />
+      ) : (
+        <Card>
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="heading">{t('campus.becomeStudent')}</Text>
+            <Text color="textMuted">{t('campus.becomeStudentDesc')}</Text>
+            <Button
+              testID="become-student"
+              title={t('campus.becomeStudent')}
+              onPress={() => void becomeStudent()}
+              loading={busy}
+            />
+          </View>
+        </Card>
+      )}
+
       <View style={{ gap: spacing.sm }}>
         <Button
           testID="browse-contracts"
@@ -142,6 +178,20 @@ export function AccountScreen() {
             variant="secondary"
             title={t('employer.myApplicationsTitle')}
             onPress={go('/contracts/my-applications')}
+          />
+        ) : null}
+        <Button
+          testID="browse-campus"
+          variant="secondary"
+          title={t('campus.browseTitle')}
+          onPress={go('/campus')}
+        />
+        {isStudent ? (
+          <Button
+            testID="my-campus-applications"
+            variant="secondary"
+            title={t('employer.myApplicationsTitle')}
+            onPress={go('/campus/my-applications')}
           />
         ) : null}
         <Button testID="open-wallet" title={t('account.wallet')} onPress={go('/wallet')} />

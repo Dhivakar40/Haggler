@@ -415,7 +415,8 @@
                     "enum": [
                       "CUSTOMER",
                       "WORKER",
-                      "EMPLOYER"
+                      "EMPLOYER",
+                      "STUDENT"
                     ]
                   }
                 },
@@ -3424,6 +3425,539 @@
         ]
       }
     },
+    "/v1/student/profile": {
+      "get": {
+        "operationId": "StudentProfileController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My student profile",
+        "tags": [
+          "student"
+        ]
+      },
+      "post": {
+        "operationId": "StudentProfileController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dateOfBirth": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "instituteName": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "dateOfBirth"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set my date of birth once (hard-blocked under 18) and my institute name",
+        "tags": [
+          "student"
+        ]
+      },
+      "patch": {
+        "operationId": "StudentProfileController_update_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "instituteName": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update my institute name (the date of birth cannot be changed here)",
+        "tags": [
+          "student"
+        ]
+      }
+    },
+    "/v1/employer/campus": {
+      "post": {
+        "operationId": "EmployerCampusController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categorySlug": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "hourlyRatePaise": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "hoursPerWeek": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 80
+                  },
+                  "isNightShift": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "openings": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 1
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "pincode": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{5}$"
+                  }
+                },
+                "required": [
+                  "categorySlug",
+                  "title",
+                  "description",
+                  "hourlyRatePaise",
+                  "hoursPerWeek",
+                  "city",
+                  "state",
+                  "pincode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Post a Campus (part-time student) listing — needs a verified employer",
+        "tags": [
+          "employer"
+        ]
+      },
+      "get": {
+        "operationId": "EmployerCampusController_mine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My Campus listings, newest first",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/campus/{id}": {
+      "patch": {
+        "operationId": "EmployerCampusController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "hourlyRatePaise": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "hoursPerWeek": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 80
+                  },
+                  "isNightShift": {
+                    "type": "boolean"
+                  },
+                  "openings": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "pincode": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{5}$"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "OPEN",
+                      "PAUSED",
+                      "CLOSED",
+                      "CANCELLED"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a listing, or change its status (pause/reopen/close/cancel)",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/campus/{id}/applications": {
+      "get": {
+        "operationId": "EmployerCampusController_listApplications_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every applicant for one of my Campus listings",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/campus/{id}/applications/{appId}/decision": {
+      "post": {
+        "operationId": "EmployerCampusController_decide_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "appId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "SHORTLIST",
+                      "REJECT",
+                      "HIRE"
+                    ]
+                  }
+                },
+                "required": [
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Shortlist, reject or hire an applicant (re-checks the weekly hours cap on hire)",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/campus": {
+      "get": {
+        "operationId": "CampusController_browse_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Browse open Campus listings",
+        "tags": [
+          "campus"
+        ]
+      }
+    },
+    "/v1/campus/{id}": {
+      "get": {
+        "operationId": "CampusController_detail_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listing detail",
+        "tags": [
+          "campus"
+        ]
+      }
+    },
+    "/v1/campus/{id}/apply": {
+      "post": {
+        "operationId": "CampusController_apply_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "coverNote": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "acceptsNightShift": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Apply to a listing (opt into night shifts explicitly if it has any)",
+        "tags": [
+          "campus"
+        ]
+      },
+      "delete": {
+        "operationId": "CampusController_withdraw_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Withdraw my application",
+        "tags": [
+          "campus"
+        ]
+      }
+    },
+    "/v1/me/campus-applications": {
+      "get": {
+        "operationId": "MyCampusApplicationsController_mine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My own Campus applications, newest first",
+        "tags": [
+          "campus"
+        ]
+      }
+    },
     "/v1/admin/auth/login": {
       "post": {
         "operationId": "AdminController_login_v1",
@@ -3644,6 +4178,68 @@
           }
         ],
         "summary": "Approve, reject (reason required) or request more information",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/employers/queue": {
+      "get": {
+        "operationId": "AdminController_employerQueue_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {}
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Unverified employers, oldest first (Phase 7 gate for Campus listings, D-062)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/employers/{id}/verify": {
+      "post": {
+        "operationId": "AdminController_verifyEmployer_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm this is a real business (unlocks Campus listings for them)",
         "tags": [
           "admin"
         ]

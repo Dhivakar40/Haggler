@@ -61,7 +61,7 @@ export class UsersService {
   }
 
   /** Adds a role. Adding WORKER (Ranger) also creates the Ranger profile. */
-  async addRole(userId: string, role: 'CUSTOMER' | 'WORKER' | 'EMPLOYER'): Promise<Me> {
+  async addRole(userId: string, role: 'CUSTOMER' | 'WORKER' | 'EMPLOYER' | 'STUDENT'): Promise<Me> {
     await this.prisma.$transaction(async (tx) => {
       await tx.userRole.upsert({
         where: { userId_role: { userId, role } },
