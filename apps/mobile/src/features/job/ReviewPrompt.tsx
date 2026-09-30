@@ -70,7 +70,8 @@ export function ReviewPrompt({ job }: { job: JobDto }) {
   }
 
   return (
-    <Card testID="review-prompt">
+    // Elevated: this only renders once, right after a job finishes, asking for a rating now.
+    <Card testID="review-prompt" elevated>
       <View style={{ gap: spacing.md }}>
         <Text variant="heading">
           {job.viewerRole === 'WORKER' ? t('job.rateCustomer') : t('job.rateRanger')}

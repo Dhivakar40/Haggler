@@ -89,7 +89,9 @@ export function NegotiationPanel({ job, action }: { job: JobDto; action: Action 
   );
 
   return (
-    <Card testID="negotiation">
+    // Elevated only while there's a pending offer from the other side awaiting a reply — the
+    // genuinely time-pressured moment (a countdown to expiry). Flat the rest of the time.
+    <Card testID="negotiation" elevated={theirs}>
       <View style={{ gap: spacing.md }}>
         <Text variant="heading">{t('job.negotiate')}</Text>
         <Text testID="band" color="textMuted">

@@ -6,29 +6,21 @@ import { useCategories } from '../../api/hooks';
 import { EmptyState, ErrorState, LoadingState, Screen, Text } from '../../components';
 import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
-import { draftLightColors, draftDarkColors } from '../../theme/tokens.draft';
 
-/**
- * DRAFT redesign (Part 2 checkpoint): a flat service directory instead of bordered/shadowed tiles
- * — each category is a plain row (icon, name, a hairline underneath), grouped two to a line. No
- * card chrome at all here: browsing categories isn't an "action awaiting you," it's a menu, so it
- * stays flat per the elevation policy in tokens.draft.ts. Data-fetching and navigation are
- * untouched from the live HomeScreen — same query, same testIDs, same behaviour.
- */
+/** A flat service directory: each category is a plain row (icon, name, a hairline underneath),
+ * not a bordered/shadowed tile — browsing categories is a menu, not an action awaiting you, so it
+ * stays flat per the elevation policy in theme/tokens.ts. */
 export function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { scheme } = useTheme();
-  const c = scheme === 'dark' ? draftDarkColors : draftLightColors;
+  const { colors } = useTheme();
   const { data, isLoading, isError, refetch } = useCategories();
 
   return (
-    <Screen scroll style={{ backgroundColor: c.background }}>
+    <Screen scroll>
       <View style={{ gap: spacing.xs }}>
-        <Text variant="title" style={{ color: c.text }}>
-          {t('home.title')}
-        </Text>
-        <Text style={{ color: c.textMuted }}>{t('home.subtitle')}</Text>
+        <Text variant="title">{t('home.title')}</Text>
+        <Text color="textMuted">{t('home.subtitle')}</Text>
       </View>
 
       {isLoading && <LoadingState />}
@@ -47,20 +39,18 @@ export function HomeScreen() {
             }
             style={({ pressed }) => [
               styles.tile,
-              { borderColor: c.border },
+              { borderColor: colors.border },
               pressed && { opacity: 0.6 },
             ]}
           >
             <Ionicons
               name={cat.icon as keyof typeof Ionicons.glyphMap}
               size={26}
-              color={c.primary}
+              color={colors.primary}
               accessibilityElementsHidden
               importantForAccessibility="no"
             />
-            <Text variant="label" style={{ color: c.text }}>
-              {t(cat.nameKey)}
-            </Text>
+            <Text variant="label">{t(cat.nameKey)}</Text>
           </Pressable>
         ))}
       </View>

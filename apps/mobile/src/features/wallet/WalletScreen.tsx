@@ -110,7 +110,9 @@ export function WalletScreen() {
       </Card>
 
       {order ? (
-        <Card testID="checkout">
+        // Elevated: a payment awaiting confirmation is the most consequential moment on this
+        // screen. Balance, plans and history below are informational and stay flat.
+        <Card testID="checkout" elevated>
           <View style={{ gap: spacing.sm }}>
             <Text variant="heading">{t('wallet.checkoutTitle')}</Text>
             <Text>

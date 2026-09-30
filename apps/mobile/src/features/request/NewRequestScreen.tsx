@@ -8,12 +8,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { type CreateRequestInput, MAX_REQUEST_PHOTOS } from '@haggler/shared';
 import { listAddresses } from '../../api/endpoints';
 import { createRequest, getPriceBand } from '../../api/market';
-import { Button, Chip, LoadingState, Screen, Text, TextField } from '../../components';
+import { Button, Card, Chip, LoadingState, Screen, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
 import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
-import { draftDarkColors, draftElevated, draftLightColors } from '../../theme/tokens.draft';
 import { VoiceNoteRecorder, type VoiceNote } from '../media/VoiceNoteRecorder';
 import { uploadRequestMedia } from '../media/upload';
 
@@ -40,8 +39,7 @@ export function scheduledIso(when: When, now = new Date()): string | undefined {
 export function NewRequestScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { scheme } = useTheme();
-  const c = scheme === 'dark' ? draftDarkColors : draftLightColors;
+  const { colors: c } = useTheme();
   const { category = 'electrician' } = useLocalSearchParams<{ category: string }>();
   const addresses = useQuery({ queryKey: ['addresses'], queryFn: listAddresses });
 
@@ -141,10 +139,8 @@ export function NewRequestScreen() {
     );
 
   return (
-    <Screen scroll style={{ backgroundColor: c.background }}>
-      <Text variant="title" style={{ color: c.text }}>
-        {t(`categories.${category}`)}
-      </Text>
+    <Screen scroll>
+      <Text variant="title">{t(`categories.${category}`)}</Text>
 
       <TextField
         testID="description"
@@ -158,11 +154,11 @@ export function NewRequestScreen() {
         {t('request.describeHint')}
       </Text>
 
-      {/* DRAFT redesign (Part 2 checkpoint): a flat, hairline-divided list instead of Chips — the
-          same "booking-history row" treatment the layout principles call for, applied here to fix
-          the address bug visibly (every address is a plain, always-tappable row; "Use a different
-          address" is its own row, never hidden). No card, no shadow: choosing an address isn't the
-          urgent moment on this screen, the price confirmation below is. */}
+      {/* A flat, hairline-divided list instead of Chips — the same "booking-history row"
+          treatment as everywhere else a list of choices reads like a record, not a menu. Every
+          address is a plain, always-tappable row; "Use a different address" is its own row, never
+          hidden. No card, no shadow: choosing an address isn't the urgent moment on this screen,
+          the price confirmation below is. */}
       <View style={[styles.listGroup, { borderColor: c.border }]}>
         <Text variant="heading" style={{ color: c.text, marginBottom: spacing.sm }}>
           {t('request.where')}
@@ -299,38 +295,29 @@ export function NewRequestScreen() {
 
       {band.data ? (
         // The one elevated surface on this screen: this is the price the customer is about to
-        // commit to. Everything else here is flat by the elevation policy in tokens.draft.ts.
-        <View
-          testID="price-band"
-          style={[
-            styles.elevatedCard,
-            { backgroundColor: c.surface, borderColor: c.primary },
-            draftElevated,
-          ]}
-        >
+        // commit to. Everything else here is flat by the elevation policy in theme/tokens.ts.
+        <Card testID="price-band" elevated>
           <View style={{ gap: spacing.xs }}>
-            <Text variant="heading" style={{ color: c.text }}>
-              {t('request.priceTitle')}
-            </Text>
-            <Text testID="price-range" style={{ color: c.text }}>
+            <Text variant="heading">{t('request.priceTitle')}</Text>
+            <Text testID="price-range">
               {t('request.priceRange', {
                 min: formatRupees(band.data.minPaise),
                 max: formatRupees(band.data.maxPaise),
               })}
             </Text>
-            <Text style={{ color: c.textMuted }}>
+            <Text color="textMuted">
               {t('request.priceTypical', { median: formatRupees(band.data.medianPaise) })}
             </Text>
             {band.data.isSeededDefault ? (
-              <Text variant="caption" style={{ color: c.warning }}>
+              <Text variant="caption" color="warning">
                 {t('request.priceEstimate')}
               </Text>
             ) : null}
-            <Text variant="caption" style={{ color: c.textMuted }}>
+            <Text variant="caption" color="textMuted">
               {t('request.priceNote')}
             </Text>
           </View>
-        </View>
+        </Card>
       ) : null}
 
       {error ? (
@@ -358,5 +345,4 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     minHeight: 48,
   },
-  elevatedCard: { borderRadius: 12, borderWidth: 1, padding: spacing.lg },
 });
