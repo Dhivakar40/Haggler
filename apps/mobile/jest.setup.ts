@@ -19,6 +19,10 @@ jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'test-device-uuid-00
 // (almost all of them) never try to touch a real notification service. Tests that DO care mock
 // these modules themselves with a narrower, test-local jest.mock.
 jest.mock('expo-device', () => ({ isDevice: false }));
+// `isRunningInExpoGo()` calls a native module that jest-expo's default environment mocks
+// unpredictably; default to "not Expo Go" so push.ts's real registration logic is exercised in
+// tests, same reasoning as the expo-device/expo-notifications mocks above.
+jest.mock('expo', () => ({ isRunningInExpoGo: jest.fn(() => false) }));
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
   setNotificationChannelAsync: jest.fn(async () => undefined),
