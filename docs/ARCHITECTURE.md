@@ -94,7 +94,10 @@ Admin (Next.js, httpOnly cookie) ─ views images side by side (2-min links, eac
 ## Admin app (`apps/admin`)
 
 Server components and actions call the API; the token lives in an httpOnly, SameSite=Strict cookie
-so page scripts cannot read it. CSP allows images only from this origin and the storage host.
+so page scripts cannot read it. CSP allows images only from this origin and the storage host. Every
+authenticated page lives under the `(app)` route group, which shares one layout
+(`app/(app)/layout.tsx`) with the nav header (KYC / Employers / Reviews / Listings) and the
+sign-out form; the route group adds no URL segment, only a filesystem/import-depth one.
 
 # Phase 2 additions
 
@@ -283,8 +286,7 @@ decide(..., HIRE)
 `EmployerProfile.verified` (new Phase 7 column) gates **Campus** listing creation only — Contract
 labour still needs no verification (D-056 stays an open gap, not silently closed). An admin sets
 it via `AdminEmployerService` (`GET/POST /admin/employers/...`, reusing the `KYC_REVIEWER` role
-rather than adding a new one); no admin UI page exists for this queue yet, only the REST endpoints
-(D-063).
+rather than adding a new one); `apps/admin/(app)/employers` is its admin UI page as of Phase 8.
 
 ## Realtime at scale: the Socket.IO Redis adapter (`src/realtime/redis-io.adapter.ts`)
 
@@ -294,3 +296,27 @@ pub/sub pair and hands it to `@socket.io/redis-adapter`. This makes `server.to(r
 the process handling the current request — closing D-031. If Redis can't be reached at boot, it
 falls back to Socket.IO's default in-memory adapter (today's single-instance behaviour) rather than
 failing to start, consistent with D-006 (Redis is an accelerator, never the source of truth).
+
+## Admin moderation (`src/admin`, Phase 8)
+
+Closes known gaps across Phases 4-7 rather than adding a new vertical: reviews and Contract/Campus
+listings can now be taken down by an admin, gated by the `DISPUTE_AGENT` role (existed since
+Phase 1, first used here) rather than widening `KYC_REVIEWER`'s scope into dispute handling.
+
+```
+AdminReviewsService    queue(revieweeId?) / hide(reviewId, reason)   [D-064]
+AdminListingsService   browseContracts(q?) / browseCampus(q?)
+                        cancelContract(id, reason) / cancelCampus(id, reason)   [D-065]
+```
+
+`hide()` reverses the review's rating out of `WorkerStats`/`CustomerStats` and recomputes the
+badge tier if it was a customer -> Ranger review, reusing the ledger self-auditing pattern
+(D-046) — an aggregate is only ever moved by a recorded event, never edited in place. Both
+services write an `audit_logs` row per action, same as every other admin decision. There is no
+report/flag mechanic yet for a user to surface a bad review or listing; moderation is entirely
+admin-initiated browse-and-search, not fed by a complaint queue (D-067).
+
+`apps/admin/(app)/reviews` and `apps/admin/(app)/listings` (the latter tab-switches between
+Contract and Campus via `?kind=`) are the UI for this — Server Actions
+(`hideReviewAction`/`cancelListingAction` in `apps/admin/src/app/actions.ts`) post straight to the
+same REST endpoints, following the existing `decideAction` (KYC) pattern.

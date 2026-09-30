@@ -529,3 +529,56 @@ plus the student-facing mobile app rather than also building admin tooling. Nigh
 is a single yes/no flag, not actual shift start/end times — good enough to gate the two required
 safeguards, not a real scheduling feature. Money handling is unchanged from Phase 6 (D-054): no
 fee/commission model exists for Campus either.
+
+## Phase 8
+
+Scope confirmed explicitly by the user: "Admin tooling for what's built" — close known gaps across
+Phases 4-7 rather than start a new vertical. Three items: an admin UI for the employer-verification
+queue (D-063), a takedown/moderation path for reviews and Contract/Campus listings (D-049/D-059),
+and a scheduled trim job for old GPS trails/OTP data (turned out to already exist — a stale-docs
+issue, not new work; see D-066).
+
+**D-064 Hiding a review reverses it out of the aggregate it fed, reusing the ledger self-auditing
+pattern (D-046).** `AdminReviewsService.hide()` sets `Review.hiddenAt`/`hiddenReason` (new columns)
+in the same transaction that decrements `WorkerStats.ratingSum/ratingCount` (customer -> Ranger
+reviews) or `CustomerStats.ratingSum/ratingCount` (Ranger -> customer reviews), and recomputes the
+Ranger's badge tier via the existing `ReputationService.recomputeWorkerBadge()` when it was a
+customer -> Ranger review — an aggregate is never "just edited," only ever moved by a real event
+with its own record, same principle as the wallet ledger. `ReviewsService.forJob()`/`forWorker()`
+filter hidden reviews out of every reader-facing list, but `mine`/`submitted` on `forJob()` are
+still computed from the unfiltered rows, so a hidden review still correctly blocks resubmission —
+hiding removes visibility, not the fact that a review was submitted. There is deliberately no
+`unhide`: this is a one-way moderation action for now (known gap, see D-066).
+
+**D-065 Listing moderation is browse-and-search, not a report queue — no one can flag a listing
+yet.** `AdminListingsService` gives `DISPUTE_AGENT` cursor-paginated browse + case-insensitive
+title search over Contract and Campus listings (`GET /admin/contract-listings`,
+`GET /admin/campus-listings`) and a cancel action (`POST .../:id/cancel`) that only works from
+`OPEN`/`PAUSED`/`FILLED` (a listing already `CANCELLED`/`FILLED`-then-closed can't be
+double-cancelled — `409`) and pushes the employer a notification naming the reason, reusing the
+existing `NotificationsService`. `DISPUTE_AGENT` was chosen over `KYC_REVIEWER` deliberately: it
+existed since Phase 1 but had never actually gated anything until this phase, and moderating
+reviews/listings is a dispute-handling function, not a KYC one — kept as two separate admin
+capabilities rather than widening `KYC_REVIEWER`'s scope.
+
+**D-066 The GPS-trail and auth-data trim jobs were already scheduled — the "gap" was in the docs,
+not the code.** Investigating the third Phase 8 item (a scheduled trim job, believed missing per
+`docs/COMPLIANCE.md`) found `QueuesService.onModuleInit()` already registers all four maintenance
+jobs (`purge-accounts`, `purge-kyc-images`, `trim-auth-data`, `trim-gps-trails`) as staggered daily
+BullMQ cron schedules via `upsertJobScheduler` (02:30-04:00 UTC) whenever `QUEUES_ENABLED=true`
+(the default) — this has been true since the jobs were built (D-030) and was never undone; only
+`docs/RUNBOOK.md` and `docs/COMPLIANCE.md` had fallen behind, still describing `otp_attempts` /
+`refresh_tokens` trimming and `trim-gps-trails` as unscheduled. Both docs are corrected in this
+phase. The one real remaining gap, now named precisely instead of conflated with "not scheduled":
+nothing pages anyone when a scheduled run lands in BullMQ's failed-job set after exhausting
+retries — alerting, not scheduling, is what's missing (tracked in D-067).
+
+**D-067 Known gaps carried forward (Phase 8).** No `unhide` for a wrongly-hidden review (D-064) —
+reversing a moderation mistake currently means a manual DB fix, not a supported admin action. No
+report/flag mechanic for either users or employers to surface a bad review or listing to an admin
+— moderation is entirely admin-initiated browse-and-search (D-065), not queue-fed by complaints.
+No alerting when a scheduled maintenance job (D-066) fails repeatedly and lands in BullMQ's
+dead-letter set — an admin would only notice by checking it manually. The admin app has minimal
+automated test coverage (a handful of pure-logic unit tests; the new Phase 8 pages were verified
+by a live trace against a running API plus a production `next build`, not by a browser test suite
+— no Playwright/E2E harness exists yet for `apps/admin`).

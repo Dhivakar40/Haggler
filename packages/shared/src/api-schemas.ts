@@ -261,3 +261,14 @@ export const adminKycDecisionSchema = z
     path: ['reason'],
   });
 export type AdminKycDecision = z.infer<typeof adminKycDecisionSchema>;
+
+/** Phase 8: admin moderation of reviews and Contract/Campus listings (D-049/D-059). */
+export const adminHideReviewSchema = z.object({
+  reason: z.string().trim().min(5).max(500),
+});
+export type AdminHideReviewInput = z.infer<typeof adminHideReviewSchema>;
+
+export const adminCancelListingSchema = z.object({
+  reason: z.string().trim().min(5).max(500),
+});
+export type AdminCancelListingInput = z.infer<typeof adminCancelListingSchema>;

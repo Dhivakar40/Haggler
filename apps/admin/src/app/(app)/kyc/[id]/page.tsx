@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { api } from '../../../lib/api';
-import { decideAction } from '../../actions';
+import { api } from '../../../../lib/api';
+import { decideAction } from '../../../actions';
 
 interface Detail {
   id: string;

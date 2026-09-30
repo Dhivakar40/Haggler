@@ -8,12 +8,18 @@
 | GET | `/health/live` | Liveness probe |
 | GET | `/health/ready` | Readiness probe; also reports which adapters are sandbox vs live |
 | POST | `/v1/admin/auth/login` | Admin sign-in (email + password). 5 wrong attempts per email locks it for 15 minutes. |
+| GET | `/v1/admin/campus-listings` | Browse Campus listings; q searches the title (Phase 8, D-059) |
+| POST | `/v1/admin/campus-listings/{id}/cancel` | Take down a fraudulent or abusive Campus listing |
+| GET | `/v1/admin/contract-listings` | Browse Contract listings; q searches the title (Phase 8, D-059) |
+| POST | `/v1/admin/contract-listings/{id}/cancel` | Take down a fraudulent or abusive Contract listing |
 | POST | `/v1/admin/employers/{id}/verify` | Confirm this is a real business (unlocks Campus listings for them) |
 | GET | `/v1/admin/employers/queue` | Unverified employers, oldest first (Phase 7 gate for Campus listings, D-062) |
 | GET | `/v1/admin/kyc/{id}` | One verification with short-lived image links. Each view is audit-logged. |
 | POST | `/v1/admin/kyc/{id}/decision` | Approve, reject (reason required) or request more information |
 | GET | `/v1/admin/kyc/queue` | KYC review queue, oldest first, cursor-paginated |
 | GET | `/v1/admin/me` | Who am I (admin) |
+| GET | `/v1/admin/reviews` | Reviews, newest first; filter to one person with revieweeId (Phase 8, D-049) |
+| POST | `/v1/admin/reviews/{id}/hide` | Hide a fraudulent or abusive review (reverses its rating out of the aggregate) |
 | POST | `/v1/auth/logout` | End this session (revokes the refresh token family). Always succeeds. |
 | POST | `/v1/auth/otp/send` | Send a 6-digit code by SMS. Limits: 30 s between codes, 5/hour per phone, 20/hour per IP. |
 | POST | `/v1/auth/otp/verify` | Verify the code. Creates the account on first sign-in and returns a session. |

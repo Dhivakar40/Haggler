@@ -182,7 +182,9 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - [ ] Set `tier_bonus_monthly_budget_paise` and `damage_coverage_cap_paise` (both 0 = disabled).
 - [ ] Have native speakers review the hi/ta/kn/te translations.
 - [ ] Fill `minimum_wage_rules` with counsel-confirmed values (intentionally empty).
-- [ ] Schedule the two daily jobs above and alert if they fail.
+- [ ] All four maintenance jobs above are already scheduled (daily cron via `upsertJobScheduler`,
+      staggered 02:30-04:00 UTC, see `QueuesService`) whenever `QUEUES_ENABLED=true` (default). What's
+      still missing: alerting when one lands in BullMQ's failed-job set (Phase 8 gap).
 - [ ] Decide who the KYC reviewers are, and train them on the masked-Aadhaar rule.
 - [ ] Review the seeded token bundle prices (`token_bundles`, placeholders) before customers can buy.
 - [ ] Switch `PAYMENTS_MODE` to `test` with real Razorpay TEST keys and a real webhook subscription

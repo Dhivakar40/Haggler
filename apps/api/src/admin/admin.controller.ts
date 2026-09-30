@@ -1,7 +1,12 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { adminKycDecisionSchema, adminLoginSchema } from '@haggler/shared';
+import {
+  adminCancelListingSchema,
+  adminHideReviewSchema,
+  adminKycDecisionSchema,
+  adminLoginSchema,
+} from '@haggler/shared';
 import { z } from 'zod';
 import {
   AdminRoles,
@@ -15,6 +20,8 @@ import { ZodPipe } from '../common/zod.pipe';
 import { AdminAuthGuard, AdminAuthService } from './admin-auth';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
+import { AdminListingsService } from './admin-listings.service';
+import { AdminReviewsService } from './admin-reviews.service';
 
 const queueQuery = z.object({
   status: z
@@ -27,6 +34,8 @@ const listQuery = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
+const reviewsQuery = listQuery.extend({ revieweeId: z.string().uuid().optional() });
+const browseListingsQuery = listQuery.extend({ q: z.string().min(1).optional() });
 
 @ApiTags('admin')
 @Public() // skips the *user* JWT guard; AdminAuthGuard below protects every route except login
@@ -36,6 +45,8 @@ export class AdminController {
     private readonly auth: AdminAuthService,
     private readonly kyc: AdminKycService,
     private readonly employers: AdminEmployerService,
+    private readonly reviews: AdminReviewsService,
+    private readonly listings: AdminListingsService,
   ) {}
 
   @Post('auth/login')
@@ -132,5 +143,90 @@ export class AdminController {
     @CurrentAdmin() admin: AuthAdmin,
   ) {
     return this.employers.verify(id, admin);
+  }
+
+  @Get('reviews')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reviews, newest first; filter to one person with revieweeId (Phase 8, D-049)',
+  })
+  @ApiQuery({ name: 'revieweeId', required: false })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  reviewsQueue(@Query(new ZodPipe(reviewsQuery)) q: z.infer<typeof reviewsQuery>) {
+    return this.reviews.queue(q.revieweeId, q.cursor, q.limit);
+  }
+
+  @Post('reviews/:id/hide')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Hide a fraudulent or abusive review (reverses its rating out of the aggregate)',
+  })
+  @ApiZodBody(adminHideReviewSchema)
+  hideReview(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminHideReviewSchema)) body: z.infer<typeof adminHideReviewSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.reviews.hide(id, body.reason, admin);
+  }
+
+  @Get('contract-listings')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Browse Contract listings; q searches the title (Phase 8, D-059)' })
+  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  browseContracts(@Query(new ZodPipe(browseListingsQuery)) q: z.infer<typeof browseListingsQuery>) {
+    return this.listings.browseContracts(q.q, q.cursor, q.limit);
+  }
+
+  @Post('contract-listings/:id/cancel')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Take down a fraudulent or abusive Contract listing' })
+  @ApiZodBody(adminCancelListingSchema)
+  cancelContract(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminCancelListingSchema)) body: z.infer<typeof adminCancelListingSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.listings.cancelContract(id, body.reason, admin);
+  }
+
+  @Get('campus-listings')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Browse Campus listings; q searches the title (Phase 8, D-059)' })
+  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  browseCampus(@Query(new ZodPipe(browseListingsQuery)) q: z.infer<typeof browseListingsQuery>) {
+    return this.listings.browseCampus(q.q, q.cursor, q.limit);
+  }
+
+  @Post('campus-listings/:id/cancel')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Take down a fraudulent or abusive Campus listing' })
+  @ApiZodBody(adminCancelListingSchema)
+  cancelCampus(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminCancelListingSchema)) body: z.infer<typeof adminCancelListingSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.listings.cancelCampus(id, body.reason, admin);
   }
 }

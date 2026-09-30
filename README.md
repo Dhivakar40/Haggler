@@ -3,14 +3,18 @@
 A mobile marketplace for India: verified local **Rangers** (independent workers) for on-demand
 services, plus long-term contract labour and part-time student jobs, on one trust layer.
 
-> **Status: Phase 7 (Campus) complete.** Everything in Phases 1–6, plus the second job-board
-> vertical: a Student (a new light role) browses part-time listings a verified Employer posts and
-> applies. Three safeguards the original spec required, on top of Phase 6's mechanics: a hard
-> 18+ block (self-declared, enforced in code, not admin-reviewed — D-060), a weekly hours cap
-> checked at both apply and hire (default 20h, D-061), and night shifts that need both a verified
-> employer and the student's explicit opt-in (D-062). **No money moves through the app for
-> Campus, same as Contract labour** — the employer pays the student directly (D-037/D-054/D-062).
-> **Rangers are still never charged anything** (D-037, unchanged since Phase 3).
+> **Status: Phase 8 (Admin tooling) complete.** Everything in Phases 1–7, plus admin moderation:
+> a `DISPUTE_AGENT`-gated admin can hide a fraudulent/abusive review (reversing its rating out of
+> the reviewee's stats, D-064) and take down a fraudulent/abusive Contract or Campus listing
+> (D-065), both with an `apps/admin` UI page, not just REST endpoints. The employer-verification
+> queue from Phase 7 (D-062/D-063) also has its own admin UI page now. Phase 7's Campus vertical:
+> a Student (a new light role) browses part-time listings a verified Employer posts and applies,
+> with three required safeguards — a hard 18+ block (self-declared, enforced in code, not
+> admin-reviewed — D-060), a weekly hours cap checked at both apply and hire (default 20h, D-061),
+> and night shifts that need both a verified employer and the student's explicit opt-in (D-062).
+> **No money moves through the app for Campus, same as Contract labour** — the employer pays the
+> student directly (D-037/D-054/D-062). **Rangers are still never charged anything** (D-037,
+> unchanged since Phase 3).
 
 ## Stack
 

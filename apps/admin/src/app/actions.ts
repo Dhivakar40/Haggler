@@ -46,3 +46,42 @@ export async function decideAction(id: string, tier: number, formData: FormData)
   }
   redirect('/kyc');
 }
+
+// ---- Phase 8: admin moderation ---------------------------------------------------------
+
+export async function verifyEmployerAction(employerId: string): Promise<void> {
+  try {
+    await api(`/v1/admin/employers/${employerId}/verify`, { method: 'POST' });
+  } catch (err) {
+    const msg = err instanceof AdminApiError ? err.message : 'Could not verify this employer.';
+    redirect(`/employers?error=${encodeURIComponent(msg)}`);
+  }
+  redirect('/employers');
+}
+
+export async function hideReviewAction(reviewId: string, formData: FormData): Promise<void> {
+  const reason = String(formData.get('reason') ?? '');
+  try {
+    await api(`/v1/admin/reviews/${reviewId}/hide`, { method: 'POST', body: { reason } });
+  } catch (err) {
+    const msg = err instanceof AdminApiError ? err.message : 'Could not hide this review.';
+    redirect(`/reviews?error=${encodeURIComponent(msg)}`);
+  }
+  redirect('/reviews');
+}
+
+export async function cancelListingAction(
+  kind: 'contract' | 'campus',
+  listingId: string,
+  formData: FormData,
+): Promise<void> {
+  const reason = String(formData.get('reason') ?? '');
+  const path = kind === 'contract' ? 'contract-listings' : 'campus-listings';
+  try {
+    await api(`/v1/admin/${path}/${listingId}/cancel`, { method: 'POST', body: { reason } });
+  } catch (err) {
+    const msg = err instanceof AdminApiError ? err.message : 'Could not cancel this listing.';
+    redirect(`/listings?error=${encodeURIComponent(msg)}`);
+  }
+  redirect('/listings');
+}

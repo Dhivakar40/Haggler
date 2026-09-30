@@ -81,17 +81,21 @@ export class ReviewsService {
       orderBy: { createdAt: 'asc' },
     });
     const myRole = job.customerId === userId ? 'CUSTOMER' : 'WORKER';
+    // "submitted" reflects the true state (a hidden review still blocks a second submission via
+    // the unique constraint) even though a moderated review's content is no longer shown below.
     const mine = rows.find((r) => r.raterRole === myRole);
     return {
       canReview: job.status === 'CONFIRMED_BY_CUSTOMER' && !mine,
       submitted: !!mine,
-      reviews: rows.map((r) => ({
-        id: r.id,
-        raterRole: r.raterRole,
-        rating: r.rating,
-        comment: r.comment,
-        createdAt: r.createdAt.toISOString(),
-      })),
+      reviews: rows
+        .filter((r) => !r.hiddenAt)
+        .map((r) => ({
+          id: r.id,
+          raterRole: r.raterRole,
+          rating: r.rating,
+          comment: r.comment,
+          createdAt: r.createdAt.toISOString(),
+        })),
     };
   }
 
@@ -108,7 +112,9 @@ export class ReviewsService {
         }
       : {};
     const rows = await this.prisma.review.findMany({
-      where: { AND: [{ revieweeId: workerId, raterRole: 'CUSTOMER' as const }, after] },
+      where: {
+        AND: [{ revieweeId: workerId, raterRole: 'CUSTOMER' as const, hiddenAt: null }, after],
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       include: { job: { select: { customerId: true } } },

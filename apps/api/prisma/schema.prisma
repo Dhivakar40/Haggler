@@ -968,15 +968,20 @@ model CustomerStats {
 /// customer, independently, only once each, only after the job is CONFIRMED_BY_CUSTOMER (the one
 /// state that means the job genuinely happened and both parties agree on that).
 model Review {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  jobId      String    @map("job_id") @db.Uuid
-  raterId    String    @map("rater_id") @db.Uuid
-  revieweeId String    @map("reviewee_id") @db.Uuid
-  raterRole  PartyRole @map("rater_role")
-  rating     Int
-  comment    String?
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId        String    @map("job_id") @db.Uuid
+  raterId      String    @map("rater_id") @db.Uuid
+  revieweeId   String    @map("reviewee_id") @db.Uuid
+  raterRole    PartyRole @map("rater_role")
+  rating       Int
+  comment      String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Phase 8 admin moderation (D-049): a hidden review is excluded from public review lists and
+  /// its rating is reversed out of WorkerStats/CustomerStats (see AdminReviewsService.hide()).
+  /// No `unhide` exists yet — hiding is a one-way moderation action for now (D-0xx known gap).
+  hiddenAt     DateTime? @map("hidden_at") @db.Timestamptz(6)
+  hiddenReason String?   @map("hidden_reason")
 
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
