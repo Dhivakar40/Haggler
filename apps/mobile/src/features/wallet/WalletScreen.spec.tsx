@@ -30,7 +30,7 @@ const BUNDLES = [
 const uuidN = (n: number) => `${String(n).padStart(8, '0')}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
 
 /** A wallet backend: tracks balance/held and a growing order list, all via the real endpoint shapes. */
-function serve(over: { balanceTokens?: number; heldTokens?: number } = {}) {
+function serve(over: { balanceTokens?: number; heldTokens?: number; membership?: unknown } = {}) {
   let balanceTokens = over.balanceTokens ?? 0;
   const heldTokens = over.heldTokens ?? 0;
   const ledger: {
@@ -43,7 +43,8 @@ function serve(over: { balanceTokens?: number; heldTokens?: number } = {}) {
   }[] = [];
   const orders: {
     id: string;
-    bundleName: string;
+    purpose: string;
+    itemName: string;
     tokens: number;
     amountPaise: number;
     status: string;
@@ -57,13 +58,17 @@ function serve(over: { balanceTokens?: number; heldTokens?: number } = {}) {
     if (c.method === 'GET' && c.path === '/v1/wallet/bundles') return { body: BUNDLES };
     if (c.method === 'GET' && c.path.startsWith('/v1/wallet/orders'))
       return { body: { items: orders, nextCursor: null } };
+    if (c.method === 'GET' && c.path.startsWith('/v1/plus/plans')) return { body: [] };
+    if (c.method === 'GET' && c.path === '/v1/plus/membership')
+      return { body: over.membership ?? null };
     if (c.method === 'POST' && c.path === '/v1/wallet/topup') {
       const bundle = BUNDLES.find((b) => b.id === (c.body as { bundleId: string }).bundleId)!;
       n += 1;
       const orderId = uuidN(n);
       orders.unshift({
         id: orderId,
-        bundleName: bundle.name,
+        purpose: 'TOKEN_TOPUP',
+        itemName: bundle.name,
         tokens: bundle.tokens,
         amountPaise: bundle.pricePaise,
         status: 'CREATED',
@@ -74,6 +79,7 @@ function serve(over: { balanceTokens?: number; heldTokens?: number } = {}) {
         status: 201,
         body: {
           orderId,
+          purpose: 'TOKEN_TOPUP',
           provider: 'sandbox',
           providerOrderId: `order_sandbox_${n}`,
           amountPaise: bundle.pricePaise,
@@ -82,7 +88,7 @@ function serve(over: { balanceTokens?: number; heldTokens?: number } = {}) {
         },
       };
     }
-    const payMatch = /\/v1\/wallet\/topup\/([0-9a-f-]+)\/sandbox-pay$/.exec(c.path);
+    const payMatch = /\/v1\/wallet\/orders\/([0-9a-f-]+)\/sandbox-pay$/.exec(c.path);
     if (c.method === 'POST' && payMatch) {
       const order = orders.find((o) => o.id === payMatch[1])!;
       order.status = 'PAID';
@@ -96,7 +102,7 @@ function serve(over: { balanceTokens?: number; heldTokens?: number } = {}) {
         note: null,
         createdAt: new Date().toISOString(),
       });
-      return { body: { balanceTokens, heldTokens, recentLedger: ledger } };
+      return { body: { ok: true } };
     }
     return undefined;
   });
@@ -179,6 +185,8 @@ describe('WalletScreen', () => {
       if (c.method === 'GET' && c.path === '/v1/wallet/bundles') return { body: BUNDLES };
       if (c.method === 'GET' && c.path.startsWith('/v1/wallet/orders'))
         return { body: { items: [], nextCursor: null } };
+      if (c.method === 'GET' && c.path.startsWith('/v1/plus/plans')) return { body: [] };
+      if (c.method === 'GET' && c.path === '/v1/plus/membership') return { body: null };
       if (c.method === 'POST' && c.path === '/v1/wallet/topup')
         return { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } };
       return undefined;

@@ -11,6 +11,7 @@ import {
   mediaPresignSchema,
   type MediaPresignRequest,
   type OfferInput,
+  paymentOrderStartSchema,
   presenceSchema,
   priceBandSchema,
   shareLinkSchema,
@@ -31,6 +32,9 @@ export const cancelRequest = (requestId: string) =>
   apiRequest(`/v1/requests/${requestId}/cancel`, { method: 'POST', schema: jobDtoSchema });
 export const rebroadcastRequest = (requestId: string) =>
   apiRequest(`/v1/requests/${requestId}/rebroadcast`, { method: 'POST', schema: jobDtoSchema });
+/** Rush fee (Phase 9, D-069): starts a payment order; complete it via wallet's verify/sandbox-pay. */
+export const rushRequest = (requestId: string) =>
+  apiRequest(`/v1/requests/${requestId}/rush`, { method: 'POST', schema: paymentOrderStartSchema });
 export const presignRequestMedia = (body: MediaPresignRequest) =>
   apiRequest('/v1/requests/media', { method: 'POST', body, schema: mediaPresignSchema });
 export const confirmRequestMedia = (mediaId: string) =>

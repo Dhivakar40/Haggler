@@ -97,6 +97,12 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - Token bundles (`token_bundles` table, prices in paise) are seeded by `pnpm db:seed`
   (`starter-3`/`value-10`/`saver-25`, placeholder prices) — review before launch, same as the
   DEFAULT price bands.
+- Haggler Plus plans (`plus_plans` table, Phase 9, D-069) are seeded the same way
+  (`plus-customer-monthly`/`plus-employer-monthly`, placeholder prices and a 10% token-bundle
+  discount) — review before launch. Rush fee and Boosted Listing fee amounts live in
+  `system_config` under key `monetization_settings` (`rush_fee_paise`, `boost_fee_paise`,
+  `boost_duration_days`; defaults ₹49 / ₹199 / 7 days), same DB-overridable-without-a-deploy
+  pattern as `MarketplaceConfig`/`CampusConfig`.
 - `PAYMENTS_SANDBOX_SECRET` signs sandbox payments; it has a fixed dev default and is never used
   when `PAYMENTS_MODE=test`, so it does not need to be set for a real deployment.
 
@@ -187,6 +193,9 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
       still missing: alerting when one lands in BullMQ's failed-job set (Phase 8 gap).
 - [ ] Decide who the KYC reviewers are, and train them on the masked-Aadhaar rule.
 - [ ] Review the seeded token bundle prices (`token_bundles`, placeholders) before customers can buy.
+- [ ] Review the seeded Haggler Plus plan prices/discount (`plus_plans`, placeholders) and the
+      Rush/Boost fee amounts (`system_config.monetization_settings`, placeholders, D-069) before
+      launch.
 - [ ] Switch `PAYMENTS_MODE` to `test` with real Razorpay TEST keys and a real webhook subscription
       before any non-sandbox testing; there is still no `live` mode anywhere (D-020).
 - [ ] Review the badge tier thresholds (`badge-tier.ts::DEFAULT_BADGE_THRESHOLDS`, placeholders);

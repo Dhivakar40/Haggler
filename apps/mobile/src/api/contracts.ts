@@ -11,6 +11,7 @@ import {
   employerProfileSchema,
   type EmployerProfileUpdate,
   myContractApplicationPageSchema,
+  paymentOrderStartSchema,
   type UpdateContractListingInput,
 } from '@haggler/shared';
 import { z } from 'zod';
@@ -95,6 +96,13 @@ export const getListingApplications = (listingId: string, cursor?: string) =>
     `/v1/employer/contracts/${listingId}/applications${cursor ? `?cursor=${cursor}` : ''}`,
     { schema: contractApplicationPageSchema },
   );
+/** Boosted listing fee (Phase 9, D-069): starts a payment order; complete it via wallet's
+ * verify/sandbox-pay. */
+export const boostListing = (listingId: string) =>
+  apiRequest(`/v1/employer/contracts/${listingId}/boost`, {
+    method: 'POST',
+    schema: paymentOrderStartSchema,
+  });
 export const decideOnApplication = (
   listingId: string,
   applicationId: string,

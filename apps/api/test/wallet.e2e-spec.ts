@@ -42,6 +42,7 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const order = await m.api.post(s, '/v1/wallet/topup', { bundleId: bundle.id }).expect(201);
     expect(order.body).toEqual({
       orderId: expect.any(String),
+      purpose: 'TOKEN_TOPUP',
       provider: 'sandbox',
       providerOrderId: expect.stringMatching(/^order_sandbox_/),
       amountPaise: bundle.pricePaise,
@@ -61,11 +62,13 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const order = (await m.api.post(s, '/v1/wallet/topup', { bundleId: bundle.id }).expect(201))
       .body;
     const after = await m.api
-      .post(s, `/v1/wallet/topup/${order.orderId}/sandbox-pay`, {})
+      .post(s, `/v1/wallet/orders/${order.orderId}/sandbox-pay`, {})
       .expect(200);
-    expect(after.body.balanceTokens).toBe(bundle.tokens);
-    expect(after.body.heldTokens).toBe(0);
-    expect(after.body.recentLedger[0]).toEqual(
+    expect(after.body).toEqual({ ok: true });
+    const wallet = await m.api.get(s, '/v1/wallet').expect(200);
+    expect(wallet.body.balanceTokens).toBe(bundle.tokens);
+    expect(wallet.body.heldTokens).toBe(0);
+    expect(wallet.body.recentLedger[0]).toEqual(
       expect.objectContaining({ type: 'PURCHASE', tokensDelta: bundle.tokens, jobId: null }),
     );
     const row = await m.prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.orderId } });
@@ -78,11 +81,10 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const bundle = (await m.api.get(s, '/v1/wallet/bundles').expect(200)).body[0];
     const order = (await m.api.post(s, '/v1/wallet/topup', { bundleId: bundle.id }).expect(201))
       .body;
-    await m.api.post(s, `/v1/wallet/topup/${order.orderId}/sandbox-pay`, {}).expect(200);
-    const second = await m.api
-      .post(s, `/v1/wallet/topup/${order.orderId}/sandbox-pay`, {})
-      .expect(200);
-    expect(second.body.balanceTokens).toBe(bundle.tokens); // not doubled
+    await m.api.post(s, `/v1/wallet/orders/${order.orderId}/sandbox-pay`, {}).expect(200);
+    await m.api.post(s, `/v1/wallet/orders/${order.orderId}/sandbox-pay`, {}).expect(200);
+    const wallet = await m.api.get(s, '/v1/wallet').expect(200);
+    expect(wallet.body.balanceTokens).toBe(bundle.tokens); // not doubled
   });
 
   it("another customer cannot pay for, or even see, someone else's order", async () => {
@@ -91,7 +93,7 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const bundle = (await m.api.get(owner, '/v1/wallet/bundles').expect(200)).body[0];
     const order = (await m.api.post(owner, '/v1/wallet/topup', { bundleId: bundle.id }).expect(201))
       .body;
-    await m.api.post(stranger, `/v1/wallet/topup/${order.orderId}/sandbox-pay`, {}).expect(404);
+    await m.api.post(stranger, `/v1/wallet/orders/${order.orderId}/sandbox-pay`, {}).expect(404);
   });
 
   it('/verify rejects a wrong signature, and does not credit anything', async () => {
@@ -100,7 +102,7 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const order = (await m.api.post(s, '/v1/wallet/topup', { bundleId: bundle.id }).expect(201))
       .body;
     const bad = await m.api
-      .post(s, `/v1/wallet/topup/${order.orderId}/verify`, {
+      .post(s, `/v1/wallet/orders/${order.orderId}/verify`, {
         razorpayPaymentId: 'pay_fake',
         razorpaySignature: 'deadbeef00',
       })
@@ -118,12 +120,14 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const paymentId = `pay_sandbox_${randomUUID()}`;
     const signature = sandboxSign(order.providerOrderId, paymentId);
     const res = await m.api
-      .post(s, `/v1/wallet/topup/${order.orderId}/verify`, {
+      .post(s, `/v1/wallet/orders/${order.orderId}/verify`, {
         razorpayPaymentId: paymentId,
         razorpaySignature: signature,
       })
       .expect(200);
-    expect(res.body.balanceTokens).toBe(bundle.tokens);
+    expect(res.body).toEqual({ ok: true });
+    const wallet = await m.api.get(s, '/v1/wallet').expect(200);
+    expect(wallet.body.balanceTokens).toBe(bundle.tokens);
   });
 
   it('a top-up already paid cannot be paid again through a different order', async () => {
@@ -131,16 +135,17 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const bundle = (await m.api.get(s, '/v1/wallet/bundles').expect(200)).body[0];
     const order = (await m.api.post(s, '/v1/wallet/topup', { bundleId: bundle.id }).expect(201))
       .body;
-    await m.api.post(s, `/v1/wallet/topup/${order.orderId}/sandbox-pay`, {}).expect(200);
+    await m.api.post(s, `/v1/wallet/orders/${order.orderId}/sandbox-pay`, {}).expect(200);
     const paymentId = `pay_sandbox_${randomUUID()}`;
     const signature = sandboxSign(order.providerOrderId, paymentId);
-    const res = await m.api
-      .post(s, `/v1/wallet/topup/${order.orderId}/verify`, {
+    await m.api
+      .post(s, `/v1/wallet/orders/${order.orderId}/verify`, {
         razorpayPaymentId: paymentId,
         razorpaySignature: signature,
       })
       .expect(200);
-    expect(res.body.balanceTokens).toBe(bundle.tokens); // unchanged, not credited a second time
+    const wallet = await m.api.get(s, '/v1/wallet').expect(200);
+    expect(wallet.body.balanceTokens).toBe(bundle.tokens); // unchanged, not credited a second time
   });
 
   it('lists purchase history newest first', async () => {
@@ -150,7 +155,7 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
       const order = (await m.api.post(s, '/v1/wallet/topup', { bundleId: bundle.id }).expect(201))
         .body;
       if (i === 1)
-        await m.api.post(s, `/v1/wallet/topup/${order.orderId}/sandbox-pay`, {}).expect(200);
+        await m.api.post(s, `/v1/wallet/orders/${order.orderId}/sandbox-pay`, {}).expect(200);
     }
     const orders = await m.api.get(s, '/v1/wallet/orders').expect(200);
     expect(orders.body.items).toHaveLength(3);
@@ -187,13 +192,14 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
 
     // A client-side verify arriving after the webhook already credited it must be a safe no-op.
     const sig2 = sandboxSign(order.providerOrderId, `pay_sandbox_${randomUUID()}`);
-    const res = await m.api
-      .post(s, `/v1/wallet/topup/${order.orderId}/verify`, {
+    await m.api
+      .post(s, `/v1/wallet/orders/${order.orderId}/verify`, {
         razorpayPaymentId: 'ignored',
         razorpaySignature: sig2,
       })
       .expect(200);
-    expect(res.body.balanceTokens).toBe(bundle.tokens); // still not doubled
+    const walletAfter = await m.api.get(s, '/v1/wallet').expect(200);
+    expect(walletAfter.body.balanceTokens).toBe(bundle.tokens); // still not doubled
   });
 
   it('the webhook ignores a wrong signature (no credit, no crash)', async () => {
@@ -227,7 +233,7 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
     const s = await testMarket.api.signIn();
     // createTopupOrder would try to call the real Razorpay API and fail on no network; the
     // sandbox-pay refusal itself does not depend on there being a real order to prove the point.
-    await testMarket.api.post(s, `/v1/wallet/topup/${randomUUID()}/sandbox-pay`, {}).expect(403);
+    await testMarket.api.post(s, `/v1/wallet/orders/${randomUUID()}/sandbox-pay`, {}).expect(403);
     await testApp.close();
   });
 });

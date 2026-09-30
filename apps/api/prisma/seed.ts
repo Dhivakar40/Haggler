@@ -86,6 +86,28 @@ const TOKEN_BUNDLES = [
   { slug: 'saver-25', name: '25 tokens', tokens: 25, priceRupees: 329 },
 ];
 
+/** Phase 9 (D-069): Haggler Plus plans. Customer plans discount token bundles and grant priority
+ * broadcast on every request; Employer plans discount token bundles too (D-058: employer token
+ * spend, if any, uses the same wallet) with no separate perk built this phase (a known gap). */
+const PLUS_PLANS = [
+  {
+    slug: 'plus-customer-monthly',
+    name: 'Haggler Plus (Customer)',
+    audience: 'CUSTOMER' as const,
+    durationDays: 30,
+    priceRupees: 99,
+    tokenDiscountBps: 1000, // 10% off token bundles
+  },
+  {
+    slug: 'plus-employer-monthly',
+    name: 'Haggler Plus (Employer)',
+    audience: 'EMPLOYER' as const,
+    durationDays: 30,
+    priceRupees: 299,
+    tokenDiscountBps: 1000,
+  },
+];
+
 async function main(): Promise<void> {
   let order = 0;
   for (const c of CATEGORIES) {
@@ -150,12 +172,34 @@ async function main(): Promise<void> {
     });
   }
 
-  const [cats, bands, bundles] = await Promise.all([
+  let planOrder = 0;
+  for (const p of PLUS_PLANS) {
+    planOrder += 10;
+    await prisma.plusPlan.upsert({
+      where: { slug: p.slug },
+      // Never overwrite pricing/duration an admin has since changed; only set what's missing.
+      update: { name: p.name, sortOrder: planOrder },
+      create: {
+        slug: p.slug,
+        name: p.name,
+        audience: p.audience,
+        durationDays: p.durationDays,
+        pricePaise: rupees(p.priceRupees),
+        tokenDiscountBps: p.tokenDiscountBps,
+        sortOrder: planOrder,
+      },
+    });
+  }
+
+  const [cats, bands, bundles, plans] = await Promise.all([
     prisma.serviceCategory.count(),
     prisma.priceBand.count(),
     prisma.tokenBundle.count(),
+    prisma.plusPlan.count(),
   ]);
-  console.log(`Seed complete: ${cats} categories, ${bands} price bands, ${bundles} token bundles`);
+  console.log(
+    `Seed complete: ${cats} categories, ${bands} price bands, ${bundles} token bundles, ${plans} Plus plans`,
+  );
 }
 
 main()

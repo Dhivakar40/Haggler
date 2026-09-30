@@ -189,6 +189,11 @@ export class RequestsService {
     const startAt = scheduledFor
       ? new Date(scheduledFor.getTime() - cfg.scheduled_lead_minutes * 60_000)
       : new Date();
+    // Phase 9 (D-069): an active Haggler Plus membership gets priority broadcast for free, on every
+    // request, via the exact same isRush mechanism a one-off paid Rush fee uses (see rush() below
+    // and MatchingService.advance()) — snapshotted at creation so a mid-broadcast membership expiry
+    // never retroactively demotes a request already in flight.
+    const isRush = await this.wallet.hasActivePlus(customerId);
 
     const { requestId, jobId } = await this.prisma.$transaction(async (tx) => {
       const id = randomUUID();
@@ -199,7 +204,9 @@ export class RequestsService {
                 ST_SetSRID(ST_MakePoint(${a.lng}, ${a.lat}), 4326)::geography,
                 ${input.urgency}::urgency, ${scheduledFor}, ${input.genderPreference}::gender_preference,
                 ${band.scope}::price_band_scope, ${band.minPaise}, ${band.medianPaise}, ${band.maxPaise}, now())`;
-      const job = await tx.job.create({ data: { requestId: id, customerId, nextWaveAt: startAt } });
+      const job = await tx.job.create({
+        data: { requestId: id, customerId, nextWaveAt: startAt, isRush },
+      });
       // D-037/D-038: reserve one token now, before the request can broadcast, so a customer can
       // never end up confirming more jobs than they have paid for. Throws INSUFFICIENT_TOKENS.
       await this.wallet.hold(tx, customerId, job.id);
@@ -291,6 +298,14 @@ export class RequestsService {
     );
     await this.matching.closeBroadcasts(job.id, 'CANCELLED');
     return this.view.build(job.id, customerId);
+  }
+
+  /** Rush fee (Phase 9, D-069): starts a payment order for skipping wave sequencing on this
+   * request. See WalletService.createRushOrder for the eligibility checks. */
+  async rush(customerId: string, requestId: string) {
+    const job = await this.prisma.job.findUnique({ where: { requestId }, select: { id: true } });
+    if (!job) throw notFound('Request not found');
+    return this.wallet.createRushOrder(customerId, job.id);
   }
 
   async listJobs(

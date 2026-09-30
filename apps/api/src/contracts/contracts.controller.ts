@@ -99,6 +99,14 @@ export class EmployerContractsController {
     return this.applications.forListing(u.id, listingId, q.cursor, q.limit);
   }
 
+  @Post(':id/boost')
+  @ApiOperation({
+    summary: 'Pay a Boosted Listing fee for higher placement (D-069): creates a payment order',
+  })
+  boost(@CurrentUser() u: AuthUser, @Param('id', id) listingId: string) {
+    return this.listings.boost(u.id, listingId);
+  }
+
   @Post(':id/applications/:appId/decision')
   @ApiOperation({ summary: 'Shortlist, reject or hire an applicant' })
   @ApiZodBody(contractDecisionSchema)

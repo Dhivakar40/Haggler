@@ -91,6 +91,15 @@ export class RequestsController {
     return this.requests.rebroadcast(u.id, requestId);
   }
 
+  @Post(':id/rush')
+  @ApiOperation({
+    summary:
+      'Pay a Rush fee to skip wave sequencing on this request (D-069): creates a payment order',
+  })
+  rush(@CurrentUser() u: AuthUser, @Param('id', id) requestId: string) {
+    return this.requests.rush(u.id, requestId);
+  }
+
   @Post(':id/accept')
   @HttpCode(200)
   @Roles('WORKER')

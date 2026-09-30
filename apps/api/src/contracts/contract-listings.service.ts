@@ -11,6 +11,7 @@ import {
 } from '@haggler/shared';
 import { notFound, unprocessable } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
+import { WalletService } from '../wallet/wallet.service';
 
 type ListingRow = Prisma.ContractListingGetPayload<{
   include: { employer: { select: { businessName: true } }; category: { select: { slug: true } } };
@@ -35,6 +36,7 @@ const toDto = (
   pincode: row.pincode,
   startDate: row.startDate ? row.startDate.toISOString().slice(0, 10) : null,
   status: row.status,
+  isBoosted: !!row.boostedUntil && row.boostedUntil.getTime() > Date.now(),
   createdAt: row.createdAt.toISOString(),
   ...extra,
 });
@@ -50,7 +52,16 @@ const EDITABLE_STATUSES = ['OPEN', 'PAUSED'] as const;
 
 @Injectable()
 export class ContractListingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly wallet: WalletService,
+  ) {}
+
+  /** Boosted listing fee (Phase 9, D-069): starts a payment order. See
+   * WalletService.createBoostOrder for the eligibility checks. */
+  boost(userId: string, listingId: string) {
+    return this.wallet.createBoostOrder(userId, 'CONTRACT', listingId);
+  }
 
   private async employerId(userId: string): Promise<string> {
     const ep = await this.prisma.employerProfile.findUnique({
@@ -168,7 +179,10 @@ export class ContractListingsService {
   }
 
   /** Public browse: only OPEN listings, optionally filtered. `viewerId` (a signed-in Worker) gets
-   * their own application status folded in so the app can show "Applied" instead of "Apply". */
+   * their own application status folded in so the app can show "Applied" instead of "Apply".
+   * Currently-boosted listings (D-069) are surfaced separately, up to 5, on the FIRST page only
+   * (cursor undefined) and excluded from the cursor-paginated `items` below them, so a boost never
+   * disturbs the stable (createdAt, id) pagination the rest of the list relies on. */
   async browse(
     viewerId: string | undefined,
     filters: { categorySlug?: string; city?: string; payType?: ContractPayType },
@@ -184,12 +198,30 @@ export class ContractListingsService {
           ],
         }
       : {};
+    const filterClauses: Prisma.ContractListingWhereInput[] = [
+      filters.categorySlug ? { category: { slug: filters.categorySlug } } : {},
+      filters.city ? { city: { equals: filters.city, mode: 'insensitive' as const } } : {},
+      filters.payType ? { payType: filters.payType } : {},
+    ];
+    const boosted = !c
+      ? await this.prisma.contractListing.findMany({
+          where: {
+            AND: [
+              { status: 'OPEN' as const },
+              { boostedUntil: { gt: new Date() } },
+              ...filterClauses,
+            ],
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 5,
+          include,
+        })
+      : [];
     const where: Prisma.ContractListingWhereInput = {
       AND: [
         { status: 'OPEN' as const },
-        filters.categorySlug ? { category: { slug: filters.categorySlug } } : {},
-        filters.city ? { city: { equals: filters.city, mode: 'insensitive' as const } } : {},
-        filters.payType ? { payType: filters.payType } : {},
+        { OR: [{ boostedUntil: null }, { boostedUntil: { lte: new Date() } }] },
+        ...filterClauses,
         after,
       ],
     };
@@ -200,15 +232,19 @@ export class ContractListingsService {
       include,
     });
     const page = toPage(rows, limit, (r) => ({ k: r.createdAt.toISOString(), id: r.id }));
+    const allRows = [...boosted, ...page.items];
     let statusByListing = new Map<string, ContractApplicationStatus>();
     if (viewerId) {
       const apps = await this.prisma.contractApplication.findMany({
-        where: { workerId: viewerId, listingId: { in: page.items.map((r) => r.id) } },
+        where: { workerId: viewerId, listingId: { in: allRows.map((r) => r.id) } },
         select: { listingId: true, status: true },
       });
       statusByListing = new Map(apps.map((a) => [a.listingId, a.status]));
     }
     return {
+      boosted: boosted.map((r) =>
+        toDto(r, { myApplicationStatus: statusByListing.get(r.id) ?? null }),
+      ),
       items: page.items.map((r) =>
         toDto(r, { myApplicationStatus: statusByListing.get(r.id) ?? null }),
       ),

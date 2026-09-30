@@ -8,6 +8,7 @@ import {
   type CampusDecisionInput,
   type CreateCampusListingInput,
   myCampusApplicationPageSchema,
+  paymentOrderStartSchema,
   type StudentProfileDto,
   studentProfileSchema,
   type StudentProfileUpdate,
@@ -91,6 +92,13 @@ export const getMyCampusListings = (cursor?: string) =>
 export const getCampusListingApplications = (listingId: string, cursor?: string) =>
   apiRequest(`/v1/employer/campus/${listingId}/applications${cursor ? `?cursor=${cursor}` : ''}`, {
     schema: campusApplicationPageSchema,
+  });
+/** Boosted listing fee (Phase 9, D-069): starts a payment order; complete it via wallet's
+ * verify/sandbox-pay. */
+export const boostCampusListing = (listingId: string) =>
+  apiRequest(`/v1/employer/campus/${listingId}/boost`, {
+    method: 'POST',
+    schema: paymentOrderStartSchema,
   });
 export const decideOnCampusApplication = (
   listingId: string,

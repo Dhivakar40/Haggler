@@ -126,6 +126,7 @@ export const makeJob = (over: Partial<JobDto> = {}): JobDto => ({
   agreedPricePaise: null,
   genderPreference: 'ANY',
   genderPreferenceMet: null,
+  isRush: false,
   broadcast: { wave: 1, deadline: iso(180_000), slaEstimateMinutes: 4 },
   customer: { id: '11111111-1111-4111-8111-111111111111', firstName: 'Asha' },
   worker: null,

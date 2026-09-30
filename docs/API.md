@@ -38,11 +38,13 @@
 | PATCH | `/v1/employer/campus/{id}` | Edit a listing, or change its status (pause/reopen/close/cancel) |
 | GET | `/v1/employer/campus/{id}/applications` | Every applicant for one of my Campus listings |
 | POST | `/v1/employer/campus/{id}/applications/{appId}/decision` | Shortlist, reject or hire an applicant (re-checks the weekly hours cap on hire) |
+| POST | `/v1/employer/campus/{id}/boost` | Pay a Boosted Listing fee for higher placement (D-069): creates a payment order |
 | POST | `/v1/employer/contracts` | Post a Contract-labour listing |
 | GET | `/v1/employer/contracts` | My listings, newest first |
 | PATCH | `/v1/employer/contracts/{id}` | Edit a listing, or change its status (pause/reopen/close/cancel) |
 | GET | `/v1/employer/contracts/{id}/applications` | Every applicant for one of my listings |
 | POST | `/v1/employer/contracts/{id}/applications/{appId}/decision` | Shortlist, reject or hire an applicant |
+| POST | `/v1/employer/contracts/{id}/boost` | Pay a Boosted Listing fee for higher placement (D-069): creates a payment order |
 | GET | `/v1/employer/profile` | My employer profile |
 | PATCH | `/v1/employer/profile` | Set or update my business name |
 | GET | `/v1/jobs` | My jobs (as customer and/or Ranger), newest first, cursor-paginated |
@@ -94,6 +96,8 @@
 | POST | `/v1/offers/{id}/accept` | Accept the other party's offer; the job becomes AGREED at that price |
 | POST | `/v1/offers/{id}/counter` | Counter-offer (next round) |
 | POST | `/v1/offers/{id}/reject` | Reject the offer: ends the negotiation and cancels the job |
+| GET | `/v1/plus/membership` | My current Haggler Plus membership, or null if never subscribed |
+| GET | `/v1/plus/plans` | Haggler Plus plans. Filter with audience=CUSTOMER|EMPLOYER (D-069) |
 | GET | `/v1/price-bands` | Price band (min/median/max, integer paise) for a category and area |
 | GET | `/v1/rangers/{id}/reviews` | A Ranger's review history from customers, newest first |
 | POST | `/v1/requests` | Create a service request. Immediate requests start broadcasting to nearby Rangers at once. |
@@ -102,6 +106,7 @@
 | POST | `/v1/requests/{id}/cancel` | Cancel a request that has not been matched yet |
 | POST | `/v1/requests/{id}/decline` | Ranger: decline a request |
 | POST | `/v1/requests/{id}/rebroadcast` | Try again after a timeout: invites Rangers from wave 1 again |
+| POST | `/v1/requests/{id}/rush` | Pay a Rush fee to skip wave sequencing on this request (D-069): creates a payment order |
 | POST | `/v1/requests/media` | Get a presigned URL to upload a request photo (max 5) or a voice note (max 60 s) |
 | POST | `/v1/requests/media/{mediaId}/confirm` | Confirm that a media upload finished |
 | GET | `/v1/student/profile` | My student profile |
@@ -111,11 +116,12 @@
 | POST | `/v1/threads/{id}/messages` | Send a message (idempotent on clientMsgId). The WebSocket event chat.message does the same. |
 | GET | `/v1/track/{token}` | Live trip link contents: status and the Ranger's position. No phone numbers. |
 | GET | `/v1/wallet` | My token balance, held tokens, and the last 20 ledger entries |
-| GET | `/v1/wallet/bundles` | Purchasable token bundles |
-| GET | `/v1/wallet/orders` | My top-up purchase history, newest first |
+| GET | `/v1/wallet/bundles` | Purchasable token bundles, discounted if I have an active Haggler Plus membership |
+| GET | `/v1/wallet/orders` | My purchase history (top-ups, Plus, rush, boosts), newest first |
+| POST | `/v1/wallet/orders/{orderId}/sandbox-pay` | Dev/test only: complete a sandbox order instantly (refused when PAYMENTS_MODE=test) |
+| POST | `/v1/wallet/orders/{orderId}/verify` | Verify Razorpay Checkout's success callback and apply the order's effect (idempotent). Works for any order purpose — top-up, Plus, rush fee, boosted listing. |
+| POST | `/v1/wallet/plus/subscribe` | Start a Haggler Plus subscription: creates a payment order (D-069) |
 | POST | `/v1/wallet/topup` | Start a top-up: creates a payment order for a token bundle |
-| POST | `/v1/wallet/topup/{orderId}/sandbox-pay` | Dev/test only: complete a sandbox order instantly (refused when PAYMENTS_MODE=test) |
-| POST | `/v1/wallet/topup/{orderId}/verify` | Verify Razorpay Checkout's success callback and credit the wallet (idempotent) |
 | GET | `/v1/worker/incoming` | Requests currently waiting for my answer (use after reconnecting) |
 | POST | `/v1/worker/location` | Location heartbeat (every 5-10 s). While on a job it also extends the GPS trail and pushes to the customer. |
 | POST | `/v1/worker/offline` | Go offline: no new requests |

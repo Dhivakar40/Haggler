@@ -699,6 +699,9 @@ model Job {
   currentWave            Int            @default(0) @map("current_wave")
   /// Bumped by each re-broadcast so previously invited Rangers can be invited again.
   broadcastAttempt       Int            @default(1) @map("broadcast_attempt")
+  /// Phase 9 (D-069): paid Rush fee OR an active Haggler Plus membership at request time. Skips
+  /// straight to the widest broadcast radius in one wave instead of progressively expanding.
+  isRush                 Boolean        @default(false) @map("is_rush")
   nextWaveAt             DateTime?      @map("next_wave_at") @db.Timestamptz(6)
   broadcastDeadline      DateTime?      @map("broadcast_deadline") @db.Timestamptz(6)
   genderPreferenceMet    Boolean?       @map("gender_preference_met")
@@ -1104,14 +1107,43 @@ model TokenBundle {
   @@map("token_bundles")
 }
 
-/// One row per top-up attempt. provider_payment_id is unique and only set once a payment is
-/// actually captured, so a replayed webhook (or a client hitting verify twice) can never credit
-/// the wallet twice for the same payment (D-039).
+/// What a PaymentOrder is for (Phase 9, D-069). One order pipeline (create -> verify/sandbox-pay ->
+/// webhook, all in WalletService), four purposes, dispatched in credit() by `purpose`. Every
+/// purpose here is paid by a CUSTOMER or an EMPLOYER only — never a Ranger/student/contract worker
+/// (D-037, unchanged; see the Phase 9 section of docs/DECISIONS.md for why this is enforced at the
+/// order-creation call sites, not by a role column on this table).
+enum PaymentPurpose {
+  TOKEN_TOPUP
+  PLUS_SUBSCRIPTION
+  RUSH_FEE
+  BOOSTED_LISTING
+
+  @@map("payment_purpose")
+}
+
+enum ListingKind {
+  CONTRACT
+  CAMPUS
+
+  @@map("listing_kind")
+}
+
+/// One row per payment attempt, of any purpose. provider_payment_id is unique and only set once a
+/// payment is actually captured, so a replayed webhook (or a client hitting verify twice) can never
+/// apply the same payment twice (D-039). Exactly one of (bundleId, planId, targetJobId,
+/// targetListingId) is set, matching `purpose` — enforced in WalletService.createXOrder(), not by a
+/// DB constraint (Postgres CHECK across nullable FKs would need a trigger; not worth it for four
+/// call sites that already can't set the wrong pair).
 model PaymentOrder {
   id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId            String             @map("user_id") @db.Uuid
-  bundleId          String             @map("bundle_id") @db.Uuid
-  tokens            Int
+  purpose           PaymentPurpose     @default(TOKEN_TOPUP)
+  bundleId          String?            @map("bundle_id") @db.Uuid
+  tokens            Int?
+  planId            String?            @map("plan_id") @db.Uuid
+  targetJobId       String?            @map("target_job_id") @db.Uuid
+  targetListingType ListingKind?       @map("target_listing_type")
+  targetListingId   String?            @map("target_listing_id") @db.Uuid
   amountPaise       Int                @map("amount_paise")
   provider          String
   providerOrderId   String             @map("provider_order_id")
@@ -1122,11 +1154,61 @@ model PaymentOrder {
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  bundle TokenBundle @relation(fields: [bundleId], references: [id])
+  bundle TokenBundle? @relation(fields: [bundleId], references: [id])
+  plan   PlusPlan?    @relation(fields: [planId], references: [id])
 
   @@unique([provider, providerOrderId])
   @@index([userId, createdAt(sort: Desc)])
   @@map("payment_orders")
+}
+
+/// A purchasable Haggler Plus plan (Phase 9). Customer plans and Employer plans are both rows here
+/// (audience tells them apart) rather than two tables, same "one catalog table, a column narrows
+/// it" shape as everything else purchasable in this schema (TokenBundle, PriceBand).
+enum PlusAudience {
+  CUSTOMER
+  EMPLOYER
+
+  @@map("plus_audience")
+}
+
+model PlusPlan {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug             String       @unique
+  name             String
+  audience         PlusAudience
+  durationDays     Int          @map("duration_days")
+  pricePaise       Int          @map("price_paise")
+  /// Discount applied to token bundle prices while this plan is active, in basis points (1000 =
+  /// 10% off). Computed live at quote/order time (WalletService), never stored per-bundle.
+  tokenDiscountBps Int          @default(0) @map("token_discount_bps")
+  isActive         Boolean      @default(true) @map("is_active")
+  sortOrder        Int          @default(0) @map("sort_order")
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  orders      PaymentOrder[]
+  memberships PlusMembership[]
+
+  @@map("plus_plans")
+}
+
+/// One row per user who has ever subscribed (cache of truth, same shape as CustomerWallet): a
+/// renewal while still active extends expires_at from its current value rather than from now, so a
+/// customer who renews early never loses the days they already paid for. "Active" is simply
+/// `expires_at > now()`, checked live wherever it matters (bundle pricing, request-time rush) —
+/// no separate status column or expiry job needed.
+model PlusMembership {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  planId    String   @map("plan_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  plan PlusPlan @relation(fields: [planId], references: [id])
+
+  @@map("plus_memberships")
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1199,6 +1281,10 @@ model ContractListing {
   pincode        String
   startDate      DateTime?             @map("start_date") @db.Date
   status         ContractListingStatus @default(OPEN)
+  /// Phase 9 (D-069): set by a paid Boosted Listing fee (WalletService). Browse surfaces every
+  /// listing with boostedUntil > now() ahead of the normal newest-first list; read live, no
+  /// separate expiry job needed.
+  boostedUntil   DateTime?             @map("boosted_until") @db.Timestamptz(6)
   createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   closedAt       DateTime?             @map("closed_at") @db.Timestamptz(6)
@@ -1279,6 +1365,8 @@ model CampusListing {
   state           String
   pincode         String
   status          ContractListingStatus @default(OPEN)
+  /// Phase 9 (D-069): same as ContractListing.boostedUntil.
+  boostedUntil    DateTime?             @map("boosted_until") @db.Timestamptz(6)
   createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   closedAt        DateTime?             @map("closed_at") @db.Timestamptz(6)

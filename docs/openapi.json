@@ -1213,6 +1213,59 @@
         ]
       }
     },
+    "/v1/plus/plans": {
+      "get": {
+        "operationId": "PlusController_plans_v1",
+        "parameters": [
+          {
+            "name": "audience",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "CUSTOMER",
+                "EMPLOYER"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Haggler Plus plans. Filter with audience=CUSTOMER|EMPLOYER (D-069)",
+        "tags": [
+          "plus"
+        ]
+      }
+    },
+    "/v1/plus/membership": {
+      "get": {
+        "operationId": "PlusController_membership_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My current Haggler Plus membership, or null if never subscribed",
+        "tags": [
+          "plus"
+        ]
+      }
+    },
     "/v1/wallet": {
       "get": {
         "operationId": "WalletController_summary_v1",
@@ -1247,7 +1300,7 @@
             "bearer": []
           }
         ],
-        "summary": "Purchasable token bundles",
+        "summary": "Purchasable token bundles, discounted if I have an active Haggler Plus membership",
         "tags": [
           "wallet"
         ]
@@ -1267,7 +1320,7 @@
             "bearer": []
           }
         ],
-        "summary": "My top-up purchase history, newest first",
+        "summary": "My purchase history (top-ups, Plus, rush, boosts), newest first",
         "tags": [
           "wallet"
         ]
@@ -1313,7 +1366,47 @@
         ]
       }
     },
-    "/v1/wallet/topup/{orderId}/verify": {
+    "/v1/wallet/plus/subscribe": {
+      "post": {
+        "operationId": "WalletController_subscribePlus_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "planId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "planId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start a Haggler Plus subscription: creates a payment order (D-069)",
+        "tags": [
+          "wallet"
+        ]
+      }
+    },
+    "/v1/wallet/orders/{orderId}/verify": {
       "post": {
         "operationId": "WalletController_verify_v1",
         "parameters": [
@@ -1361,13 +1454,13 @@
             "bearer": []
           }
         ],
-        "summary": "Verify Razorpay Checkout's success callback and credit the wallet (idempotent)",
+        "summary": "Verify Razorpay Checkout's success callback and apply the order's effect (idempotent). Works for any order purpose — top-up, Plus, rush fee, boosted listing.",
         "tags": [
           "wallet"
         ]
       }
     },
-    "/v1/wallet/topup/{orderId}/sandbox-pay": {
+    "/v1/wallet/orders/{orderId}/sandbox-pay": {
       "post": {
         "operationId": "WalletController_sandboxPay_v1",
         "parameters": [
@@ -1852,6 +1945,35 @@
           }
         ],
         "summary": "Try again after a timeout: invites Rangers from wave 1 again",
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/v1/requests/{id}/rush": {
+      "post": {
+        "operationId": "RequestsController_rush_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pay a Rush fee to skip wave sequencing on this request (D-069): creates a payment order",
         "tags": [
           "requests"
         ]
@@ -3222,6 +3344,35 @@
         ]
       }
     },
+    "/v1/employer/contracts/{id}/boost": {
+      "post": {
+        "operationId": "EmployerContractsController_boost_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pay a Boosted Listing fee for higher placement (D-069): creates a payment order",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
     "/v1/employer/contracts/{id}/applications/{appId}/decision": {
       "post": {
         "operationId": "EmployerContractsController_decide_v1",
@@ -3746,6 +3897,35 @@
           }
         ],
         "summary": "Every applicant for one of my Campus listings",
+        "tags": [
+          "employer"
+        ]
+      }
+    },
+    "/v1/employer/campus/{id}/boost": {
+      "post": {
+        "operationId": "EmployerCampusController_boost_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pay a Boosted Listing fee for higher placement (D-069): creates a payment order",
         "tags": [
           "employer"
         ]

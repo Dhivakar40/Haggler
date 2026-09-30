@@ -146,6 +146,7 @@ export class JobViewService {
       agreedPricePaise: job.agreedPricePaise,
       genderPreference: req.genderPreference,
       genderPreferenceMet: job.genderPreferenceMet,
+      isRush: job.isRush,
       broadcast:
         role === 'CUSTOMER'
           ? {

@@ -17,6 +17,7 @@ import { HealthModule } from './health/health.module';
 import { KycModule } from './kyc/kyc.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
+import { MonetizationModule } from './monetization/monetization.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReputationModule } from './reputation/reputation.module';
 import { HttpMetricsMiddleware, MetricsModule } from './metrics/metrics';
@@ -97,6 +98,7 @@ export const LOG_REDACT_PATHS = [
     UsersModule,
     WorkerModule,
     KycModule,
+    MonetizationModule,
     WalletModule,
     ReputationModule,
     NotificationsModule,

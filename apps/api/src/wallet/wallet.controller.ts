@@ -13,7 +13,11 @@ import {
 import type { RawBodyRequest } from '@nestjs/common';
 import { ApiBearerAuth, ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { createTopupOrderSchema, verifyTopupSchema } from '@haggler/shared';
+import {
+  createTopupOrderSchema,
+  subscribePlusSchema,
+  verifyPaymentOrderSchema,
+} from '@haggler/shared';
 import { z } from 'zod';
 import { ApiZodBody, CurrentUser, Public, type AuthUser } from '../common/decorators';
 import { unprocessable } from '../common/http-errors';
@@ -39,13 +43,15 @@ export class WalletController {
   }
 
   @Get('bundles')
-  @ApiOperation({ summary: 'Purchasable token bundles' })
-  bundles() {
-    return this.wallet.listBundles();
+  @ApiOperation({
+    summary: 'Purchasable token bundles, discounted if I have an active Haggler Plus membership',
+  })
+  bundles(@CurrentUser() u: AuthUser) {
+    return this.wallet.listBundles(u.id);
   }
 
   @Get('orders')
-  @ApiOperation({ summary: 'My top-up purchase history, newest first' })
+  @ApiOperation({ summary: 'My purchase history (top-ups, Plus, rush, boosts), newest first' })
   orders(@CurrentUser() u: AuthUser, @Query(new ZodPipe(listQuery)) q: z.infer<typeof listQuery>) {
     return this.wallet.listOrders(u.id, q.cursor, q.limit);
   }
@@ -60,27 +66,39 @@ export class WalletController {
     return this.wallet.createTopupOrder(u.id, body.bundleId);
   }
 
-  @Post('topup/:orderId/verify')
+  @Post('plus/subscribe')
+  @ApiOperation({ summary: 'Start a Haggler Plus subscription: creates a payment order (D-069)' })
+  @ApiZodBody(subscribePlusSchema)
+  subscribePlus(
+    @CurrentUser() u: AuthUser,
+    @Body(new ZodPipe(subscribePlusSchema)) body: z.infer<typeof subscribePlusSchema>,
+  ) {
+    return this.wallet.createSubscriptionOrder(u.id, body.planId);
+  }
+
+  @Post('orders/:orderId/verify')
   @HttpCode(200)
   @ApiOperation({
-    summary: "Verify Razorpay Checkout's success callback and credit the wallet (idempotent)",
+    summary:
+      "Verify Razorpay Checkout's success callback and apply the order's effect (idempotent). " +
+      'Works for any order purpose — top-up, Plus, rush fee, boosted listing.',
   })
-  @ApiZodBody(verifyTopupSchema)
+  @ApiZodBody(verifyPaymentOrderSchema)
   verify(
     @CurrentUser() u: AuthUser,
     @Param('orderId', id) orderId: string,
-    @Body(new ZodPipe(verifyTopupSchema)) body: z.infer<typeof verifyTopupSchema>,
+    @Body(new ZodPipe(verifyPaymentOrderSchema)) body: z.infer<typeof verifyPaymentOrderSchema>,
   ) {
-    return this.wallet.verifyTopup(u.id, orderId, body.razorpayPaymentId, body.razorpaySignature);
+    return this.wallet.verifyOrder(u.id, orderId, body.razorpayPaymentId, body.razorpaySignature);
   }
 
-  @Post('topup/:orderId/sandbox-pay')
+  @Post('orders/:orderId/sandbox-pay')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Dev/test only: complete a sandbox order instantly (refused when PAYMENTS_MODE=test)',
   })
   sandboxPay(@CurrentUser() u: AuthUser, @Param('orderId', id) orderId: string) {
-    return this.wallet.sandboxPay(u.id, orderId);
+    return this.wallet.sandboxPayOrder(u.id, orderId);
   }
 }
 

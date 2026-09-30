@@ -582,3 +582,79 @@ dead-letter set — an admin would only notice by checking it manually. The admi
 automated test coverage (a handful of pure-logic unit tests; the new Phase 8 pages were verified
 by a live trace against a running API plus a production `next build`, not by a browser test suite
 — no Playwright/E2E harness exists yet for `apps/admin`).
+
+## Phase 9
+
+Scope confirmed explicitly by the user: "Haggler Plus subscription/fees" — the platform's first
+monetization beyond the Phase 3 customer token wallet, built strictly under the rule already
+recorded in D-036/D-037 and restated by the user for this phase: Rangers, students and contract
+workers are **never** charged, at any tier, ever. Every fee in this phase is paid only by a
+customer (on-demand) or an employer (Contracts/Campus), through the existing customer-wallet /
+Razorpay-test-mode pipeline from Phase 3 — no new payment infrastructure, no Ranger-side wallet or
+payout path touched.
+
+**D-069 One PaymentOrder pipeline, four purposes, not four payment systems.** `PaymentOrder` grew a
+`purpose` column (`TOKEN_TOPUP | PLUS_SUBSCRIPTION | RUSH_FEE | BOOSTED_LISTING`) and nullable
+`bundleId`/`planId`/`targetJobId`/`targetListingType`+`targetListingId` — exactly one of which is
+set per purpose. `WalletService.createTopupOrder/createSubscriptionOrder/createRushOrder/
+createBoostOrder` are thin (validate + price + `payments.createOrder`); every purpose then goes
+through the exact same `verifyOrder`/`sandboxPayOrder`/webhook path Phase 3 built, and `credit()`
+dispatches by `purpose` to one of four small "apply the effect" branches in one place. This was the
+central design choice this phase: reusing one audited create-order/verify/webhook/idempotent-credit
+pipeline for three new kinds of paid feature, rather than writing (and re-testing) that machinery
+four times. The two renamed endpoints (`/wallet/topup/:id/verify` → `/wallet/orders/:id/verify`,
+same for `sandbox-pay`) are a deliberate breaking rename, safe pre-launch with no real users, so the
+verify/pay path reads correctly for a rush-fee or boost order too, not just a token top-up.
+
+**D-070 Haggler Plus: one `PlusMembership` row per user, a renewal extends rather than resets.**
+`PlusPlan` is a catalog table (`audience: CUSTOMER | EMPLOYER`, `durationDays`, `pricePaise`,
+`tokenDiscountBps`) — same "one table, a column narrows it" shape as `TokenBundle`/`PriceBand`.
+`PlusMembership` is unique per `userId` (cache-of-truth pattern, like `CustomerWallet`); "active" is
+simply `expiresAt > now()`, checked live everywhere it matters — no status column, no expiry job.
+Renewing while still active extends `expiresAt` from its current value, not from `now()`, so an
+early renewal never costs the days already paid for. Two perks, both computed live, never stored as
+a flag on anything else: (1) token bundle prices get `tokenDiscountBps` off at quote and purchase
+time (`WalletService.listBundles`/`createTopupOrder`); (2) **priority broadcast** is granted by
+snapshotting `Job.isRush = true` at request-creation time if the customer has an active membership
+— the exact same mechanism a one-off paid Rush fee uses (D-071), so "Plus priority" and "paid rush"
+are one code path, not two. Snapshotting at creation (not checked live during broadcast) means a
+membership that expires mid-broadcast never retroactively demotes a request already in flight.
+
+**D-071 Rush fee skips to the widest broadcast radius in one wave, not a shorter wait between
+waves.** "Skip wave sequencing" was read as: broadcast immediately at the widest configured radius
+(`broadcast_radii_m` last element) instead of progressively expanding through 2/5/10 km, rather
+than sending the same three waves faster. `MatchingService.advance()` special-cases `job.isRush`:
+`radiusM` uses the last configured radius on the very first wave, and `currentWave` jumps straight
+to `broadcast_radii_m.length` (as if every wave had already run), so the _next_ `advance()` call —
+if still unmatched — goes straight to the existing timeout/rebroadcast-or-cancel path instead of a
+second wave. Net effect: one wide-radius wave, then the same "ask again or cancel" choice the
+customer already had after 3 normal waves, just faster either way. A paid Rush fee (`POST
+/requests/:id/rush`, then the same order pipeline as everything else) can only be bought on a
+request that is not already rush and is still `REQUESTED`/`BROADCASTING` (`ALREADY_RUSH` /
+`NOT_BROADCASTING`) — there is nothing left to speed up once a Ranger has accepted, and refunding a
+paid-but-useless rush fee bought in the gap between order-creation and payment is a known,
+disclosed gap (D-072), not silently handled.
+
+**D-072 Boosted listing: a fee, not an auction, surfaced separately rather than reshuffling cursor
+pagination.** `ContractListing`/`CampusListing` gained `boostedUntil`; paying (`POST
+/employer/contracts|campus/:id/boost`, OPEN listings only, no stacking — `LISTING_NOT_BOOSTABLE` /
+`ALREADY_BOOSTED`) sets it `duration_days` (default 7) out from payment time. Rather than folding
+"boosted first" into the existing `(createdAt, id)` cursor — which would need a compound cursor key
+across every paginated listing endpoint in the app just for this one feature — `browse()` returns a
+second, separate, unpaginated `boosted` array (currently-active boosts, up to 5, newest first,
+**first page only**) alongside the normal cursor-paginated `items` (which excludes anything
+currently boosted, so nothing appears twice). This is a deliberate, disclosed simplification: a
+boosted listing is guaranteed top-of-list placement without touching pagination correctness
+anywhere else in the codebase, at the cost of "top 5" rather than a fully general boost-ranked feed.
+
+**D-073 Known gaps carried forward (Phase 9).** No refund path for a paid Rush fee or Boosted
+Listing fee that turns out to buy nothing (job matched, or listing closed, between order creation
+and payment) — the money is real, the effect silently no-ops (D-071/D-072); a manual admin
+adjustment is the only recourse today. No Razorpay Checkout UI for any of the four purposes in
+`apps/mobile` — sandbox pay only, same gap the Phase 3 wallet already had for top-ups. Boost is
+"top 5, first page only," not a general ranked-boost feed (D-072). Employer Haggler Plus plans
+exist in the catalog and get the token-bundle discount, but have no employer-specific perk beyond
+that this phase (e.g. no employer-side priority anything) — a known, disclosed asymmetry with the
+Customer plan's priority-broadcast perk. No integration test drives an actual real-money Razorpay
+Checkout flow anywhere in this project (unchanged since Phase 3, D-043) — sandbox mode's real HMAC
+signing is the closest exercised approximation.

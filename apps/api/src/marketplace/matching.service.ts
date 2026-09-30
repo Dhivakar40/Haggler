@@ -127,7 +127,13 @@ export class MatchingService {
       SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng FROM service_requests WHERE id = ${job.requestId}::uuid`;
     const p = point[0];
     if (!p) return true;
-    const radiusM = cfg.broadcast_radii_m[wave] as number;
+    // Rush (Phase 9, D-069: a paid Rush fee, or a free perk of an active Haggler Plus membership at
+    // request time) skips straight to the widest configured radius in one wave, instead of
+    // progressively expanding — see the currentWave jump below, which then sends any further
+    // advance() call straight to timeOut() rather than a second wave.
+    const lastWave = cfg.broadcast_radii_m.length - 1;
+    const radiusM = cfg.broadcast_radii_m[job.isRush ? lastWave : wave] as number;
+    const nextWave = job.isRush ? cfg.broadcast_radii_m.length : wave + 1;
 
     const raw = await this.presence.findCandidates({
       jobId: job.id,
@@ -148,7 +154,7 @@ export class MatchingService {
         data: ranked.map((r) => ({
           jobId: job.id,
           attempt: job.broadcastAttempt,
-          wave: wave + 1,
+          wave: nextWave,
           workerId: r.userId,
           distanceM: r.distanceM,
           score: r.score,
@@ -174,12 +180,13 @@ export class MatchingService {
       await tx.job.update({
         where: { id: job.id },
         data: {
-          currentWave: wave + 1,
+          currentWave: nextWave,
           nextWaveAt: new Date(now.getTime() + interval),
-          // The countdown the customer sees: the whole broadcast (all waves), from the first wave.
+          // The countdown the customer sees: the whole broadcast. Rush only ever sends one wave, so
+          // its deadline is a single interval away instead of the full multi-wave span.
           broadcastDeadline:
             job.broadcastDeadline ??
-            new Date(now.getTime() + interval * cfg.broadcast_radii_m.length),
+            new Date(now.getTime() + interval * (job.isRush ? 1 : cfg.broadcast_radii_m.length)),
           genderPreferenceMet:
             pref === 'ANY' ? null : invitedGenders.some((g) => g.gender === pref),
         },
@@ -195,9 +202,9 @@ export class MatchingService {
           data: { jobId: dto.jobId, type: 'broadcast' },
         });
     }
-    await this.transitions.notify(job.id, { wave: wave + 1 });
+    await this.transitions.notify(job.id, { wave: nextWave });
     this.logger.log(
-      `job ${job.id}: wave ${wave + 1} (${radiusM} m) invited ${ranked.length} of ${raw.length} eligible`,
+      `job ${job.id}: wave ${nextWave}${job.isRush ? ' (rush)' : ''} (${radiusM} m) invited ${ranked.length} of ${raw.length} eligible`,
     );
     return true;
   }

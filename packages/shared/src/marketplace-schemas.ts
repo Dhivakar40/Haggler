@@ -109,6 +109,9 @@ export const jobDtoSchema = z.object({
   agreedPricePaise: paiseSchema.nullable(),
   genderPreference: z.enum(['ANY', 'FEMALE', 'MALE']),
   genderPreferenceMet: z.boolean().nullable(),
+  /** Rush (Phase 9, D-069): a paid Rush fee or an active Haggler Plus membership at request time.
+   * Skipped straight to the widest broadcast radius in one wave. */
+  isRush: z.boolean(),
   /** How the broadcast is going (customer only). */
   broadcast: z
     .object({

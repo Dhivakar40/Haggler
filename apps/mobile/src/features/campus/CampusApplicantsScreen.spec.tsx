@@ -34,6 +34,7 @@ const listing = (over: Record<string, unknown> = {}) => ({
   state: 'Tamil Nadu',
   pincode: '600042',
   status: 'OPEN',
+  isBoosted: false,
   createdAt: new Date().toISOString(),
   ...over,
 });

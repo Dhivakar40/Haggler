@@ -5,13 +5,16 @@ import { useTranslation } from 'react-i18next';
 import { Alert, FlatList, View } from 'react-native';
 import type { CampusDecisionInput } from '@haggler/shared';
 import {
+  boostCampusListing,
   decideOnCampusApplication,
   updateCampusListing,
   useCampusListing,
   useCampusListingApplications,
 } from '../../api/campus';
+import { sandboxPay } from '../../api/wallet';
 import { Button, Card, EmptyState, ErrorState, LoadingState, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
+import { formatRupees } from '../../lib/money';
 import { spacing } from '../../theme/tokens';
 
 const STATUS_COLOR: Record<string, 'text' | 'success' | 'danger' | 'textMuted'> = {
@@ -42,6 +45,48 @@ export function CampusApplicantsScreen() {
     } catch (err) {
       setError(errorMessage(err, t));
     } finally {
+      setClosing(false);
+    }
+  }
+
+  /** Boosted listing fee (Phase 9, D-069). */
+  async function boost() {
+    setError(undefined);
+    setClosing(true);
+    try {
+      const order = await boostCampusListing(listingId);
+      if (order.provider === 'sandbox') {
+        Alert.alert(
+          t('monetization.boostButton'),
+          t('monetization.boostSummary', {
+            amount: formatRupees(order.amountPaise),
+            days: 7,
+          }),
+          [
+            { text: t('monetization.cancel'), style: 'cancel', onPress: () => setClosing(false) },
+            {
+              text: t('monetization.payNow'),
+              onPress: () =>
+                void (async () => {
+                  try {
+                    await sandboxPay(order.orderId);
+                    await qc.invalidateQueries({ queryKey: ['campus', listingId] });
+                    Alert.alert(t('monetization.boostDone'));
+                  } catch (err) {
+                    setError(errorMessage(err, t));
+                  } finally {
+                    setClosing(false);
+                  }
+                })(),
+            },
+          ],
+        );
+      } else {
+        setError(t('wallet.razorpayPending'));
+        setClosing(false);
+      }
+    } catch (err) {
+      setError(errorMessage(err, t));
       setClosing(false);
     }
   }
@@ -101,6 +146,15 @@ export function CampusApplicantsScreen() {
               })}{' '}
               · {t(`employer.listingStatus.${listing.data.status}`)}
             </Text>
+            {listing.data.status === 'OPEN' && !listing.data.isBoosted ? (
+              <Button
+                testID="boost-campus-listing"
+                variant="secondary"
+                title={t('monetization.boostButton')}
+                onPress={() => void boost()}
+                loading={closing}
+              />
+            ) : null}
             {listing.data.status === 'OPEN' || listing.data.status === 'PAUSED' ? (
               <Button
                 testID="close-campus-listing"

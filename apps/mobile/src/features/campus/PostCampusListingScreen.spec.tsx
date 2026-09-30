@@ -49,6 +49,7 @@ describe('PostCampusListingScreen', () => {
             state: 'Tamil Nadu',
             pincode: '600042',
             status: 'OPEN',
+            isBoosted: false,
             createdAt: new Date().toISOString(),
           },
         };

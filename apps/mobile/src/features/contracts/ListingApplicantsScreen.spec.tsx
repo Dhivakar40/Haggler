@@ -34,6 +34,7 @@ const listing = (over: Record<string, unknown> = {}) => ({
   pincode: '600042',
   startDate: null,
   status: 'OPEN',
+  isBoosted: false,
   createdAt: new Date().toISOString(),
   ...over,
 });

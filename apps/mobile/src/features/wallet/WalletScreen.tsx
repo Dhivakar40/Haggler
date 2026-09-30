@@ -3,12 +3,15 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
-import type { TokenBundleDto, TopupOrderDto } from '@haggler/shared';
+import type { PaymentOrderStartDto, PlusPlanDto, TokenBundleDto } from '@haggler/shared';
 import {
   createTopupOrder,
   sandboxPay,
+  subscribePlus,
   useBundles,
   useOrders,
+  usePlusMembership,
+  usePlusPlans,
   useWallet,
   walletKey,
 } from '../../api/wallet';
@@ -17,7 +20,8 @@ import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
 import { spacing } from '../../theme/tokens';
 
-/** Buy tokens -> a payment order -> pay -> the wallet refetches. One order in flight at a time. */
+/** Buy tokens or subscribe to Plus -> a payment order -> pay -> the relevant query refetches.
+ * One order in flight at a time (D-069: Plus + rush + boost all share this same checkout flow). */
 export function WalletScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -25,7 +29,9 @@ export function WalletScreen() {
   const wallet = useWallet();
   const bundles = useBundles();
   const orders = useOrders();
-  const [order, setOrder] = useState<TopupOrderDto | null>(null);
+  const membership = usePlusMembership();
+  const plans = usePlusPlans('CUSTOMER');
+  const [order, setOrder] = useState<PaymentOrderStartDto | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string>();
 
@@ -34,6 +40,19 @@ export function WalletScreen() {
     setBusy(bundle.id);
     try {
       const o = await createTopupOrder({ bundleId: bundle.id });
+      setOrder(o);
+    } catch (err) {
+      setError(errorMessage(err, t));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function subscribe(plan: PlusPlanDto) {
+    setError(undefined);
+    setBusy(plan.id);
+    try {
+      const o = await subscribePlus({ planId: plan.id });
       setOrder(o);
     } catch (err) {
       setError(errorMessage(err, t));
@@ -51,6 +70,7 @@ export function WalletScreen() {
       setOrder(null);
       await qc.invalidateQueries({ queryKey: walletKey });
       await qc.invalidateQueries({ queryKey: ['wallet', 'orders'] });
+      await qc.invalidateQueries({ queryKey: ['plus', 'membership'] });
     } catch (err) {
       setError(errorMessage(err, t));
     } finally {
@@ -94,10 +114,12 @@ export function WalletScreen() {
           <View style={{ gap: spacing.sm }}>
             <Text variant="heading">{t('wallet.checkoutTitle')}</Text>
             <Text>
-              {t('wallet.checkoutSummary', {
-                tokens: order.tokens,
-                amount: formatRupees(order.amountPaise),
-              })}
+              {order.purpose === 'PLUS_SUBSCRIPTION'
+                ? t('wallet.checkoutSummaryPlus', { amount: formatRupees(order.amountPaise) })
+                : t('wallet.checkoutSummary', {
+                    tokens: order.tokens ?? 0,
+                    amount: formatRupees(order.amountPaise),
+                  })}
             </Text>
             {order.provider === 'sandbox' ? (
               <>
@@ -129,6 +151,49 @@ export function WalletScreen() {
           {error}
         </Text>
       ) : null}
+
+      <View style={{ gap: spacing.sm }}>
+        <Text variant="heading">{t('wallet.plusTitle')}</Text>
+        {membership.data?.active ? (
+          <Card testID="plus-active">
+            <Text>{t('wallet.plusActive', { name: membership.data.planName })}</Text>
+            <Text color="textMuted">
+              {t('wallet.plusExpires', {
+                date: new Date(membership.data.expiresAt).toLocaleDateString(),
+              })}
+            </Text>
+          </Card>
+        ) : (
+          (plans.data ?? []).map((p) => (
+            <Card key={p.id} testID={`plus-plan-${p.slug}`}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: spacing.sm,
+                }}
+              >
+                <View style={{ gap: 2 }}>
+                  <Text variant="heading">{p.name}</Text>
+                  <Text color="textMuted">
+                    {t('wallet.plusPrice', {
+                      amount: formatRupees(p.pricePaise),
+                      days: p.durationDays,
+                    })}
+                  </Text>
+                </View>
+                <Button
+                  testID={`subscribe-${p.slug}`}
+                  title={t('wallet.subscribe')}
+                  loading={busy === p.id}
+                  onPress={() => void subscribe(p)}
+                />
+              </View>
+            </Card>
+          ))
+        )}
+      </View>
 
       <View style={{ gap: spacing.sm }}>
         <Text variant="heading">{t('wallet.buyTokens')}</Text>
@@ -164,7 +229,7 @@ export function WalletScreen() {
         {orders.data?.items.map((o) => (
           <Card key={o.id} testID={`order-${o.id}`}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text>{t('wallet.tokenCount', { count: o.tokens })}</Text>
+              <Text>{o.itemName}</Text>
               <Text
                 color={
                   o.status === 'PAID'

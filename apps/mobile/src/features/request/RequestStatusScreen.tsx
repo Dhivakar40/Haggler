@@ -3,10 +3,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, View } from 'react-native';
-import { cancelRequest, rebroadcastRequest, requestKey, useRequest } from '../../api/market';
+import {
+  cancelRequest,
+  rebroadcastRequest,
+  requestKey,
+  rushRequest,
+  useRequest,
+} from '../../api/market';
+import { sandboxPay } from '../../api/wallet';
 import { Button, Card, Countdown, ErrorState, LoadingState, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { isTimedOut, isWaitingForRanger } from '../../lib/job-status';
+import { formatRupees } from '../../lib/money';
 import { useNow } from '../../lib/useNow';
 import { spacing } from '../../theme/tokens';
 
@@ -75,6 +83,37 @@ export function RequestStatusScreen() {
           }),
       },
     ]);
+
+  async function rush() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const order = await rushRequest(id as string);
+      if (order.provider === 'sandbox') {
+        Alert.alert(
+          t('monetization.rushButton'),
+          t('monetization.rushSummary', { amount: formatRupees(order.amountPaise) }),
+          [
+            { text: t('monetization.cancel'), style: 'cancel', onPress: () => setBusy(false) },
+            {
+              text: t('monetization.payNow'),
+              onPress: () =>
+                void run(async () => {
+                  await sandboxPay(order.orderId);
+                  Alert.alert(t('monetization.rushDone'));
+                }),
+            },
+          ],
+        );
+      } else {
+        setError(t('wallet.razorpayPending'));
+        setBusy(false);
+      }
+    } catch (err) {
+      setError(errorMessage(err, t));
+      setBusy(false);
+    }
+  }
 
   if (job.status === 'CANCELLED') {
     return (
@@ -153,6 +192,15 @@ export function RequestStatusScreen() {
           testID="rebroadcast"
           title={t('requestStatus.rebroadcast')}
           onPress={() => void run(() => rebroadcastRequest(id as string))}
+          loading={busy}
+        />
+      ) : null}
+      {!timedOut && !scheduledWait && !job.isRush ? (
+        <Button
+          testID="rush"
+          variant="secondary"
+          title={t('monetization.rushButton')}
+          onPress={() => void rush()}
           loading={busy}
         />
       ) : null}

@@ -88,6 +88,8 @@ export const contractListingSchema = z.object({
   pincode: z.string(),
   startDate: z.string().nullable(),
   status: contractListingStatusSchema,
+  /** A currently-active Boosted Listing fee is in effect (D-069). */
+  isBoosted: z.boolean(),
   createdAt: z.string(),
   /** Only present for the employer who owns the listing, or omitted entirely for a browsing Ranger. */
   applicationCount: z.number().int().optional(),
@@ -97,6 +99,8 @@ export const contractListingSchema = z.object({
 export type ContractListingDto = z.infer<typeof contractListingSchema>;
 
 export const contractListingPageSchema = z.object({
+  /** Currently-boosted listings, up to 5, present only on the first page (D-069). */
+  boosted: z.array(contractListingSchema).optional(),
   items: z.array(contractListingSchema),
   nextCursor: z.string().nullable(),
 });

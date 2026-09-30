@@ -183,9 +183,11 @@ integration test.
 called; signs with a fixed dev secret using the real HMAC algorithm, so signature verification is
 genuinely exercised even without Razorpay) and `razorpay` (`test` mode only, `rzp_test_` keys). Both
 implement the same interface: create an order, verify a Checkout callback's signature, verify a
-webhook's signature. Two independent paths can settle a top-up — `POST /wallet/topup/:id/verify`
-(client callback, fast) and `POST /webhooks/razorpay` (server-to-server, authoritative) — and both
-funnel through the same guarded `credit()` so a double-credit is structurally impossible (D-041).
+webhook's signature. Two independent paths can settle any PaymentOrder — `POST
+/wallet/orders/:id/verify` (client callback, fast) and `POST /webhooks/razorpay` (server-to-server,
+authoritative) — and both funnel through the same guarded `credit()` so a double-credit is
+structurally impossible (D-041). As of Phase 9 (D-069) this same pipeline settles more than token
+top-ups — see the Phase 9 section below.
 
 # Phase 4 additions
 
@@ -320,3 +322,50 @@ admin-initiated browse-and-search, not fed by a complaint queue (D-067).
 Contract and Campus via `?kind=`) are the UI for this — Server Actions
 (`hideReviewAction`/`cancelListingAction` in `apps/admin/src/app/actions.ts`) post straight to the
 same REST endpoints, following the existing `decideAction` (KYC) pattern.
+
+## Monetization (`src/wallet`, `src/monetization`, Phase 9)
+
+The platform's first fees beyond the Phase 3 token wallet — a Haggler Plus subscription, a Rush
+fee, a Boosted Listing fee — all paid by a customer or an employer, never a Ranger/student/contract
+worker (D-037/D-054/D-062, restated and enforced again this phase). All three are new _purposes_ on
+the one `PaymentOrder` pipeline Phase 3 built, not new payment infrastructure (D-069):
+
+```
+WalletService (src/wallet, @Global module)
+   createTopupOrder / createSubscriptionOrder / createRushOrder / createBoostOrder
+      │  each: validate ownership/eligibility, price it, payments.createOrder(), insert PaymentOrder
+      ▼
+   verifyOrder() / sandboxPayOrder() / handleWebhook()   [purpose-agnostic — unchanged from Phase 3]
+      │  race-safe credit(), guarded updateMany(status: CREATED), same as D-041
+      ▼
+   credit() dispatches by PaymentOrder.purpose:
+      TOKEN_TOPUP        → balance_tokens += N (Phase 3, unchanged)
+      PLUS_SUBSCRIPTION  → upsert PlusMembership, extending expiresAt if still active   [D-070]
+      RUSH_FEE           → Job.isRush = true, nextWaveAt = now (scheduler picks it up)  [D-071]
+      BOOSTED_LISTING    → ContractListing/CampusListing.boostedUntil = now + N days    [D-072]
+```
+
+`src/monetization` (`MonetizationConfig`, `PlusService`, `PlusController`) is a small, separate,
+**read-only-facing** module: `PlusController` (`GET /plus/plans`, `GET /plus/membership`) depends
+only on `PlusService` → `PrismaService`. `WalletModule` imports `MonetizationModule` to reuse
+`PlusService`'s reads (e.g. "does this user get the token-bundle discount") and
+`MonetizationConfig`'s rush/boost fee amounts — a one-way dependency. `WalletService.credit()`
+itself never calls back into `PlusService`; it writes `PlusMembership` rows directly with a plain
+Prisma query inside its own transaction, which is what keeps this one-way and avoids a
+`WalletModule` ↔ `MonetizationModule` import cycle. Similarly, `WalletService.createRushOrder`/
+`createBoostOrder` and their `credit()` branches read/write `Job`/`ContractListing`/`CampusListing`
+directly rather than calling into `MatchingService`/`ContractListingsService`/`CampusListingsService`
+— simple state flips (`isRush`, `nextWaveAt`, `boostedUntil`), not business logic, so no new
+cross-module edge into `MarketplaceModule` was needed there either. The one real new edge:
+`ContractListingsService`/`CampusListingsService` inject `WalletService` (safe, since
+`WalletModule` is `@Global` and doesn't depend on `ContractsModule`/`CampusModule` back) to expose
+their own `boost(userId, listingId)` convenience method.
+
+`MatchingService.advance()` special-cases `job.isRush`: the very first wave uses the widest
+configured radius instead of the progressive 2/5/10 km sequence, and `currentWave` jumps straight
+to "all waves sent," so a still-unmatched rush request goes to the existing timeout/rebroadcast
+path after one wave instead of three (D-071). `ContractListingsService`/`CampusListingsService.
+browse()` return a second `boosted` array (currently-boosted listings, up to 5, first page only) —
+deliberately kept separate from the cursor-paginated `items` rather than folding a boost flag into
+the `(createdAt, id)` sort key, so boosting a listing can never disturb pagination correctness
+anywhere else that reuses the same cursor helpers (D-072).

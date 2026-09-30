@@ -72,6 +72,8 @@ export const campusListingSchema = z.object({
   state: z.string(),
   pincode: z.string(),
   status: contractListingStatusSchema,
+  /** A currently-active Boosted Listing fee is in effect (D-069). */
+  isBoosted: z.boolean(),
   createdAt: z.string(),
   applicationCount: z.number().int().optional(),
   myApplicationStatus: contractApplicationStatusSchema.nullable().optional(),
@@ -79,6 +81,8 @@ export const campusListingSchema = z.object({
 export type CampusListingDto = z.infer<typeof campusListingSchema>;
 
 export const campusListingPageSchema = z.object({
+  /** Currently-boosted listings, up to 5, present only on the first page (D-069). */
+  boosted: z.array(campusListingSchema).optional(),
   items: z.array(campusListingSchema),
   nextCursor: z.string().nullable(),
 });

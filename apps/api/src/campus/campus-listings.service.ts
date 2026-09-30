@@ -10,6 +10,7 @@ import {
 } from '@haggler/shared';
 import { notFound, unprocessable } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
+import { WalletService } from '../wallet/wallet.service';
 
 type ListingRow = Prisma.CampusListingGetPayload<{
   include: { employer: { select: { businessName: true } }; category: { select: { slug: true } } };
@@ -34,6 +35,7 @@ const toDto = (
   state: row.state,
   pincode: row.pincode,
   status: row.status,
+  isBoosted: !!row.boostedUntil && row.boostedUntil.getTime() > Date.now(),
   createdAt: row.createdAt.toISOString(),
   ...extra,
 });
@@ -48,7 +50,16 @@ const EDITABLE_STATUSES = ['OPEN', 'PAUSED'] as const;
 
 @Injectable()
 export class CampusListingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly wallet: WalletService,
+  ) {}
+
+  /** Boosted listing fee (Phase 9, D-069): starts a payment order. See
+   * WalletService.createBoostOrder for the eligibility checks. */
+  boost(userId: string, listingId: string) {
+    return this.wallet.createBoostOrder(userId, 'CAMPUS', listingId);
+  }
 
   /** Every Campus listing needs a *verified* employer (D-062) — stricter than Contract, which
    * needs no verification at all (D-056). Returns the employer row, not just its id, since the
@@ -176,7 +187,9 @@ export class CampusListingsService {
   }
 
   /** Public browse: only OPEN listings, optionally filtered. `viewerId` (a signed-in student)
-   * gets their own application status folded in so the app can show "Applied" instead of "Apply". */
+   * gets their own application status folded in so the app can show "Applied" instead of "Apply".
+   * Currently-boosted listings (D-069) are surfaced separately, same pattern and same reasoning as
+   * ContractListingsService.browse(). */
   async browse(
     viewerId: string | undefined,
     filters: { categorySlug?: string; city?: string },
@@ -192,11 +205,29 @@ export class CampusListingsService {
           ],
         }
       : {};
+    const filterClauses: Prisma.CampusListingWhereInput[] = [
+      filters.categorySlug ? { category: { slug: filters.categorySlug } } : {},
+      filters.city ? { city: { equals: filters.city, mode: 'insensitive' as const } } : {},
+    ];
+    const boosted = !c
+      ? await this.prisma.campusListing.findMany({
+          where: {
+            AND: [
+              { status: 'OPEN' as const },
+              { boostedUntil: { gt: new Date() } },
+              ...filterClauses,
+            ],
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 5,
+          include,
+        })
+      : [];
     const where: Prisma.CampusListingWhereInput = {
       AND: [
         { status: 'OPEN' as const },
-        filters.categorySlug ? { category: { slug: filters.categorySlug } } : {},
-        filters.city ? { city: { equals: filters.city, mode: 'insensitive' as const } } : {},
+        { OR: [{ boostedUntil: null }, { boostedUntil: { lte: new Date() } }] },
+        ...filterClauses,
         after,
       ],
     };
@@ -207,15 +238,19 @@ export class CampusListingsService {
       include,
     });
     const page = toPage(rows, limit, (r) => ({ k: r.createdAt.toISOString(), id: r.id }));
+    const allRows = [...boosted, ...page.items];
     let statusByListing = new Map<string, ContractApplicationStatus>();
     if (viewerId) {
       const apps = await this.prisma.campusApplication.findMany({
-        where: { studentId: viewerId, listingId: { in: page.items.map((r) => r.id) } },
+        where: { studentId: viewerId, listingId: { in: allRows.map((r) => r.id) } },
         select: { listingId: true, status: true },
       });
       statusByListing = new Map(apps.map((a) => [a.listingId, a.status]));
     }
     return {
+      boosted: boosted.map((r) =>
+        toDto(r, { myApplicationStatus: statusByListing.get(r.id) ?? null }),
+      ),
       items: page.items.map((r) =>
         toDto(r, { myApplicationStatus: statusByListing.get(r.id) ?? null }),
       ),

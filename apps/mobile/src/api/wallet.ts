@@ -2,9 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import {
   type CreateTopupOrderInput,
   paymentOrderPageSchema,
+  paymentOrderStartSchema,
+  type PlusAudience,
+  plusMembershipSchema,
+  plusPlanSchema,
+  type SubscribePlusInput,
   tokenBundleSchema,
-  topupOrderSchema,
-  type VerifyTopupInput,
+  type VerifyPaymentOrderInput,
   walletSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
@@ -19,15 +23,29 @@ export const getOrders = (cursor?: string) =>
   });
 
 export const createTopupOrder = (input: CreateTopupOrderInput) =>
-  apiRequest('/v1/wallet/topup', { method: 'POST', body: input, schema: topupOrderSchema });
-export const verifyTopup = (orderId: string, input: VerifyTopupInput) =>
-  apiRequest(`/v1/wallet/topup/${orderId}/verify`, {
+  apiRequest('/v1/wallet/topup', { method: 'POST', body: input, schema: paymentOrderStartSchema });
+export const subscribePlus = (input: SubscribePlusInput) =>
+  apiRequest('/v1/wallet/plus/subscribe', {
     method: 'POST',
     body: input,
-    schema: walletSchema,
+    schema: paymentOrderStartSchema,
+  });
+export const verifyOrder = (orderId: string, input: VerifyPaymentOrderInput) =>
+  apiRequest(`/v1/wallet/orders/${orderId}/verify`, {
+    method: 'POST',
+    body: input,
+    schema: z.object({ ok: z.literal(true) }),
   });
 export const sandboxPay = (orderId: string) =>
-  apiRequest(`/v1/wallet/topup/${orderId}/sandbox-pay`, { method: 'POST', schema: walletSchema });
+  apiRequest(`/v1/wallet/orders/${orderId}/sandbox-pay`, {
+    method: 'POST',
+    schema: z.object({ ok: z.literal(true) }),
+  });
+
+export const getPlusPlans = (audience: PlusAudience) =>
+  apiRequest(`/v1/plus/plans?audience=${audience}`, { schema: z.array(plusPlanSchema) });
+export const getPlusMembership = () =>
+  apiRequest('/v1/plus/membership', { schema: plusMembershipSchema });
 
 export const walletKey = ['wallet'] as const;
 export function useWallet() {
@@ -38,4 +56,14 @@ export function useBundles() {
 }
 export function useOrders() {
   return useQuery({ queryKey: ['wallet', 'orders'], queryFn: () => getOrders() });
+}
+export function usePlusPlans(audience: PlusAudience) {
+  return useQuery({
+    queryKey: ['plus', 'plans', audience],
+    queryFn: () => getPlusPlans(audience),
+    staleTime: 5 * 60_000,
+  });
+}
+export function usePlusMembership() {
+  return useQuery({ queryKey: ['plus', 'membership'], queryFn: getPlusMembership });
 }
