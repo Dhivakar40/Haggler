@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { applyToContract, useContract, withdrawFromContract } from '../../api/contracts';
 import { Button, Card, ErrorState, LoadingState, Screen, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
@@ -46,6 +46,13 @@ export function ContractDetailScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function confirmWithdraw() {
+    Alert.alert(t('employer.withdrawConfirmTitle'), t('employer.withdrawConfirmBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('employer.withdraw'), style: 'destructive', onPress: () => void withdraw() },
+    ]);
   }
 
   if (listing.isLoading)
@@ -109,7 +116,7 @@ export function ContractDetailScreen() {
                 testID="withdraw-application"
                 variant="danger"
                 title={t('employer.withdraw')}
-                onPress={() => void withdraw()}
+                onPress={confirmWithdraw}
                 loading={busy}
               />
             ) : null}

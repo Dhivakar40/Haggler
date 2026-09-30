@@ -93,6 +93,7 @@ const kn: Translation = {
     read: 'ಓದಿ',
     agree: 'ಒಪ್ಪಿ ಮುಂದುವರಿಯಿರಿ',
     mustAgree: 'ಮುಂದುವರಿಯಲು ಎರಡಕ್ಕೂ ಒಪ್ಪಬೇಕು.',
+    signOutInstead: 'ಸಿದ್ಧವಿಲ್ಲವೇ? ಬದಲಿಗೆ ಸೈನ್ ಔಟ್ ಮಾಡಿ',
   },
   account: {
     title: 'ಖಾತೆ',
@@ -252,6 +253,7 @@ const kn: Translation = {
     where: 'ಎಲ್ಲಿ?',
     noAddress: 'ರೇಂಜರ್ ಎಲ್ಲಿಗೆ ಹೋಗಬೇಕೆಂದು ತಿಳಿಯಲು ಮೊದಲು ವಿಳಾಸ ಸೇರಿಸಿ.',
     addAddress: 'ವಿಳಾಸ ಸೇರಿಸಿ',
+    addAnotherAddress: 'ಬೇರೆ ವಿಳಾಸ ಬಳಸಿ',
     when: 'ಯಾವಾಗ?',
     now: 'ಈಗ',
     schedule: 'ಸಮಯ ನಿಗದಿ',
@@ -405,6 +407,9 @@ const kn: Translation = {
     counter: 'ಪ್ರತಿ ಪ್ರಸ್ತಾವ',
     accept: 'ಒಪ್ಪಿ',
     reject: 'ತಿರಸ್ಕರಿಸಿ',
+    rejectConfirmTitle: 'ಈ ಆಫರ್ ಅನ್ನು ತಿರಸ್ಕರಿಸುವುದೇ?',
+    rejectConfirmBody:
+      'ಇದು ಮಾತುಕತೆಯನ್ನು ಕೊನೆಗೊಳಿಸಿ ಕೆಲಸವನ್ನು ರದ್ದುಗೊಳಿಸುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.',
     round: 'ಸುತ್ತು {{n}} / 3',
     theyOffered: 'ನಿಮಗೆ {{amount}} ಪ್ರಸ್ತಾವ ಬಂದಿದೆ',
     youOffered: 'ನೀವು {{amount}} ಪ್ರಸ್ತಾಪಿಸಿದ್ದೀರಿ. ಉತ್ತರಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ…',
@@ -541,6 +546,9 @@ const kn: Translation = {
     coverNoteLabel: 'ಕವರ್ ಟಿಪ್ಪಣಿ (ಐಚ್ಛಿಕ)',
     apply: 'ಅರ್ಜಿ ಸಲ್ಲಿಸಿ',
     withdraw: 'ನನ್ನ ಅರ್ಜಿಯನ್ನು ಹಿಂಪಡೆಯಿರಿ',
+    withdrawConfirmTitle: 'ಈ ಅರ್ಜಿಯನ್ನು ಹಿಂಪಡೆಯುವುದೇ?',
+    withdrawConfirmBody:
+      'ಉದ್ಯೋಗದಾತರು ಇನ್ನು ಮುಂದೆ ನಿಮ್ಮನ್ನು ಅರ್ಜಿದಾರರಾಗಿ ನೋಡುವುದಿಲ್ಲ. ಸ್ಥಾನಗಳು ಉಳಿದಿದ್ದರೆ ನೀವು ನಂತರ ಮತ್ತೆ ಅರ್ಜಿ ಸಲ್ಲಿಸಬಹುದು.',
     yourApplicationStatus: 'ನಿಮ್ಮ ಅರ್ಜಿ: {{status}}',
     listingNotOpen: 'ಈ ಪಟ್ಟಿ ಇನ್ನು ಮುಂದೆ ಅರ್ಜಿಗಳನ್ನು ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ.',
     noListings: 'ನೀವು ಇನ್ನೂ ಯಾವುದೇ ಕೆಲಸವನ್ನು ಪೋಸ್ಟ್ ಮಾಡಿಲ್ಲ.',

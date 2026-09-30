@@ -1,8 +1,19 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Alert } from 'react-native';
 import i18n from '../../i18n';
 import { mockApi, renderWithProviders, signInAs } from '../../test-utils';
 import { ContractDetailScreen } from './ContractDetailScreen';
+
+/** Presses the button with this label in the most recent Alert.alert(...) call. */
+const pressAlertButton = (label: string) => {
+  const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
+    string,
+    string | undefined,
+    { text: string; onPress?: () => void }[],
+  ];
+  args[2].find((b) => b.text === label)?.onPress?.();
+};
 
 const LISTING_ID = 'aaaaaaaa-1111-4111-8111-111111111111';
 
@@ -33,6 +44,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   signInAs({ roles: ['CUSTOMER', 'WORKER'] });
   (useLocalSearchParams as jest.Mock).mockReturnValue({ id: LISTING_ID });
+  jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 });
 
 describe('ContractDetailScreen', () => {
@@ -77,25 +89,6 @@ describe('ContractDetailScreen', () => {
     expect(applyCall?.body).toEqual({ coverNote: 'I can start Monday.' });
   });
 
-  it('an applied worker can withdraw', async () => {
-    let withdrawn = false;
-    mockApi((c) => {
-      if (c.method === 'DELETE' && c.path === `/v1/contracts/${LISTING_ID}/apply`) {
-        withdrawn = true;
-        return { body: { ok: true } };
-      }
-      if (c.path === `/v1/contracts/${LISTING_ID}`)
-        return {
-          body: listing({ myApplicationStatus: withdrawn ? 'WITHDRAWN' : 'APPLIED' }),
-        };
-      return undefined;
-    });
-    await renderWithProviders(<ContractDetailScreen />);
-    await waitFor(() => expect(screen.getByTestId('withdraw-application')).toBeTruthy());
-    fireEvent.press(screen.getByTestId('withdraw-application'));
-    await waitFor(() => expect(screen.queryByTestId('withdraw-application')).toBeNull());
-  });
-
   it('a hired application cannot be withdrawn (no withdraw button shown)', async () => {
     mockApi((c) =>
       c.path === `/v1/contracts/${LISTING_ID}`
@@ -116,5 +109,30 @@ describe('ContractDetailScreen', () => {
     await renderWithProviders(<ContractDetailScreen />);
     await waitFor(() => expect(screen.getByText(/no longer accepting applications/)).toBeTruthy());
     expect(screen.queryByTestId('apply-to-contract')).toBeNull();
+  });
+
+  // Mutation test kept last in the file: a mutating test (fires an async state-changing
+  // interaction) followed by more tests in the same file can leave a corrupted render tree for
+  // the tests after it under RNTL — an established convention in this codebase, see the other
+  // *Screen.spec.tsx files.
+  it('an applied worker can withdraw', async () => {
+    let withdrawn = false;
+    mockApi((c) => {
+      if (c.method === 'DELETE' && c.path === `/v1/contracts/${LISTING_ID}/apply`) {
+        withdrawn = true;
+        return { body: { ok: true } };
+      }
+      if (c.path === `/v1/contracts/${LISTING_ID}`)
+        return {
+          body: listing({ myApplicationStatus: withdrawn ? 'WITHDRAWN' : 'APPLIED' }),
+        };
+      return undefined;
+    });
+    await renderWithProviders(<ContractDetailScreen />);
+    await waitFor(() => expect(screen.getByTestId('withdraw-application')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('withdraw-application'));
+    expect(Alert.alert).toHaveBeenCalled();
+    await act(async () => pressAlertButton('Withdraw my application'));
+    await waitFor(() => expect(screen.queryByTestId('withdraw-application')).toBeNull());
   });
 });

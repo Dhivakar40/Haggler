@@ -47,6 +47,17 @@ export function NegotiationPanel({ job, action }: { job: JobDto; action: Action 
     );
   }
 
+  function confirmReject() {
+    Alert.alert(t('job.rejectConfirmTitle'), t('job.rejectConfirmBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('job.reject'),
+        style: 'destructive',
+        onPress: () => void action.run('reject', () => rejectOffer(pending!.id)),
+      },
+    ]);
+  }
+
   function send(kind: 'offer' | 'counter') {
     const paise = parseRupeesToPaise(amount);
     if (paise === null || paise < 100) return setInvalid(true);
@@ -127,7 +138,7 @@ export function NegotiationPanel({ job, action }: { job: JobDto; action: Action 
                 variant="danger"
                 title={t('job.reject')}
                 loading={action.busy === 'reject'}
-                onPress={() => void action.run('reject', () => rejectOffer(pending.id))}
+                onPress={confirmReject}
               />
             </View>
             {job.offers.length < MAX_NEGOTIATION_ROUNDS ? (

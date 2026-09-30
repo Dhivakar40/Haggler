@@ -87,6 +87,7 @@ const hi: Translation = {
     read: 'पढ़ें',
     agree: 'सहमत हूँ, आगे बढ़ें',
     mustAgree: 'आगे बढ़ने के लिए दोनों से सहमत होना ज़रूरी है।',
+    signOutInstead: 'तैयार नहीं हैं? इसके बजाय साइन आउट करें',
   },
   account: {
     title: 'खाता',
@@ -245,6 +246,7 @@ const hi: Translation = {
     where: 'कहाँ?',
     noAddress: 'पहले पता जोड़ें ताकि रेंजर को पता चले कि कहाँ जाना है।',
     addAddress: 'पता जोड़ें',
+    addAnotherAddress: 'दूसरा पता इस्तेमाल करें',
     when: 'कब?',
     now: 'अभी',
     schedule: 'समय तय करें',
@@ -397,6 +399,9 @@ const hi: Translation = {
     counter: 'जवाबी प्रस्ताव',
     accept: 'स्वीकार करें',
     reject: 'अस्वीकार करें',
+    rejectConfirmTitle: 'यह प्रस्ताव अस्वीकार करें?',
+    rejectConfirmBody:
+      'इससे बातचीत समाप्त हो जाएगी और काम रद्द हो जाएगा। इसे वापस नहीं लिया जा सकता।',
     round: 'दौर {{n}} / 3',
     theyOffered: 'आपको {{amount}} का प्रस्ताव मिला',
     youOffered: 'आपने {{amount}} का प्रस्ताव दिया। जवाब का इंतज़ार…',
@@ -531,6 +536,9 @@ const hi: Translation = {
     coverNoteLabel: 'कवर नोट (वैकल्पिक)',
     apply: 'आवेदन करें',
     withdraw: 'मेरा आवेदन वापस लें',
+    withdrawConfirmTitle: 'यह आवेदन वापस लें?',
+    withdrawConfirmBody:
+      'नियोक्ता अब आपको आवेदक के रूप में नहीं देखेगा। यदि जगह खाली रहती है तो आप बाद में फिर आवेदन कर सकते हैं।',
     yourApplicationStatus: 'आपका आवेदन: {{status}}',
     listingNotOpen: 'यह लिस्टिंग अब आवेदन स्वीकार नहीं कर रही है।',
     noListings: 'आपने अभी तक कोई नौकरी पोस्ट नहीं की है।',

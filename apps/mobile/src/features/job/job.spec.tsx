@@ -288,6 +288,8 @@ describe('JobScreen: negotiation', () => {
     );
     await renderWithProviders(<JobScreen />);
     await fireEvent.press(await screen.findByTestId('reject-offer'));
+    expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe('Reject this offer?');
+    await act(async () => pressAlertButton('Reject'));
     expect(await screen.findByText('Cancelled')).toBeTruthy();
     expect(post(calls, `/v1/offers/${OFFER_ID}/reject`)).toBeTruthy();
   });

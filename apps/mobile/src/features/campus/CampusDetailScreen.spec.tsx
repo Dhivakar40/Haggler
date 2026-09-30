@@ -1,8 +1,19 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Alert } from 'react-native';
 import i18n from '../../i18n';
 import { mockApi, renderWithProviders, signInAs } from '../../test-utils';
 import { CampusDetailScreen } from './CampusDetailScreen';
+
+/** Presses the button with this label in the most recent Alert.alert(...) call. */
+const pressAlertButton = (label: string) => {
+  const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
+    string,
+    string | undefined,
+    { text: string; onPress?: () => void }[],
+  ];
+  args[2].find((b) => b.text === label)?.onPress?.();
+};
 
 const LISTING_ID = 'aaaaaaaa-1111-4111-8111-111111111111';
 
@@ -33,6 +44,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   signInAs({ roles: ['CUSTOMER', 'STUDENT'] });
   (useLocalSearchParams as jest.Mock).mockReturnValue({ id: LISTING_ID });
+  jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 });
 
 describe('CampusDetailScreen', () => {
@@ -108,6 +120,8 @@ describe('CampusDetailScreen', () => {
     await renderWithProviders(<CampusDetailScreen />);
     await waitFor(() => expect(screen.getByTestId('withdraw-campus-application')).toBeTruthy());
     fireEvent.press(screen.getByTestId('withdraw-campus-application'));
+    expect(Alert.alert).toHaveBeenCalled();
+    await act(async () => pressAlertButton('Withdraw my application'));
     await waitFor(() => expect(screen.queryByTestId('withdraw-campus-application')).toBeNull());
   });
 });

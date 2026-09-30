@@ -15,6 +15,7 @@ export function ConsentScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const refreshMe = useSession((s) => s.refreshMe);
+  const signOut = useSession((s) => s.signOut);
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [error, setError] = useState<string>();
@@ -76,6 +77,13 @@ export function ConsentScreen() {
         title={t('consent.agree')}
         onPress={() => void agree()}
         loading={busy}
+      />
+      <Button
+        testID="consent-sign-out"
+        variant="secondary"
+        title={t('consent.signOutInstead')}
+        onPress={() => void signOut()}
+        disabled={busy}
       />
     </Screen>
   );

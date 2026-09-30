@@ -154,15 +154,7 @@ export function NewRequestScreen() {
       <View style={{ gap: spacing.sm }}>
         <Text variant="heading">{t('request.where')}</Text>
         {list.length === 0 ? (
-          <>
-            <Text color="textMuted">{t('request.noAddress')}</Text>
-            <Button
-              testID="add-address"
-              variant="secondary"
-              title={t('request.addAddress')}
-              onPress={() => router.push('/address-new')}
-            />
-          </>
+          <Text color="textMuted">{t('request.noAddress')}</Text>
         ) : (
           list.map((a) => (
             <Chip
@@ -174,6 +166,12 @@ export function NewRequestScreen() {
             />
           ))
         )}
+        <Button
+          testID="add-address"
+          variant="secondary"
+          title={list.length === 0 ? t('request.addAddress') : t('request.addAnotherAddress')}
+          onPress={() => router.push('/address-new')}
+        />
       </View>
 
       <View style={{ gap: spacing.sm }}>
