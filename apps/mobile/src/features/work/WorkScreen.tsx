@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { IncomingRequest } from '@haggler/shared';
 import {
   acceptRequest,
@@ -15,16 +15,25 @@ import {
   usePresence,
 } from '../../api/market';
 import { useSession } from '../../auth/session';
-import { Button, Card, Countdown, EmptyState, Screen, Text } from '../../components';
+import { Button, Countdown, EmptyState, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { isActive } from '../../lib/job-status';
 import { formatRupees } from '../../lib/money';
 import { ensureForegroundPermission } from '../../location/tracker';
+import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
+import { draftDarkColors, draftElevated, draftLightColors } from '../../theme/tokens.draft';
 
 const distanceLabel = (m: number): string =>
   m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
 
+/**
+ * DRAFT redesign (Part 2 checkpoint): an incoming request is the single most time-pressured
+ * surface a Ranger sees — a countdown, real money, a decision in seconds — so it's the clearest
+ * case for the elevation policy in tokens.draft.ts: genuinely raised above the page, unlike the
+ * flat presence-toggle control below it. Functionally unchanged from the live WorkScreen (same
+ * props, same testIDs, same accept/decline calls).
+ */
 function IncomingCard({
   item,
   onAccept,
@@ -37,19 +46,30 @@ function IncomingCard({
   busy: boolean;
 }) {
   const { t } = useTranslation();
+  const { scheme } = useTheme();
+  const c = scheme === 'dark' ? draftDarkColors : draftLightColors;
   return (
-    <Card testID={`incoming-${item.requestId}`}>
+    <View
+      testID={`incoming-${item.requestId}`}
+      style={[
+        styles.elevatedCard,
+        { backgroundColor: c.surface, borderColor: c.warning },
+        draftElevated,
+      ]}
+    >
       <View style={{ gap: spacing.sm }}>
-        <Text variant="heading">{t(`categories.${item.categorySlug}`)}</Text>
-        <Text>{item.description}</Text>
-        <Text color="textMuted">
+        <Text variant="heading" style={{ color: c.text }}>
+          {t(`categories.${item.categorySlug}`)}
+        </Text>
+        <Text style={{ color: c.text }}>{item.description}</Text>
+        <Text style={{ color: c.textMuted }}>
           {t('work.away', { distance: distanceLabel(item.distanceM) })} · {item.city} {item.pincode}
         </Text>
-        <Text testID={`band-${item.requestId}`} color="textMuted">
+        <Text testID={`band-${item.requestId}`} style={{ color: c.textMuted }}>
           {formatRupees(item.band.minPaise)} – {formatRupees(item.band.maxPaise)}
         </Text>
         {item.photoCount > 0 || item.hasVoiceNote ? (
-          <Text color="textMuted">
+          <Text style={{ color: c.textMuted }}>
             {[
               item.photoCount > 0 ? t('work.photos', { count: item.photoCount }) : null,
               item.hasVoiceNote ? t('work.voiceNote') : null,
@@ -59,7 +79,7 @@ function IncomingCard({
           </Text>
         ) : null}
         {item.scheduledFor ? (
-          <Text color="textMuted">
+          <Text style={{ color: c.textMuted }}>
             {t('work.scheduledFor', { when: new Date(item.scheduledFor).toLocaleString() })}
           </Text>
         ) : null}
@@ -80,7 +100,7 @@ function IncomingCard({
           />
         </View>
       </View>
-    </Card>
+    </View>
   );
 }
 
@@ -88,6 +108,8 @@ function IncomingCard({
 export function WorkScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { scheme } = useTheme();
+  const c = scheme === 'dark' ? draftDarkColors : draftLightColors;
   const qc = useQueryClient();
   const tier = useSession((s) => s.user?.workerKycTier ?? 0);
   const presence = usePresence(true);
@@ -166,11 +188,20 @@ export function WorkScreen() {
   }
 
   return (
-    <Screen scroll>
-      <Text variant="title">{t('work.title')}</Text>
-      <Card>
+    <Screen scroll style={{ backgroundColor: c.background }}>
+      <Text variant="title" style={{ color: c.text }}>
+        {t('work.title')}
+      </Text>
+      {/* A flat, bordered control — not elevated. Going online/offline is a standing status, not
+          a decision the page is asking the Ranger to make right now, so it stays flat per the
+          elevation policy (see IncomingCard below for the contrast). */}
+      <View style={[styles.flatCard, { backgroundColor: c.surface, borderColor: c.border }]}>
         <View style={{ gap: spacing.sm }}>
-          <Text variant="heading" testID="presence-label" color={online ? 'success' : 'textMuted'}>
+          <Text
+            variant="heading"
+            testID="presence-label"
+            style={{ color: online ? c.success : c.textMuted }}
+          >
             {online ? t('work.online') : t('work.offline')}
           </Text>
           <Button
@@ -181,24 +212,33 @@ export function WorkScreen() {
             loading={toggling}
           />
           {online ? (
-            <Text variant="caption" color="textMuted">
+            <Text variant="caption" style={{ color: c.textMuted }}>
               {t('work.keepOpen')}
             </Text>
           ) : null}
         </View>
-      </Card>
+      </View>
 
       {error ? (
-        <Text color="danger" accessibilityRole="alert" testID="work-error">
+        <Text style={{ color: c.danger }} accessibilityRole="alert" testID="work-error">
           {error}
         </Text>
       ) : null}
 
       {activeJob ? (
-        <Card testID="active-job">
+        <View
+          testID="active-job"
+          style={[
+            styles.elevatedCard,
+            { backgroundColor: c.surface, borderColor: c.primary },
+            draftElevated,
+          ]}
+        >
           <View style={{ gap: spacing.sm }}>
-            <Text variant="heading">{t('work.activeJob')}</Text>
-            <Text color="textMuted">
+            <Text variant="heading" style={{ color: c.text }}>
+              {t('work.activeJob')}
+            </Text>
+            <Text style={{ color: c.textMuted }}>
               {t(`categories.${activeJob.categorySlug}`)} · {t(`job.status.${activeJob.status}`)}
             </Text>
             <Button
@@ -207,12 +247,14 @@ export function WorkScreen() {
               onPress={() => router.push({ pathname: '/job/[id]', params: { id: activeJob.id } })}
             />
           </View>
-        </Card>
+        </View>
       ) : null}
 
       {online && !activeJob ? (
         <View style={{ gap: spacing.md }}>
-          <Text variant="heading">{t('work.incoming')}</Text>
+          <Text variant="heading" style={{ color: c.text }}>
+            {t('work.incoming')}
+          </Text>
           {incoming.data && incoming.data.length === 0 ? (
             <EmptyState message={t('work.waiting')} />
           ) : null}
@@ -230,3 +272,8 @@ export function WorkScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  flatCard: { borderRadius: 12, borderWidth: 1, padding: spacing.lg },
+  elevatedCard: { borderRadius: 12, borderWidth: 1, padding: spacing.lg },
+});

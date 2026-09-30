@@ -3,14 +3,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { type CreateRequestInput, MAX_REQUEST_PHOTOS } from '@haggler/shared';
 import { listAddresses } from '../../api/endpoints';
 import { createRequest, getPriceBand } from '../../api/market';
-import { Button, Card, Chip, LoadingState, Screen, Text, TextField } from '../../components';
+import { Button, Chip, LoadingState, Screen, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
+import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
+import { draftDarkColors, draftElevated, draftLightColors } from '../../theme/tokens.draft';
 import { VoiceNoteRecorder, type VoiceNote } from '../media/VoiceNoteRecorder';
 import { uploadRequestMedia } from '../media/upload';
 
@@ -37,6 +40,8 @@ export function scheduledIso(when: When, now = new Date()): string | undefined {
 export function NewRequestScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { scheme } = useTheme();
+  const c = scheme === 'dark' ? draftDarkColors : draftLightColors;
   const { category = 'electrician' } = useLocalSearchParams<{ category: string }>();
   const addresses = useQuery({ queryKey: ['addresses'], queryFn: listAddresses });
 
@@ -136,8 +141,10 @@ export function NewRequestScreen() {
     );
 
   return (
-    <Screen scroll>
-      <Text variant="title">{t(`categories.${category}`)}</Text>
+    <Screen scroll style={{ backgroundColor: c.background }}>
+      <Text variant="title" style={{ color: c.text }}>
+        {t(`categories.${category}`)}
+      </Text>
 
       <TextField
         testID="description"
@@ -151,27 +158,57 @@ export function NewRequestScreen() {
         {t('request.describeHint')}
       </Text>
 
-      <View style={{ gap: spacing.sm }}>
-        <Text variant="heading">{t('request.where')}</Text>
+      {/* DRAFT redesign (Part 2 checkpoint): a flat, hairline-divided list instead of Chips — the
+          same "booking-history row" treatment the layout principles call for, applied here to fix
+          the address bug visibly (every address is a plain, always-tappable row; "Use a different
+          address" is its own row, never hidden). No card, no shadow: choosing an address isn't the
+          urgent moment on this screen, the price confirmation below is. */}
+      <View style={[styles.listGroup, { borderColor: c.border }]}>
+        <Text variant="heading" style={{ color: c.text, marginBottom: spacing.sm }}>
+          {t('request.where')}
+        </Text>
         {list.length === 0 ? (
-          <Text color="textMuted">{t('request.noAddress')}</Text>
+          <Text style={{ color: c.textMuted }}>{t('request.noAddress')}</Text>
         ) : (
           list.map((a) => (
-            <Chip
+            <Pressable
               key={a.id}
               testID={`address-${a.label}`}
-              label={`${a.label}: ${a.line1}`}
-              selected={selected?.id === a.id}
+              accessibilityRole="radio"
+              accessibilityLabel={`${a.label}: ${a.line1}`}
+              accessibilityState={{ selected: selected?.id === a.id }}
               onPress={() => setAddressId(a.id)}
-            />
+              style={({ pressed }) => [
+                styles.listRow,
+                { borderColor: c.border },
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              <Ionicons
+                name={selected?.id === a.id ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={selected?.id === a.id ? c.primary : c.textMuted}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: c.text, fontWeight: '600' }}>{a.label}</Text>
+                <Text variant="caption" style={{ color: c.textMuted }}>
+                  {a.line1}
+                </Text>
+              </View>
+            </Pressable>
           ))
         )}
-        <Button
+        <Pressable
           testID="add-address"
-          variant="secondary"
-          title={list.length === 0 ? t('request.addAddress') : t('request.addAnotherAddress')}
+          accessibilityRole="button"
           onPress={() => router.push('/address-new')}
-        />
+          style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.6 }]}
+        >
+          <Ionicons name="add-circle-outline" size={20} color={c.primary} />
+          <Text style={{ color: c.primary, fontWeight: '600' }}>
+            {list.length === 0 ? t('request.addAddress') : t('request.addAnotherAddress')}
+          </Text>
+        </Pressable>
       </View>
 
       <View style={{ gap: spacing.sm }}>
@@ -261,28 +298,39 @@ export function NewRequestScreen() {
       </View>
 
       {band.data ? (
-        <Card testID="price-band">
+        // The one elevated surface on this screen: this is the price the customer is about to
+        // commit to. Everything else here is flat by the elevation policy in tokens.draft.ts.
+        <View
+          testID="price-band"
+          style={[
+            styles.elevatedCard,
+            { backgroundColor: c.surface, borderColor: c.primary },
+            draftElevated,
+          ]}
+        >
           <View style={{ gap: spacing.xs }}>
-            <Text variant="heading">{t('request.priceTitle')}</Text>
-            <Text testID="price-range">
+            <Text variant="heading" style={{ color: c.text }}>
+              {t('request.priceTitle')}
+            </Text>
+            <Text testID="price-range" style={{ color: c.text }}>
               {t('request.priceRange', {
                 min: formatRupees(band.data.minPaise),
                 max: formatRupees(band.data.maxPaise),
               })}
             </Text>
-            <Text color="textMuted">
+            <Text style={{ color: c.textMuted }}>
               {t('request.priceTypical', { median: formatRupees(band.data.medianPaise) })}
             </Text>
             {band.data.isSeededDefault ? (
-              <Text variant="caption" color="warning">
+              <Text variant="caption" style={{ color: c.warning }}>
                 {t('request.priceEstimate')}
               </Text>
             ) : null}
-            <Text variant="caption" color="textMuted">
+            <Text variant="caption" style={{ color: c.textMuted }}>
               {t('request.priceNote')}
             </Text>
           </View>
-        </Card>
+        </View>
       ) : null}
 
       {error ? (
@@ -299,3 +347,16 @@ export function NewRequestScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  listGroup: { borderTopWidth: 1 },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    minHeight: 48,
+  },
+  elevatedCard: { borderRadius: 12, borderWidth: 1, padding: spacing.lg },
+});
