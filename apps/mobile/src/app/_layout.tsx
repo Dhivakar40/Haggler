@@ -54,10 +54,17 @@ function Navigator() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const status = useSession((s) => s.status);
-  const missing = useSession((s) => s.user?.missingConsents ?? []);
+  // Select booleans, not `s.user?.missingConsents ?? []` — that `?? []` allocates a new array
+  // reference on every call, so useSyncExternalStore's getSnapshot never sees a stable value and
+  // re-renders in an infinite loop ("The result of getSnapshot should be cached").
+  const missingTerms = useSession(
+    (s) => s.user?.missingConsents.includes('TERMS_OF_SERVICE') ?? false,
+  );
+  const missingPrivacy = useSession(
+    (s) => s.user?.missingConsents.includes('PRIVACY_POLICY') ?? false,
+  );
   const signedIn = status === 'signedIn';
-  const needsConsent =
-    signedIn && (missing.includes('TERMS_OF_SERVICE') || missing.includes('PRIVACY_POLICY'));
+  const needsConsent = signedIn && (missingTerms || missingPrivacy);
   const header = {
     headerShown: true,
     headerStyle: { backgroundColor: colors.surface },
