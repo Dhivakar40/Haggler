@@ -78,11 +78,6 @@ function Navigator() {
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
 
-      <Stack.Protected guard={signedIn}>
-        <Stack.Screen name="legal/index" options={{ ...header, title: t('legal.title') }} />
-        <Stack.Screen name="legal/[doc]" options={{ ...header, title: t('legal.title') }} />
-      </Stack.Protected>
-
       <Stack.Protected guard={needsConsent}>
         <Stack.Screen name="consent" />
       </Stack.Protected>
@@ -162,6 +157,19 @@ function Navigator() {
           name="employer/campus/[id]"
           options={{ ...header, title: t('employer.applicantsTitle') }}
         />
+      </Stack.Protected>
+
+      {/* Declared last (not first): with no app/index.tsx, Expo Router falls back to the FIRST
+          Stack.Protected screen whose guard passes when it has nothing else to resolve "/" to. A
+          signed-in user mid-consent satisfies this block's guard (signedIn) before satisfying the
+          main app block's guard (signedIn && !needsConsent), so if this were declared first, every
+          signed-in-but-not-yet-consented user would land here by default instead of on /consent —
+          the app then genuinely has no way to reach /consent (legal/index shows no way back, since
+          it would be the stack's root with nothing behind it). Consent's own "Read" buttons still
+          reach these screens fine via router.push(), regardless of declaration order here. */}
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="legal/index" options={{ ...header, title: t('legal.title') }} />
+        <Stack.Screen name="legal/[doc]" options={{ ...header, title: t('legal.title') }} />
       </Stack.Protected>
     </Stack>
   );
