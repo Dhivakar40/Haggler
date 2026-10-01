@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "__REPLACE_WITH_HOSTED_API_URL__"
+        "EXPO_PUBLIC_API_URL": "https://haggler.onrender.com"
       }
     }
   }
