@@ -176,13 +176,13 @@ sandbox adapters stay on here; this is explicitly a testing environment.
 **Stack** (confirmed against each provider's free-tier terms as of Oct 2026 — re-check before
 relying on this long-term, free tiers change):
 
-| Service               | Provider                                               | Why                                                                                                                                                                                                                                                                                |
-| --------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Postgres + PostGIS    | [Supabase](https://supabase.com) free tier             | 500 MB DB storage, PostGIS is a standard enable-from-dashboard extension. **Auto-pauses after 7 days with zero activity** — needs a manual "restore" click in the dashboard if that happens.                                                                                       |
-| Redis                 | [Upstash](https://upstash.com) free tier               | 500K commands/mo, 256 MB, standard Redis protocol (TLS, `rediss://`) — not REST-only, so ioredis/BullMQ work unmodified (see the `tls:` fix in `queues.service.ts`, D-074).                                                                                                        |
-| S3-compatible storage | [Cloudflare R2](https://dash.cloudflare.com) free tier | 10 GB storage, **free egress** (no bandwidth bill), S3-compatible API. `StorageService` already builds presigned URLs against `S3_PUBLIC_ENDPOINT` separately from the internal endpoint (built for a LAN IP originally) — for R2 both are simply the same public R2 API endpoint. |
-| API hosting (NestJS)  | [Render](https://render.com) free web service          | Always-on-ish; **spins down after 15 min idle, ~30-60s cold start** on the next request. Accepted tradeoff for a free, zero-maintenance host — teammates just see one slow request after an idle period.                                                                           |
-| Android build         | [EAS Build](https://expo.dev) free tier                | 15 Android builds/month, cloud-built, no local Android SDK needed.                                                                                                                                                                                                                 |
+| Service               | Provider                                                          | Why                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Postgres + PostGIS    | [Supabase](https://supabase.com) free tier                        | 500 MB DB storage, PostGIS is a standard enable-from-dashboard extension. **Auto-pauses after 7 days with zero activity** — needs a manual "restore" click in the dashboard if that happens.                                                                                                                                                                                                                                                    |
+| Redis                 | [Upstash](https://upstash.com) free tier                          | 500K commands/mo, 256 MB, standard Redis protocol (TLS, `rediss://`) — not REST-only, so ioredis/BullMQ work unmodified (see the `tls:` fix in `queues.service.ts`, D-074).                                                                                                                                                                                                                                                                     |
+| S3-compatible storage | [Backblaze B2](https://www.backblaze.com/cloud-storage) free tier | 10 GB storage, no card required to sign up (Cloudflare R2 was the original pick, but R2 requires billing details on file even at $0 due — switched to avoid that). Mature S3-compatible API, well-exercised with presigned URLs. `StorageService` already builds presigned URLs against `S3_PUBLIC_ENDPOINT` separately from the internal endpoint (built for a LAN IP originally) — for B2 both are simply the same public B2 S3 API endpoint. |
+| API hosting (NestJS)  | [Render](https://render.com) free web service                     | Always-on-ish; **spins down after 15 min idle, ~30-60s cold start** on the next request. Accepted tradeoff for a free, zero-maintenance host — teammates just see one slow request after an idle period.                                                                                                                                                                                                                                        |
+| Android build         | [EAS Build](https://expo.dev) free tier                           | 15 Android builds/month, cloud-built, no local Android SDK needed.                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### One-time setup (you — these all need interactive signup I can't do)
 
@@ -191,10 +191,11 @@ relying on this long-term, free tiers change):
    use the **pooler/transaction** connection string if offered, port 6543) → that's `DATABASE_URL`.
 2. **Upstash**: create a Redis database (any region close to Render's) → copy the `rediss://`
    connection string from the dashboard → that's `REDIS_URL`.
-3. **Cloudflare R2**: create an account → R2 → create two buckets (`haggler-media`, `haggler-kyc`,
-   or your own names) → Manage R2 API Tokens → create a token with read+write on both buckets →
-   copy the Account ID, Access Key ID, and Secret Access Key. The S3 endpoint is
-   `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
+3. **Backblaze B2**: create an account (no card) → create two buckets (`haggler-media`,
+   `haggler-kyc`, or your own names — note the **region** shown, e.g. `us-west-004`) → Application
+   Keys → "Add a New Application Key" (NOT the master key — the S3-compatible API refuses that) →
+   scope it to both buckets, read+write → copy the `keyID` (= access key) and `applicationKey`
+   (= secret key). The S3 endpoint is `https://s3.<region>.backblazeb2.com`.
 4. **Render**: create a free Web Service from this repo (root directory `apps/api`, build command
    `pnpm install --frozen-lockfile && pnpm build:shared && pnpm --filter @haggler/api build`, start
    command `pnpm --filter @haggler/api start:prod` or equivalent) → note the public URL
@@ -211,11 +212,11 @@ private — a `.env` file I can read works):
 ```
 DATABASE_URL=postgresql://...supabase.co:6543/postgres
 REDIS_URL=rediss://default:...@....upstash.io:6379
-S3_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-S3_PUBLIC_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-S3_ACCESS_KEY=...
-S3_SECRET_KEY=...
-S3_REGION=auto
+S3_ENDPOINT=https://s3.<region>.backblazeb2.com
+S3_PUBLIC_ENDPOINT=https://s3.<region>.backblazeb2.com
+S3_ACCESS_KEY=...   # the Application Key's keyID
+S3_SECRET_KEY=...   # the Application Key's applicationKey
+S3_REGION=<region>   # e.g. us-west-004 — B2 needs the real region, unlike R2's "auto"
 S3_FORCE_PATH_STYLE=true
 RENDER_API_URL=https://<name>.onrender.com   # once the Render service exists
 ```
