@@ -36,6 +36,11 @@ export class QueuesService implements OnModuleInit, OnModuleDestroy {
       port: Number(u.port || 6379),
       password: u.password || undefined,
       username: u.username || undefined,
+      // A hosted Redis (e.g. Upstash's standard protocol endpoint) uses rediss:// and refuses
+      // plaintext connections; ioredis's own `new Redis(url)` constructor auto-detects this from
+      // the scheme, but building ConnectionOptions by hand (required for BullMQ's
+      // maxRetriesPerRequest: null below) does not — so it has to be set explicitly here.
+      tls: u.protocol === 'rediss:' ? {} : undefined,
       maxRetriesPerRequest: null, // required by BullMQ workers (per-command retries, not reconnection)
       enableOfflineQueue: true,
       // Reconnection backoff, capped at ~6s total. Without a cap, ioredis's default retryStrategy

@@ -63,6 +63,14 @@ const envSchema = z
     S3_BUCKET_MEDIA: z.string().default('haggler-media'),
     S3_BUCKET_KYC: z.string().default('haggler-kyc'),
 
+    /** QA/testing builds only (D-074): when true, OTP verification also accepts a fixed
+     * "123456" code for ANY phone number, alongside the real sandbox/live flow. Never allowed
+     * when NODE_ENV=production (refused below, same pattern as the sandbox adapter modes). */
+    TESTING_MODE: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+
     SMS_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
     KYC_PROVIDER: z.literal('manual_admin').default('manual_admin'),
     PAYMENTS_MODE: z.enum(['sandbox', 'test']).default('sandbox'),
@@ -129,6 +137,14 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: [key],
           message: `${key}=sandbox is not allowed when NODE_ENV=production`,
+        });
+      }
+      // A fixed test OTP that works for any phone number must never exist in production (D-074).
+      if (env.TESTING_MODE) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['TESTING_MODE'],
+          message: 'TESTING_MODE=true is not allowed when NODE_ENV=production',
         });
       }
     }

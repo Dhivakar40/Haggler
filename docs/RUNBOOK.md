@@ -166,6 +166,74 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - The public Nominatim/OSM servers must not be used at scale. Use a hosted or self-hosted geocoder.
 - Sandbox adapters are refused when `NODE_ENV=production`; payments have no live mode (D-020).
 
+## Hosted testing deployment (teammate APK testing, D-074)
+
+A separate environment from "Production notes" above: this is a free-tier, always-on, publicly
+reachable deployment so teammates can install one APK and use the app end-to-end without a dev
+server, a LAN IP, or anyone's PC being on — not a production launch. `TESTING_MODE=true` and the
+sandbox adapters stay on here; this is explicitly a testing environment.
+
+**Stack** (confirmed against each provider's free-tier terms as of Oct 2026 — re-check before
+relying on this long-term, free tiers change):
+
+| Service               | Provider                                               | Why                                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Postgres + PostGIS    | [Supabase](https://supabase.com) free tier             | 500 MB DB storage, PostGIS is a standard enable-from-dashboard extension. **Auto-pauses after 7 days with zero activity** — needs a manual "restore" click in the dashboard if that happens.                                                                                       |
+| Redis                 | [Upstash](https://upstash.com) free tier               | 500K commands/mo, 256 MB, standard Redis protocol (TLS, `rediss://`) — not REST-only, so ioredis/BullMQ work unmodified (see the `tls:` fix in `queues.service.ts`, D-074).                                                                                                        |
+| S3-compatible storage | [Cloudflare R2](https://dash.cloudflare.com) free tier | 10 GB storage, **free egress** (no bandwidth bill), S3-compatible API. `StorageService` already builds presigned URLs against `S3_PUBLIC_ENDPOINT` separately from the internal endpoint (built for a LAN IP originally) — for R2 both are simply the same public R2 API endpoint. |
+| API hosting (NestJS)  | [Render](https://render.com) free web service          | Always-on-ish; **spins down after 15 min idle, ~30-60s cold start** on the next request. Accepted tradeoff for a free, zero-maintenance host — teammates just see one slow request after an idle period.                                                                           |
+| Android build         | [EAS Build](https://expo.dev) free tier                | 15 Android builds/month, cloud-built, no local Android SDK needed.                                                                                                                                                                                                                 |
+
+### One-time setup (you — these all need interactive signup I can't do)
+
+1. **Supabase**: create a project → Database → Extensions → enable `postgis` → Project Settings →
+   Database → copy the connection string (`postgresql://postgres:[password]@...supabase.co:5432/postgres`,
+   use the **pooler/transaction** connection string if offered, port 6543) → that's `DATABASE_URL`.
+2. **Upstash**: create a Redis database (any region close to Render's) → copy the `rediss://`
+   connection string from the dashboard → that's `REDIS_URL`.
+3. **Cloudflare R2**: create an account → R2 → create two buckets (`haggler-media`, `haggler-kyc`,
+   or your own names) → Manage R2 API Tokens → create a token with read+write on both buckets →
+   copy the Account ID, Access Key ID, and Secret Access Key. The S3 endpoint is
+   `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
+4. **Render**: create a free Web Service from this repo (root directory `apps/api`, build command
+   `pnpm install --frozen-lockfile && pnpm build:shared && pnpm --filter @haggler/api build`, start
+   command `pnpm --filter @haggler/api start:prod` or equivalent) → note the public URL
+   (`https://<name>.onrender.com`).
+5. **Expo/EAS**: create a free Expo account → run `eas login` once locally (or hand me an
+   `EXPO_TOKEN` from an access token in Expo account settings) → run `eas init` in `apps/mobile`
+   once to link the project (creates `expo.extra.eas.projectId` in `app.json`).
+
+### What to send back
+
+Once you have accounts 1-4, give me (as env vars, not pasted in chat if you'd rather keep them
+private — a `.env` file I can read works):
+
+```
+DATABASE_URL=postgresql://...supabase.co:6543/postgres
+REDIS_URL=rediss://default:...@....upstash.io:6379
+S3_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+S3_PUBLIC_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+S3_REGION=auto
+S3_FORCE_PATH_STYLE=true
+RENDER_API_URL=https://<name>.onrender.com   # once the Render service exists
+```
+
+From there I'll run the migration + seed against Supabase, set Render's environment variables
+(including `TESTING_MODE=true`; `NODE_ENV` stays at its default, `development` — `env.ts` only
+has `development | test | production`, and `production` is what refuses `TESTING_MODE`/sandbox
+adapters, D-074 — a "hosted but still a test environment" deploy is `development` by this schema's
+own definition, not a new value), point `eas.json`'s `preview` profile's `EXPO_PUBLIC_API_URL` at
+the Render URL, and trigger `eas build --profile preview --platform android` from `apps/mobile`.
+
+### Redeploying after a code change
+
+Render redeploys automatically on a push to `main` (configure this in the Render dashboard's
+deploy settings). To rebuild the APK after a mobile-side change: `cd apps/mobile && eas build
+--profile preview --platform android` — a new download link appears in the terminal output and on
+the EAS dashboard (`expo.dev` → your project → Builds).
+
 ## Troubleshooting
 
 | Symptom                                                        | Cause / fix                                                                                     |

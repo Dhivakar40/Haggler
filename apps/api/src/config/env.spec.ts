@@ -79,4 +79,31 @@ describe('parseEnv', () => {
       /not allowed when NODE_ENV=production/,
     );
   });
+
+  it('TESTING_MODE defaults to false and is allowed outside production (D-074)', () => {
+    expect(parseEnv(baseEnv).TESTING_MODE).toBe(false);
+    expect(parseEnv({ ...baseEnv, TESTING_MODE: 'true' }).TESTING_MODE).toBe(true);
+  });
+
+  it('refuses TESTING_MODE=true in production (D-074)', () => {
+    const prodEnv = {
+      ...baseEnv,
+      NODE_ENV: 'production',
+      SMS_MODE: 'live',
+      MSG91_AUTH_KEY: 'k',
+      MSG91_TEMPLATE_ID: 't',
+      PUSH_MODE: 'live',
+      FCM_SERVICE_ACCOUNT_JSON: '{}',
+      MAPS_MODE: 'osm',
+      NOMINATIM_USER_AGENT: 'haggler/1.0',
+      PAYMENTS_MODE: 'test',
+      RAZORPAY_KEY_ID: 'rzp_test_abc',
+      RAZORPAY_KEY_SECRET: 's',
+      RAZORPAY_WEBHOOK_SECRET: 'w',
+    };
+    expect(() => parseEnv(prodEnv)).not.toThrow(); // sanity: this prod env is otherwise valid
+    expect(() => parseEnv({ ...prodEnv, TESTING_MODE: 'true' })).toThrow(
+      /TESTING_MODE=true is not allowed when NODE_ENV=production/,
+    );
+  });
 });

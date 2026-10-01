@@ -188,6 +188,31 @@ describe('OTP verify', () => {
   });
 });
 
+describe('TESTING_MODE: fixed OTP for QA builds (D-074)', () => {
+  it('accepts the fixed code for any phone number when TESTING_MODE=true', async () => {
+    const qaApp = await h.createApp({ TESTING_MODE: 'true' });
+    const qaApi = new Api(qaApp);
+    const phone = newPhone();
+    await qaApi.sendOtp(phone); // the real code is generated and ignored — never read it below
+    const res = await qaApi
+      .http()
+      .post('/v1/auth/otp/verify')
+      .send({ phone, code: '123456', deviceId: 'device-qa-1', platform: 'android' });
+    expect(res.status).toBe(200);
+    await qaApp.close();
+  });
+
+  it('the fixed code is still rejected when TESTING_MODE is unset (default)', async () => {
+    const phone = newPhone();
+    const res = await api
+      .http()
+      .post('/v1/auth/otp/verify')
+      .send({ phone, code: '123456', deviceId: 'device-no-qa-1', platform: 'android' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('OTP_INVALID');
+  });
+});
+
 describe('sessions: refresh rotation, device binding, logout', () => {
   const refresh = (s: { refreshToken: string; deviceId: string }, deviceId = s.deviceId) =>
     api

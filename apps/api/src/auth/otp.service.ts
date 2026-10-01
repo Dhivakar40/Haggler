@@ -19,6 +19,10 @@ import {
   OTP_TTL_SECONDS,
 } from './auth.constants';
 
+/** QA/testing builds only (D-074). Never matched unless TESTING_MODE=true, which env.ts refuses
+ * outright when NODE_ENV=production — see the superRefine there. */
+export const TESTING_MODE_FIXED_CODE = '123456';
+
 /** Zero-padded uniform random code. randomInt is cryptographically secure (not Math.random). */
 export function generateOtp(length = OTP_LENGTH): string {
   return String(randomInt(0, 10 ** length)).padStart(length, '0');
@@ -83,6 +87,14 @@ export class OtpService {
 
   /** Consumes the code on success. Throws OTP_INVALID for every failure (no hints for attackers). */
   async verify(phone: string, code: string): Promise<void> {
+    // QA/testing builds only (D-074): a fixed code that works for any phone number, so teammates
+    // testing a standalone APK don't need to read the real code off someone's server console. Only
+    // reachable when TESTING_MODE=true, which env.ts refuses outright in production — this branch
+    // is dead code there. Logged loudly every time it's used so it's never silently relied on.
+    if (this.env.env.TESTING_MODE && code === TESTING_MODE_FIXED_CODE) {
+      this.logger.warn(`TESTING_MODE: fixed OTP accepted for ${phone}`);
+      return;
+    }
     await this.assertNotLockedOut(phone);
     const now = new Date();
     const row = await this.prisma.otpAttempt.findFirst({

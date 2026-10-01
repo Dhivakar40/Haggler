@@ -28,6 +28,14 @@ async function bootstrap(): Promise<void> {
   logger.log(`Haggler API listening on :${env.PORT} (${env.NODE_ENV})`);
   // Say plainly which adapters are fake and which are real.
   logger.log({ adapters: adapterModes(env) }, 'Adapter modes');
+  // D-074: loud and impossible to miss in the boot log — a fixed OTP that works for any phone
+  // number is a real authentication bypass, even though it's refused outright in production.
+  if (env.TESTING_MODE) {
+    logger.warn(
+      'TESTING_MODE=true: OTP verification accepts a fixed test code for ANY phone number. ' +
+        'This must NEVER be set in production (env.ts refuses it).',
+    );
+  }
 }
 
 bootstrap().catch((err) => {

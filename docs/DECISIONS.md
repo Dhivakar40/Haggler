@@ -658,3 +658,18 @@ that this phase (e.g. no employer-side priority anything) — a known, disclosed
 Customer plan's priority-broadcast perk. No integration test drives an actual real-money Razorpay
 Checkout flow anywhere in this project (unchanged since Phase 3, D-043) — sandbox mode's real HMAC
 signing is the closest exercised approximation.
+
+## Teammate testing: hosted backend + a fixed QA OTP
+
+**D-074 TESTING_MODE: a fixed OTP, impossible to enable in production.** Teammates installing a
+standalone APK and testing against the hosted backend have no console to read a sandbox OTP off
+of (D-001's `[SANDBOX SMS] OTP for ...` log line only exists in a terminal only the deployer sees).
+`TESTING_MODE=true` makes `OtpService.verify()` accept a fixed code (`123456`) for **any** phone
+number, in addition to the real sandbox/live flow — same env-var-flag shape as `SMS_MODE`/
+`PAYMENTS_MODE`/etc., and refused outright by `env.ts`'s `superRefine` whenever
+`NODE_ENV=production`, the same mechanism that already refuses a sandbox adapter in production.
+Every use is logged loudly (`logger.warn`) rather than silently accepted, and the flag's state is
+printed at boot alongside the adapter-modes line so it's impossible to miss in server logs. This
+is a real authentication bypass by design — it must never reach a build anyone outside the test
+team can install, which is why it is gated identically to (and as strictly as) every other
+sandbox/fake adapter in this codebase, not a one-off.
