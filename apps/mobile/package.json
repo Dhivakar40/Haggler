@@ -51,7 +51,8 @@
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:unit": "jest"
+    "test:unit": "jest",
+    "eas-build-post-install": "cd ../.. && pnpm --filter @haggler/shared build"
   },
   "private": true
 }
