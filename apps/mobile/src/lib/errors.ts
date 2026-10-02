@@ -23,7 +23,10 @@ export function errorMessage(err: unknown, t: TFunction): string {
         return t('common.error');
     }
   }
-  // fetch() rejects with a TypeError when the phone is offline or the server is unreachable.
+  // fetch() rejects with a TypeError when the phone is offline or the server is unreachable, and
+  // with an AbortError (a DOMException) when our own request timeout fires, e.g. a slow cold
+  // start on a hosted free-tier backend. Both are connectivity issues, not app bugs.
   if (err instanceof TypeError) return t('states.error');
+  if (err instanceof Error && err.name === 'AbortError') return t('states.error');
   return t('common.error');
 }

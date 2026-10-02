@@ -51,7 +51,10 @@ export function configureAuth(next: AuthHooks | null): void {
   hooks = next;
 }
 
-const TIMEOUT_MS = 10_000;
+// A hosted free-tier backend (e.g. Render) can spin down after ~15 minutes idle and take up to a
+// minute to wake on the next request; 10s was tuned for a LAN dev server and aborts before that
+// cold start finishes, surfacing as a confusing generic error. Generous on purpose.
+const TIMEOUT_MS = 60_000;
 
 export interface RequestOptions<T> {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
