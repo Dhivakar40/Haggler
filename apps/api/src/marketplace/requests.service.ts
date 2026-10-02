@@ -125,36 +125,44 @@ export class RequestsService {
   // ---- create ------------------------------------------------------------------------------------
 
   async create(customerId: string, input: CreateRequestInput) {
-    const cfg = await this.cfg.get();
+    // These reads are all independent of one another (none needs another's result), so they go
+    // over the wire together instead of as separate round trips. Against a local dev database the
+    // difference is invisible; against a hosted one each round trip can be a meaningful fraction
+    // of a second, and this endpoint alone used to make about a dozen of them in sequence.
+    const [cfg, category, open, addr, media, isRush] = await Promise.all([
+      this.cfg.get(),
+      this.prisma.serviceCategory.findFirst({ where: { slug: input.categorySlug, isActive: true } }),
+      this.prisma.job.count({ where: { customerId, status: { in: OPEN_STATES } } }),
+      this.prisma.$queryRaw<
+        {
+          id: string;
+          line1: string;
+          line2: string | null;
+          city: string;
+          state: string;
+          pincode: string;
+          lat: number | null;
+          lng: number | null;
+        }[]
+      >`
+        SELECT id::text AS id, line1, line2, city, state, pincode, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+        FROM addresses WHERE id = ${input.addressId}::uuid AND user_id = ${customerId}::uuid`,
+      input.mediaIds.length
+        ? this.prisma.requestMedia.findMany({
+            where: { id: { in: input.mediaIds }, ownerId: customerId },
+          })
+        : Promise.resolve([]),
+      this.wallet.hasActivePlus(customerId),
+    ]);
 
-    const category = await this.prisma.serviceCategory.findFirst({
-      where: { slug: input.categorySlug, isActive: true },
-    });
     if (!category) throw notFound(`Unknown category "${input.categorySlug}"`);
 
-    const open = await this.prisma.job.count({
-      where: { customerId, status: { in: OPEN_STATES } },
-    });
     if (open >= cfg.max_open_jobs_per_customer)
       throw conflict(
         `You can have up to ${cfg.max_open_jobs_per_customer} open requests at a time.`,
         { code: 'TOO_MANY_OPEN' },
       );
 
-    const addr = await this.prisma.$queryRaw<
-      {
-        id: string;
-        line1: string;
-        line2: string | null;
-        city: string;
-        state: string;
-        pincode: string;
-        lat: number | null;
-        lng: number | null;
-      }[]
-    >`
-      SELECT id::text AS id, line1, line2, city, state, pincode, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
-      FROM addresses WHERE id = ${input.addressId}::uuid AND user_id = ${customerId}::uuid`;
     const a = addr[0];
     if (!a) throw notFound('Address not found');
     if (a.lat === null || a.lng === null || !isInIndia(a.lat, a.lng))
@@ -171,11 +179,6 @@ export class RequestsService {
       if (mins > 14 * 24 * 60) throw unprocessable('You can schedule up to 14 days ahead.');
     }
 
-    const media = input.mediaIds.length
-      ? await this.prisma.requestMedia.findMany({
-          where: { id: { in: input.mediaIds }, ownerId: customerId },
-        })
-      : [];
     if (media.length !== input.mediaIds.length) throw notFound('Some attachments were not found');
     if (media.some((m) => m.status !== 'UPLOADED' || m.requestId))
       throw unprocessable('Some attachments are not uploaded or are already used.');
@@ -192,8 +195,8 @@ export class RequestsService {
     // Phase 9 (D-069): an active Haggler Plus membership gets priority broadcast for free, on every
     // request, via the exact same isRush mechanism a one-off paid Rush fee uses (see rush() below
     // and MatchingService.advance()) — snapshotted at creation so a mid-broadcast membership expiry
-    // never retroactively demotes a request already in flight.
-    const isRush = await this.wallet.hasActivePlus(customerId);
+    // never retroactively demotes a request already in flight. (Fetched up front, in parallel with
+    // the other independent reads above.)
 
     const { requestId, jobId } = await this.prisma.$transaction(async (tx) => {
       const id = randomUUID();
