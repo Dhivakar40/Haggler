@@ -17,6 +17,7 @@ import {
   CONSENT_PURPOSES,
   consentInputSchema,
   emergencyContactInputSchema,
+  onboardingInputSchema,
   profileUpdateSchema,
   registerPushTokenSchema,
 } from '@haggler/shared';
@@ -47,8 +48,22 @@ export class UsersController {
     return this.users.getMe(user.id);
   }
 
+  @Post('onboarding')
+  @ApiOperation({
+    summary:
+      'The mandatory first-sign-in setup (name, date of birth, gender, email). One-time; ' +
+      'refuses once already complete — use PATCH /me afterward.',
+  })
+  @ApiZodBody(onboardingInputSchema)
+  onboarding(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodPipe(onboardingInputSchema)) body: z.infer<typeof onboardingInputSchema>,
+  ) {
+    return this.users.completeOnboarding(user.id, body);
+  }
+
   @Patch()
-  @ApiOperation({ summary: 'Update my name and languages' })
+  @ApiOperation({ summary: 'Update my profile (name, email, date of birth, gender, languages)' })
   @ApiZodBody(profileUpdateSchema)
   update(
     @CurrentUser() user: AuthUser,

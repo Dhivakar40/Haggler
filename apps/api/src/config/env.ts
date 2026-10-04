@@ -22,7 +22,11 @@ const envSchema = z
     ADMIN_JWT_SECRET: z.string().min(32, 'ADMIN_JWT_SECRET must be at least 32 characters'),
     JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
     ADMIN_JWT_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
+    /** Default session length when "keep me logged in" was not chosen at sign-in. */
     REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
+    /** D-075: "keep me logged in" session length. Same rotation/device-binding/theft-detection
+     * model as any other session — only how long it can go between app opens changes. */
+    REFRESH_TTL_DAYS_REMEMBER_ME: z.coerce.number().int().positive().default(90),
     /** 32 random bytes, base64. Encrypts date of birth and Aadhaar last-4 at rest. */
     FIELD_ENCRYPTION_KEY: z
       .string()

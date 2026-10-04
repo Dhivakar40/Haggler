@@ -16,6 +16,23 @@ interface SessionState {
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
+let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * "Keep me logged in" (D-075) means the person should rarely, if ever, see the reactive 401 ->
+ * refresh round trip `apiRequest` already does. So in addition to that safety net, proactively
+ * refresh a bit before the access token actually expires (70% of its life), while signed in.
+ */
+function scheduleProactiveRefresh(expiresInSeconds: number): void {
+  if (proactiveRefreshTimer) clearTimeout(proactiveRefreshTimer);
+  const delayMs = Math.max(10_000, expiresInSeconds * 0.7 * 1000);
+  proactiveRefreshTimer = setTimeout(() => {
+    if (useSession.getState().status === 'signedIn') void doRefresh().catch(() => undefined);
+  }, delayMs);
+  // Node's timer (not React Native's, which has no unref) would otherwise keep the test runner's
+  // process alive until this fires.
+  (proactiveRefreshTimer as unknown as { unref?: () => void }).unref?.();
+}
 
 export const useSession = create<SessionState>()((set, get) => ({
   status: 'loading',
@@ -39,6 +56,7 @@ export const useSession = create<SessionState>()((set, get) => ({
   async startSession(s) {
     await setRefreshToken(s.refreshToken);
     set({ accessToken: s.accessToken, user: s.user, status: 'signedIn' });
+    scheduleProactiveRefresh(s.expiresInSeconds);
   },
 
   async refreshMe() {
@@ -61,6 +79,7 @@ export const useSession = create<SessionState>()((set, get) => ({
         auth: false,
       }).catch(() => undefined);
     await clearRefreshToken();
+    if (proactiveRefreshTimer) clearTimeout(proactiveRefreshTimer);
     set({ user: null, accessToken: null, status: 'signedOut' });
   },
 }));
@@ -83,6 +102,7 @@ export function doRefresh(): Promise<boolean> {
       });
       await setRefreshToken(pair.refreshToken); // the old one is now dead: persist the new one first
       useSession.setState({ accessToken: pair.accessToken });
+      scheduleProactiveRefresh(pair.expiresInSeconds);
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {

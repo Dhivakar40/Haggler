@@ -12,6 +12,7 @@ import {
   kycStatusSchema,
   type KycSubmitInput,
   meSchema,
+  type OnboardingInput,
   type ProfileUpdate,
   type RegisterPushTokenInput,
   type WorkerProfileUpdate,
@@ -38,6 +39,7 @@ export const verifyOtp = (input: {
   code: string;
   deviceId: string;
   platform: 'android' | 'ios' | 'web';
+  rememberMe?: boolean;
 }) =>
   apiRequest('/v1/auth/otp/verify', {
     method: 'POST',
@@ -45,6 +47,9 @@ export const verifyOtp = (input: {
     body: input,
     schema: authSessionSchema,
   });
+
+export const completeOnboarding = (body: OnboardingInput) =>
+  apiRequest('/v1/me/onboarding', { method: 'POST', body, schema: meSchema });
 
 export const updateProfile = (body: ProfileUpdate) =>
   apiRequest('/v1/me', { method: 'PATCH', body, schema: meSchema });

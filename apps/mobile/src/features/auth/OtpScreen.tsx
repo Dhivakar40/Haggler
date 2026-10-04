@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { sendOtp, verifyOtp } from '../../api/endpoints';
-import { Button, Screen, Text, TextField } from '../../components';
+import { Button, Checkbox, Screen, Text, TextField } from '../../components';
 import { getDeviceId } from '../../auth/secure-storage';
 import { devicePlatform, useSession } from '../../auth/session';
 import { errorMessage } from '../../lib/errors';
@@ -18,6 +18,7 @@ export function OtpScreen() {
   const { phone = '' } = useLocalSearchParams<{ phone: string }>();
   const startSession = useSession((s) => s.startSession);
   const [code, setCode] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(RESEND_SECONDS);
@@ -39,6 +40,7 @@ export function OtpScreen() {
         code,
         deviceId: await getDeviceId(),
         platform: devicePlatform(),
+        rememberMe,
       });
       await startSession(session);
       // The root layout now sees a signed-in user and shows the consent or the app.
@@ -74,6 +76,12 @@ export function OtpScreen() {
           textContentType="oneTimeCode"
           maxLength={6}
           error={error}
+        />
+        <Checkbox
+          testID="remember-me"
+          label={t('auth.rememberMe')}
+          checked={rememberMe}
+          onPress={() => setRememberMe((v) => !v)}
         />
         <Button
           testID="verify"

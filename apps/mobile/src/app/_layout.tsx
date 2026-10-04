@@ -44,10 +44,11 @@ function ThemedStatusBar() {
 }
 
 /**
- * Three mutually exclusive worlds, chosen by the session:
- *  - signed out            -> sign-in screens only
- *  - signed in, no consent -> the consent screen only (DPDP: explicit consent before use)
- *  - signed in + consented -> the app
+ * Four mutually exclusive worlds, chosen by the session:
+ *  - signed out              -> sign-in screens only
+ *  - signed in, no consent   -> the consent screen only (DPDP: explicit consent before use)
+ *  - signed in, no profile   -> the mandatory setup screen only (D-075, Part B)
+ *  - signed in + ready       -> the app
  * `Stack.Protected` makes the other routes unreachable, even by deep link.
  */
 function Navigator() {
@@ -63,8 +64,10 @@ function Navigator() {
   const missingPrivacy = useSession(
     (s) => s.user?.missingConsents.includes('PRIVACY_POLICY') ?? false,
   );
+  const profileComplete = useSession((s) => s.user?.profileComplete ?? false);
   const signedIn = status === 'signedIn';
   const needsConsent = signedIn && (missingTerms || missingPrivacy);
+  const needsOnboarding = signedIn && !needsConsent && !profileComplete;
   const header = {
     headerShown: true,
     headerStyle: { backgroundColor: colors.surface },
@@ -82,7 +85,11 @@ function Navigator() {
         <Stack.Screen name="consent" />
       </Stack.Protected>
 
-      <Stack.Protected guard={signedIn && !needsConsent}>
+      <Stack.Protected guard={needsOnboarding}>
+        <Stack.Screen name="onboarding" />
+      </Stack.Protected>
+
+      <Stack.Protected guard={signedIn && !needsConsent && profileComplete}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile" options={{ ...header, title: t('profile.title') }} />
         <Stack.Screen name="addresses" options={{ ...header, title: t('addresses.title') }} />

@@ -673,3 +673,36 @@ printed at boot alongside the adapter-modes line so it's impossible to miss in s
 is a real authentication bypass by design — it must never reach a build anyone outside the test
 team can install, which is why it is gated identically to (and as strictly as) every other
 sandbox/fake adapter in this codebase, not a one-off.
+
+## Phase 10: dual profiles, mandatory setup, "keep me logged in"
+
+**D-075 "Keep me logged in" extends refresh TTL, never weakens rotation.** Phase 1's refresh-token
+model (rotation on every use, family-wide revocation on reuse, device binding) is unconditional
+security, not something a convenience toggle should get to disable. So "keep me logged in" at
+sign-in (`otpVerifySchema.rememberMe`, default `false`) only changes **how long** a refresh token
+lives before it must be used — `REFRESH_TTL_DAYS` (30d) vs `REFRESH_TTL_DAYS_REMEMBER_ME` (90d) —
+by storing the choice on the `refresh_tokens` row itself (`rememberMe`) and carrying it forward on
+every rotation (`TokenService.rotate` reads the old row's flag and passes it to the new `issue()`
+call), so the person only has to choose once, at sign-in, not re-opt-in on every silent refresh.
+Everything else — theft detection, device binding, single-use tokens — is identical regardless of
+the flag.
+
+**D-075 profile setup is self-reported and separate from KYC-verified identity data.** The
+mandatory first-sign-in setup (`POST /v1/me/onboarding`: name, date of birth, gender, email) exists
+for personalization from the first session, not identity verification — it is collected before any
+KYC flow even starts and is never treated as proof of anything. `User.dateOfBirthEnc` (self-
+reported, AES-256-GCM like every other DOB in this schema) is a distinct column from
+`WorkerProfile.dateOfBirthEnc` (D-017: KYC-verified, entered by an admin reviewing the actual
+Aadhaar during KYC decision) — conflating them would let an unverified self-report masquerade as
+verified identity data. The onboarding endpoint is one-time by design (`UsersService
+.completeOnboarding` refuses once `profileCompletedAt` is set); further edits go through the
+existing `PATCH /me` (`profileUpdateSchema`), which now also accepts `email`/`dateOfBirth`/`gender`.
+
+**D-075 Ranger ("dual") profile unlock reuses existing KYC-tier gates, no new state.** A Ranger
+profile is not a new entity to lock/unlock — `WorkerProfile` already exists per-user once the
+`WORKER` role is added, and `kycTier` already gates capability (`presence.service.ts` already
+refuses `goOnline()` below tier 2). The mobile app reads the existing `me.workerKycTier` to decide
+what to show: no `WorkerProfile`/role → "become a Ranger" entry point; tier 0-1 → Ranger profile
+visible but marked pending, matching the existing "Finish verification level 2" message; tier ≥2 →
+fully unlocked, same threshold the API already enforces server-side. No new backend endpoint or
+column was needed for the lock state itself — it was already the right shape.

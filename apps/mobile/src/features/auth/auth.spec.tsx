@@ -99,6 +99,31 @@ describe('OtpScreen', () => {
     expect(useSession.getState().user?.missingConsents).toHaveLength(3);
   });
 
+  it('defaults "keep me logged in" to checked and sends it as rememberMe', async () => {
+    const { calls } = mockApi((c) =>
+      c.path === '/v1/auth/otp/verify' ? { body: session } : undefined,
+    );
+    await renderWithProviders(<OtpScreen />);
+    expect(screen.getByTestId('remember-me').props.accessibilityState.checked).toBe(true);
+    await fireEvent.changeText(screen.getByTestId('otp-input'), '123456');
+    await fireEvent.press(screen.getByTestId('verify'));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.body).toMatchObject({ rememberMe: true });
+  });
+
+  it('sends rememberMe: false once unchecked', async () => {
+    const { calls } = mockApi((c) =>
+      c.path === '/v1/auth/otp/verify' ? { body: session } : undefined,
+    );
+    await renderWithProviders(<OtpScreen />);
+    await fireEvent.press(screen.getByTestId('remember-me'));
+    expect(screen.getByTestId('remember-me').props.accessibilityState.checked).toBe(false);
+    await fireEvent.changeText(screen.getByTestId('otp-input'), '123456');
+    await fireEvent.press(screen.getByTestId('verify'));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.body).toMatchObject({ rememberMe: false });
+  });
+
   it('shows a clear message for a wrong code and stays signed out', async () => {
     mockApi(() => ({ status: 400, body: { error: { code: 'OTP_INVALID', message: 'x' } } }));
     await renderWithProviders(<OtpScreen />);

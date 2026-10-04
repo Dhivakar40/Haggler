@@ -64,6 +64,18 @@ model User {
   phoneVerifiedAt      DateTime?  @map("phone_verified_at") @db.Timestamptz(6)
   fullName             String?    @map("full_name")
   photoUrl             String?    @map("photo_url")
+  /// Self-reported, not used for sign-in or OTP delivery. Not verified like KYC identity data.
+  email                String?
+  /// Self-reported, collected at mandatory first-sign-in setup. AES-256-GCM (EncryptionService),
+  /// same treatment as any other date of birth in this schema. Distinct from a Ranger's
+  /// KYC-verified WorkerProfile.dateOfBirthEnc, which an admin enters from the Aadhaar itself.
+  dateOfBirthEnc       String?    @map("date_of_birth_enc")
+  /// Self-reported at setup; editable later in Settings. Separate from WorkerProfile.gender,
+  /// which is KYC-scoped and only meaningful once someone is a Ranger.
+  gender               Gender?
+  /// Set once the mandatory first-sign-in setup (name/age/gender/email) is completed. Null gates
+  /// the main app behind that flow; see D-075.
+  profileCompletedAt   DateTime?  @map("profile_completed_at") @db.Timestamptz(6)
   preferredLanguage    String     @default("en") @map("preferred_language")
   languages            String[]   @default(["en"])
   status               UserStatus @default(ACTIVE)
@@ -128,6 +140,9 @@ model RefreshToken {
   tokenHash    String    @unique @map("token_hash")
   familyId     String    @map("family_id") @db.Uuid
   expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// Set at sign-in ("keep me logged in") and carried forward on every rotation, so a long-lived
+  /// session stays long-lived without the person re-opting-in on each silent refresh (D-075).
+  rememberMe   Boolean   @default(false) @map("remember_me")
   revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
   replacedById String?   @map("replaced_by_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

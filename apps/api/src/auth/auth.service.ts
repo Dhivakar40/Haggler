@@ -52,7 +52,13 @@ export class AuthService {
     });
 
     const roles = user.roles.map((r) => r.role);
-    const tokens = await this.tokens.issue({ id: user.id, roles }, device.id);
+    const tokens = await this.tokens.issue(
+      { id: user.id, roles },
+      device.id,
+      undefined,
+      undefined,
+      input.rememberMe,
+    );
     const { refreshTokenId: _id, ...pair } = tokens;
 
     await this.audit.record({

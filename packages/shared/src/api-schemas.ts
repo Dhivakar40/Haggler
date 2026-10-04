@@ -24,6 +24,8 @@ export const otpVerifySchema = z.object({
   code: z.string().regex(/^[0-9]{6}$/, 'Code is 6 digits'),
   deviceId: deviceIdSchema,
   platform: z.enum(['android', 'ios', 'web']),
+  /** D-075: "keep me logged in" at sign-in. Defaults off — a shorter session unless chosen. */
+  rememberMe: z.boolean().optional().default(false),
 });
 export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;
 
@@ -37,11 +39,29 @@ export const logoutSchema = z.object({ refreshToken: z.string().min(20).max(200)
 
 export const userRoleSchema = z.enum(USER_ROLES);
 
+/** Self-reported date of birth (profile setup), not the KYC-verified one an admin enters. */
+export const dateOfBirthSchema = z.string().refine(
+  (v) => {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return false;
+    const years = (Date.now() - d.getTime()) / (365.25 * 86_400_000);
+    return years >= 5 && years <= 120;
+  },
+  { message: 'Enter a valid date of birth' },
+);
+export const genderSchema = z.enum(['FEMALE', 'MALE', 'OTHER']);
+export type Gender = z.infer<typeof genderSchema>;
+
 export const meSchema = z.object({
   id: z.string().uuid(),
   phone: z.string(),
   fullName: z.string().nullable(),
   photoUrl: z.string().nullable(),
+  email: z.string().nullable(),
+  dateOfBirth: z.string().nullable(),
+  gender: genderSchema.nullable(),
+  /** Gates the main app behind the mandatory first-sign-in setup (D-075) until true. */
+  profileComplete: z.boolean(),
   preferredLanguage: z.enum(SUPPORTED_LANGUAGES),
   languages: z.array(z.string()),
   roles: z.array(userRoleSchema),
@@ -51,6 +71,15 @@ export const meSchema = z.object({
   workerKycTier: z.number().int().nullable(),
 });
 export type Me = z.infer<typeof meSchema>;
+
+/** The mandatory one-time setup shown right after first sign-in, before the app is usable. */
+export const onboardingInputSchema = z.object({
+  fullName: z.string().trim().min(2).max(80),
+  dateOfBirth: dateOfBirthSchema,
+  gender: genderSchema,
+  email: z.string().trim().email().max(254),
+});
+export type OnboardingInput = z.infer<typeof onboardingInputSchema>;
 
 export const authSessionSchema = z.object({
   accessToken: z.string(),
@@ -73,6 +102,9 @@ export type TokenPair = z.infer<typeof tokenPairSchema>;
 export const profileUpdateSchema = z
   .object({
     fullName: z.string().trim().min(2).max(80).optional(),
+    email: z.string().trim().email().max(254).optional(),
+    dateOfBirth: dateOfBirthSchema.optional(),
+    gender: genderSchema.optional(),
     preferredLanguage: z.enum(SUPPORTED_LANGUAGES).optional(),
     languages: z.array(z.enum(SUPPORTED_LANGUAGES)).min(1).max(5).optional(),
   })

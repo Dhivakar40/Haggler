@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import type { ConsentInput, Me, ProfileUpdate, RegisterPushTokenInput } from '@haggler/shared';
+import type {
+  ConsentInput,
+  Me,
+  OnboardingInput,
+  ProfileUpdate,
+  RegisterPushTokenInput,
+} from '@haggler/shared';
 import { CONSENT_PURPOSES, LEGAL_VERSION } from '@haggler/shared';
 import { conflict, notFound, unprocessable } from '../common/http-errors';
+import { EncryptionService } from '../common/crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TokenService } from '../auth/token.service';
@@ -14,6 +21,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly tokens: TokenService,
+    private readonly encryption: EncryptionService,
   ) {}
 
   async getMe(userId: string): Promise<Me> {
@@ -32,6 +40,10 @@ export class UsersService {
       phone: user.phone,
       fullName: user.fullName,
       photoUrl: user.photoUrl,
+      email: user.email,
+      dateOfBirth: user.dateOfBirthEnc ? this.encryption.decrypt(user.dateOfBirthEnc) : null,
+      gender: user.gender,
+      profileComplete: user.profileCompletedAt !== null,
       preferredLanguage: user.preferredLanguage as Me['preferredLanguage'],
       languages: user.languages,
       roles: user.roles.map((r) => r.role),
@@ -41,8 +53,39 @@ export class UsersService {
     };
   }
 
+  /**
+   * The mandatory first-sign-in setup (D-075): name, date of birth, gender, email. One-time —
+   * further edits go through `updateProfile` (Settings > Edit Profile) instead.
+   */
+  async completeOnboarding(userId: string, input: OnboardingInput): Promise<Me> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { profileCompletedAt: true },
+    });
+    if (!user) throw notFound('User not found');
+    if (user.profileCompletedAt) throw conflict('Profile setup is already complete.');
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        fullName: input.fullName,
+        email: input.email,
+        gender: input.gender,
+        dateOfBirthEnc: this.encryption.encrypt(input.dateOfBirth),
+        profileCompletedAt: new Date(),
+      },
+    });
+    return this.getMe(userId);
+  }
+
   async updateProfile(userId: string, input: ProfileUpdate): Promise<Me> {
-    await this.prisma.user.update({ where: { id: userId }, data: input });
+    const { dateOfBirth, ...rest } = input;
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...rest,
+        ...(dateOfBirth !== undefined ? { dateOfBirthEnc: this.encryption.encrypt(dateOfBirth) } : {}),
+      },
+    });
     return this.getMe(userId);
   }
 

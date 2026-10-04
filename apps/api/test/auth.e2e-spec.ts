@@ -297,6 +297,131 @@ describe('sessions: refresh rotation, device binding, logout', () => {
   });
 });
 
+describe('"keep me logged in" (D-075)', () => {
+  const verifyWith = (phone: string, code: string, deviceId: string, rememberMe?: boolean) =>
+    api
+      .http()
+      .post('/v1/auth/otp/verify')
+      .set('X-Forwarded-For', newIp())
+      .send({ phone, code, deviceId, platform: 'android', rememberMe });
+
+  it('defaults to the short TTL when rememberMe is omitted', async () => {
+    const phone = newPhone();
+    await api.sendOtp(phone);
+    const code = api.sms().lastCodeFor(phone) as string;
+    const res = await verifyWith(phone, code, 'dev-remember-1').expect(200);
+    const row = await api.prisma().refreshToken.findFirst({
+      where: { userId: res.body.user.id },
+    });
+    expect(row?.rememberMe).toBe(false);
+    const days = (row!.expiresAt.getTime() - row!.createdAt.getTime()) / 86_400_000;
+    expect(days).toBeCloseTo(30, 0);
+  });
+
+  it('extends the refresh TTL when rememberMe is true, and rotation preserves it', async () => {
+    const phone = newPhone();
+    await api.sendOtp(phone);
+    const code = api.sms().lastCodeFor(phone) as string;
+    const res = await verifyWith(phone, code, 'dev-remember-2', true).expect(200);
+    const row = await api
+      .prisma()
+      .refreshToken.findFirst({ where: { userId: res.body.user.id } });
+    expect(row?.rememberMe).toBe(true);
+    const days = (row!.expiresAt.getTime() - row!.createdAt.getTime()) / 86_400_000;
+    expect(days).toBeCloseTo(90, 0);
+
+    // Rotation must not downgrade a remembered session back to the short TTL.
+    const rotated = await api
+      .http()
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: res.body.refreshToken, deviceId: 'dev-remember-2' })
+      .expect(200);
+    const rows = await api
+      .prisma()
+      .refreshToken.findMany({ where: { userId: res.body.user.id }, orderBy: { createdAt: 'asc' } });
+    const newest = rows[rows.length - 1]!;
+    expect(newest.id).not.toBe(row!.id);
+    expect(newest.rememberMe).toBe(true);
+    expect(rotated.body.accessToken).toBeTruthy();
+  });
+});
+
+describe('mandatory profile setup (Part B, D-075)', () => {
+  const dateOfBirth = '1995-07-04';
+
+  it('gates on profileComplete=false until POST /v1/me/onboarding succeeds', async () => {
+    const s = await api.signIn();
+    const before = await api.get(s, '/v1/me').expect(200);
+    expect(before.body.profileComplete).toBe(false);
+    expect(before.body.email).toBeNull();
+    expect(before.body.dateOfBirth).toBeNull();
+    expect(before.body.gender).toBeNull();
+
+    const done = await api
+      .http()
+      .post('/v1/me/onboarding')
+      .set('Authorization', `Bearer ${s.accessToken}`)
+      .send({ fullName: 'Asha Raman', dateOfBirth, gender: 'FEMALE', email: 'asha@example.com' })
+      .expect(201);
+    expect(done.body).toMatchObject({
+      fullName: 'Asha Raman',
+      email: 'asha@example.com',
+      dateOfBirth,
+      gender: 'FEMALE',
+      profileComplete: true,
+    });
+
+    const after = await api.get(s, '/v1/me').expect(200);
+    expect(after.body.profileComplete).toBe(true);
+    expect(after.body.dateOfBirth).toBe(dateOfBirth); // round-trips through encryption unchanged
+  });
+
+  it('refuses a second onboarding once already complete', async () => {
+    const s = await api.signIn();
+    await api
+      .http()
+      .post('/v1/me/onboarding')
+      .set('Authorization', `Bearer ${s.accessToken}`)
+      .send({ fullName: 'Asha Raman', dateOfBirth, gender: 'FEMALE', email: 'asha@example.com' })
+      .expect(201);
+    const again = await api
+      .http()
+      .post('/v1/me/onboarding')
+      .set('Authorization', `Bearer ${s.accessToken}`)
+      .send({ fullName: 'Asha Raman', dateOfBirth, gender: 'FEMALE', email: 'asha@example.com' })
+      .expect(409);
+    expect(again.body.error.code).toBe('CONFLICT');
+  });
+
+  it('rejects an invalid date of birth (impossible calendar date)', async () => {
+    const s = await api.signIn();
+    const res = await api
+      .http()
+      .post('/v1/me/onboarding')
+      .set('Authorization', `Bearer ${s.accessToken}`)
+      .send({ fullName: 'Asha Raman', dateOfBirth: '1995-02-31', gender: 'FEMALE', email: 'a@b.com' });
+    expect(res.status).toBe(400);
+  });
+
+  it('PATCH /v1/me can edit email/dateOfBirth/gender after onboarding is complete', async () => {
+    const s = await api.signIn();
+    await api
+      .http()
+      .post('/v1/me/onboarding')
+      .set('Authorization', `Bearer ${s.accessToken}`)
+      .send({ fullName: 'Asha Raman', dateOfBirth, gender: 'FEMALE', email: 'asha@example.com' })
+      .expect(201);
+    const updated = await api
+      .http()
+      .patch('/v1/me')
+      .set('Authorization', `Bearer ${s.accessToken}`)
+      .send({ email: 'asha.new@example.com' })
+      .expect(200);
+    expect(updated.body.email).toBe('asha.new@example.com');
+    expect(updated.body.dateOfBirth).toBe(dateOfBirth); // untouched fields survive a partial update
+  });
+});
+
 describe('roles and profile', () => {
   let s: Session;
   beforeAll(async () => {

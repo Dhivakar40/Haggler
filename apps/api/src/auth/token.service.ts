@@ -44,8 +44,12 @@ export class TokenService {
     deviceRefId: string | null,
     familyId: string = randomUUID(),
     tx?: Prisma.TransactionClient,
+    /** D-075: "keep me logged in". Carried forward on every rotation (see `rotate` below), so it
+     * only needs to be chosen once, at sign-in. */
+    rememberMe = false,
   ): Promise<TokenPair & { refreshTokenId: string }> {
-    const { JWT_ACCESS_SECRET, JWT_ACCESS_TTL_SECONDS, REFRESH_TTL_DAYS } = this.envService.env;
+    const { JWT_ACCESS_SECRET, JWT_ACCESS_TTL_SECONDS, REFRESH_TTL_DAYS, REFRESH_TTL_DAYS_REMEMBER_ME } =
+      this.envService.env;
     const claims: AccessClaims = { sub: user.id, roles: user.roles, did: deviceRefId };
     const accessToken = await this.jwt.signAsync(claims, {
       secret: JWT_ACCESS_SECRET,
@@ -54,6 +58,7 @@ export class TokenService {
       audience: JWT_AUDIENCE_USER,
     });
     const refreshToken = this.newRefreshValue();
+    const ttlDays = rememberMe ? REFRESH_TTL_DAYS_REMEMBER_ME : REFRESH_TTL_DAYS;
     const db = tx ?? this.prisma;
     const row = await db.refreshToken.create({
       data: {
@@ -61,7 +66,8 @@ export class TokenService {
         deviceRefId,
         tokenHash: sha256Hex(refreshToken),
         familyId,
-        expiresAt: new Date(Date.now() + REFRESH_TTL_DAYS * 86_400_000),
+        rememberMe,
+        expiresAt: new Date(Date.now() + ttlDays * 86_400_000),
       },
     });
     return {
@@ -107,6 +113,8 @@ export class TokenService {
       { id: row.userId, roles: row.user.roles.map((r) => r.role) },
       row.deviceRefId,
       row.familyId,
+      undefined,
+      row.rememberMe,
     );
     await this.prisma.refreshToken.update({
       where: { id: row.id },
