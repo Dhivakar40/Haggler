@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { JobStatus, Prisma } from '@prisma/client';
 import { SOCKET_EVENTS } from '@haggler/shared';
+import { diagMark } from '../common/diag-timing'; // TEMPORARY — D-078
 import { conflict } from '../common/http-errors';
 import type { PushMessage } from '../adapters/push/push.provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -68,6 +69,7 @@ export class JobTransitions {
       where: { id: input.jobId, status: input.from },
       data: { ...(input.data ?? {}), status: input.to },
     });
+    diagMark('move:after job.updateMany'); // TEMPORARY — D-078
     if (res.count !== 1)
       throw conflict('This job just changed. Refresh and try again.', { code: 'STALE_JOB' });
     await tx.jobEvent.create({
@@ -79,8 +81,10 @@ export class JobTransitions {
         meta: input.meta,
       },
     });
+    diagMark('move:after jobEvent.create'); // TEMPORARY — D-078
     if (input.to === 'CONFIRMED_BY_CUSTOMER') await this.wallet.consume(tx, input.jobId);
     else if (RELEASES_TOKEN.includes(input.to)) await this.wallet.release(tx, input.jobId);
+    diagMark('move:after wallet.consume/release'); // TEMPORARY — D-078
   }
 
   /** Tell both parties the job changed; their apps re-read it (payload is intentionally tiny). */
@@ -89,6 +93,7 @@ export class JobTransitions {
       where: { id: jobId },
       select: { customerId: true, workerId: true, status: true, requestId: true },
     });
+    diagMark('notify:after job.findUnique'); // TEMPORARY — D-078
     if (!job) return;
     const payload = { jobId, requestId: job.requestId, status: job.status, ...extra };
     const push = STATUS_PUSH[job.status];

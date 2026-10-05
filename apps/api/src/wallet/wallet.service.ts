@@ -3,6 +3,7 @@ import type { ListingKind, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { decodeCursor, toPage } from '@haggler/shared';
 import { PAYMENTS_PROVIDER, type PaymentsProvider } from '../adapters/payments/payments.provider';
+import { diagMark } from '../common/diag-timing'; // TEMPORARY — D-078
 import { conflict, forbidden, notFound, unprocessable } from '../common/http-errors';
 import { EnvService } from '../config/env.service';
 import { MonetizationConfig } from '../monetization/monetization-config.service';
@@ -448,12 +449,15 @@ export class WalletService {
       where: { jobId, status: 'HELD' },
       data: { status: 'CONSUMED' },
     });
+    diagMark('consume:after walletHold.updateMany'); // TEMPORARY — D-078
     if (res.count !== 1) return;
     const hold = await tx.walletHold.findUniqueOrThrow({ where: { jobId } });
+    diagMark('consume:after walletHold.findUniqueOrThrow'); // TEMPORARY — D-078
     await tx.customerWallet.update({
       where: { id: hold.walletId },
       data: { heldTokens: { decrement: hold.tokens } },
     });
+    diagMark('consume:after customerWallet.update'); // TEMPORARY — D-078
     await tx.walletLedgerEntry.create({
       data: {
         walletId: hold.walletId,
@@ -463,6 +467,7 @@ export class WalletService {
         jobId,
       },
     });
+    diagMark('consume:after walletLedgerEntry.create'); // TEMPORARY — D-078
   }
 
   /** The job ended without confirming: give the held token back. No-op if there was no hold. */
@@ -510,13 +515,16 @@ export class WalletService {
       update: {},
       create: { userId },
     });
+    diagMark('grantBonus:after customerWallet.upsert'); // TEMPORARY — D-078
     await tx.customerWallet.update({
       where: { id: wallet.id },
       data: { balanceTokens: { increment: tokens } },
     });
+    diagMark('grantBonus:after customerWallet.update'); // TEMPORARY — D-078
     await tx.walletLedgerEntry.create({
       data: { walletId: wallet.id, type: 'BONUS', tokensDelta: tokens, heldDelta: 0, note },
     });
+    diagMark('grantBonus:after walletLedgerEntry.create'); // TEMPORARY — D-078
   }
 }
 
