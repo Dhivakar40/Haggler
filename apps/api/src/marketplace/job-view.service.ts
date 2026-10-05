@@ -81,10 +81,14 @@ export class JobViewService {
     const { job, role } = await this.loadForParty(jobId, viewerId);
     const req = job.request;
     const matched = !!job.workerId;
-    const point = await this.requestPoint(req.id);
     const showAddress = role === 'CUSTOMER' || matched;
 
-    const [customer, worker, media, sla] = await Promise.all([
+    // None of these seven reads depend on job/req/role beyond what loadForParty already returned,
+    // or on each other — they went out as up to five sequential round trips before; one hosted-
+    // database round trip costs ~65-130ms regardless of how trivial the query is, so collapsing
+    // every independent read into one batch is a real, non-cosmetic saving (D-078).
+    const [point, customer, worker, media, sla, stats, myReview] = await Promise.all([
+      this.requestPoint(req.id),
       this.prisma.user.findUnique({
         where: { id: job.customerId },
         select: { id: true, fullName: true },
@@ -105,16 +109,13 @@ export class JobViewService {
       role === 'CUSTOMER' && (job.status === 'REQUESTED' || job.status === 'BROADCASTING')
         ? this.slaEstimateMinutes(req.categoryId, req.pincode)
         : Promise.resolve(0),
-    ]);
-    const stats = job.workerId
-      ? await this.prisma.workerStats.findUnique({ where: { workerUserId: job.workerId } })
-      : null;
-    const myReview =
+      job.workerId
+        ? this.prisma.workerStats.findUnique({ where: { workerUserId: job.workerId } })
+        : Promise.resolve(null),
       job.status === 'CONFIRMED_BY_CUSTOMER'
-        ? await this.prisma.review.findUnique({
-            where: { jobId_raterRole: { jobId, raterRole: role } },
-          })
-        : null;
+        ? this.prisma.review.findUnique({ where: { jobId_raterRole: { jobId, raterRole: role } } })
+        : Promise.resolve(null),
+    ]);
 
     const arrivalCode =
       role === 'CUSTOMER' &&

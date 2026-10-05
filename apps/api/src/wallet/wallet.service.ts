@@ -450,19 +450,23 @@ export class WalletService {
     });
     if (res.count !== 1) return;
     const hold = await tx.walletHold.findUniqueOrThrow({ where: { jobId } });
-    await tx.customerWallet.update({
-      where: { id: hold.walletId },
-      data: { heldTokens: { decrement: hold.tokens } },
-    });
-    await tx.walletLedgerEntry.create({
-      data: {
-        walletId: hold.walletId,
-        type: 'CONSUME',
-        tokensDelta: 0,
-        heldDelta: -hold.tokens,
-        jobId,
-      },
-    });
+    // The wallet decrement and the ledger entry are independent writes — neither reads the other's
+    // result — so they go over the wire together instead of as two sequential round trips (D-078).
+    await Promise.all([
+      tx.customerWallet.update({
+        where: { id: hold.walletId },
+        data: { heldTokens: { decrement: hold.tokens } },
+      }),
+      tx.walletLedgerEntry.create({
+        data: {
+          walletId: hold.walletId,
+          type: 'CONSUME',
+          tokensDelta: 0,
+          heldDelta: -hold.tokens,
+          jobId,
+        },
+      }),
+    ]);
   }
 
   /** The job ended without confirming: give the held token back. No-op if there was no hold. */
@@ -510,13 +514,16 @@ export class WalletService {
       update: {},
       create: { userId },
     });
-    await tx.customerWallet.update({
-      where: { id: wallet.id },
-      data: { balanceTokens: { increment: tokens } },
-    });
-    await tx.walletLedgerEntry.create({
-      data: { walletId: wallet.id, type: 'BONUS', tokensDelta: tokens, heldDelta: 0, note },
-    });
+    // Same independent-writes reasoning as consume() above (D-078).
+    await Promise.all([
+      tx.customerWallet.update({
+        where: { id: wallet.id },
+        data: { balanceTokens: { increment: tokens } },
+      }),
+      tx.walletLedgerEntry.create({
+        data: { walletId: wallet.id, type: 'BONUS', tokensDelta: tokens, heldDelta: 0, note },
+      }),
+    ]);
   }
 }
 
