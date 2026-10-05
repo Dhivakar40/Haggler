@@ -173,7 +173,10 @@ reachable deployment so teammates can install one APK and use the app end-to-end
 server, a LAN IP, or anyone's PC being on — not a production launch. `TESTING_MODE=true` and the
 sandbox adapters stay on here; this is explicitly a testing environment.
 
-### Current hosting layout (D-078, as of the Mumbai/Singapore move)
+### Current hosting layout (D-078, as of the Mumbai/Singapore move) — PRIMARY
+
+**This is the primary deployment.** `https://haggler-f.onrender.com` + the Mumbai Supabase project
+(`haggler_f`) is what the current APK points at and what teammates should be using.
 
 The original deployment (D-074) put every service in its provider's default/nearest-signup region,
 which landed on Sydney (Supabase) with Render on a US region — a real cross-continent latency tax
@@ -189,10 +192,13 @@ PgBouncer/transaction-pooler fix). D-078 moved the backend onto a region-matched
 Measured effect (warm, same moment, both stacks): `/health/ready` ~0.3-0.5s new vs ~1.0-1.2s old
 (when old wasn't actively unstable — see below); `GET /v1/categories` ~0.65s new vs ~2.1s old.
 
-**The old Sydney/US deployment is kept running as a fallback**, untouched, with its own Render
-service and Supabase project. Teammates stay on the old APK (pointing at the old backend) until a
-new APK is built and confirmed against the new one — the two backends have independent,
-non-synchronized data (new accounts/requests/KYC made on one do not appear on the other).
+### Old deployment (Sydney Supabase + original Render service) — TEMPORARY FALLBACK, not deleted
+
+Kept running, untouched, specifically as a rollback option — **do not delete or repoint it** until
+the new stack has had real teammate usage without issues. Its APK and backend are independent of
+the new ones: new accounts/requests/KYC made on one do not appear on the other. Any teammate still
+on the old APK must **uninstall it** before installing the new one (same package name, but talking
+to a different backend with different data — see the teammate message below).
 
 **A real, unrelated finding from this move**: the old Supabase project's per-query latency was
 observed to be highly volatile during sustained use late in this project's testing — anywhere from
@@ -270,13 +276,14 @@ adapters, D-074 — a "hosted but still a test environment" deploy is `developme
 own definition, not a new value), point `eas.json`'s `preview` profile's `EXPO_PUBLIC_API_URL` at
 the Render URL, and trigger `eas build --profile preview --platform android` from `apps/mobile`.
 
-### Rotating secrets later (D-078 note)
+### Rotating secrets later (D-078 note) — MUST happen before any real user data
 
-The Mumbai/Singapore move (D-078) **reused** the existing `JWT_ACCESS_SECRET`, `ADMIN_JWT_SECRET`
-and `FIELD_ENCRYPTION_KEY` on the new Render service rather than generating fresh ones — a
-deliberate choice for this migration (infra move only, no secret rotation bundled in), not an
-oversight. They should still be rotated eventually, since all three were pasted in plaintext chat
-earlier in this project's history (flagged at the time). Procedure:
+**`JWT_ACCESS_SECRET`, `ADMIN_JWT_SECRET`, `FIELD_ENCRYPTION_KEY`, and the Backblaze B2 storage
+keys (`S3_ACCESS_KEY`/`S3_SECRET_KEY`) are all still the values that were pasted in plaintext chat
+earlier in this project's history, reused as-is through both the original D-074 setup and the
+D-078 Mumbai/Singapore move.** That reuse was a deliberate, scoped decision each time (infra moves
+and testing-environment setup, not secret hygiene work) — it is **not** acceptable once this
+deployment stores any real person's data. Rotate all four before that point, not after.
 
 - **`JWT_ACCESS_SECRET` / `ADMIN_JWT_SECRET`**: safe to rotate anytime — just generate a new value
   (`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`) and update the
@@ -284,6 +291,11 @@ earlier in this project's history (flagged at the time). Procedure:
   immediately; everyone simply signs in again. Refresh tokens are unaffected (they're opaque,
   DB-stored, not JWTs) — no one is logged out at the refresh-token level, only the current access
   token needs refreshing, which `doRefresh()` does automatically.
+- **`S3_ACCESS_KEY` / `S3_SECRET_KEY`**: safe to rotate anytime — generate a new Backblaze
+  Application Key scoped the same way (read+write on both buckets), update the env vars, then
+  delete the old Application Key from the B2 dashboard. Already-issued presigned URLs are signed
+  with the old key and expire on their own short TTL (minutes) regardless, so there is no
+  in-flight-upload breakage window worth planning around.
 - **`FIELD_ENCRYPTION_KEY`**: **not** a drop-in rotation. This key decrypts every already-encrypted
   field at rest: `User.dateOfBirthEnc`, `WorkerProfile.dateOfBirthEnc`, `WorkerProfile.aadhaarLast4Enc`,
   `StudentProfile.dateOfBirthEnc`, and any `Job.arrivalCodeEnc` for an in-flight job. Swapping the
@@ -293,7 +305,9 @@ earlier in this project's history (flagged at the time). Procedure:
   (`EncryptionService.decrypt`), re-encrypts with a freshly-instantiated `EncryptionService` using
   the NEW key, and writes it back — for every row, across every table above — before the env var is
   switched over on the running service. This does not exist as a script today; write one when
-  rotation is actually needed, don't improvise it live against a running deployment.
+  rotation is actually needed, don't improvise it live against a running deployment. If this
+  deployment never collects real KYC data before a FIELD_ENCRYPTION_KEY rotation, this step is
+  moot — swapping the key is then safe with nothing to re-encrypt.
 
 ### Redeploying after a code change
 

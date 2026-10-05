@@ -780,6 +780,16 @@ drop-in swap — it would make every already-encrypted DOB/Aadhaar-digits/arriva
 permanently undecryptable without a re-encrypt-under-the-new-key pass first) is documented in the
 runbook for whenever rotation is actually done.
 
+**D-078 addendum — cutover to primary.** After the migration above was verified (all 15 migrations,
+every index/constraint/trigger, a 15/15 automated smoke test covering sign-in through confirm(),
+league updates and wallet consumption, all run live against the new database), the Mumbai/Singapore
+stack was promoted from "verified candidate" to **primary**: the APK's `EXPO_PUBLIC_API_URL` now
+points at it, and the runbook's hosting-layout section was re-labeled accordingly. The old Sydney/US
+stack stays up as a temporary fallback, not deleted, until the new stack has real teammate usage
+without issues. Secrets (JWT, admin JWT, field encryption, Backblaze keys) were explicitly **not**
+rotated as part of this cutover — see the runbook's rotation section, now stated as a hard
+requirement before any real user data is stored, not just a someday-task.
+
 ## Phase 12: client league system (Part E) + a Part D idempotency retrofit
 
 **D-077 league-up bonuses are paid against a high-water mark, not the raw old-vs-new comparison —
