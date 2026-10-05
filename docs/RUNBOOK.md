@@ -218,6 +218,11 @@ single long-lived Node process (`WEB_CONCURRENCY=1`), not many short-lived serve
 so transaction-pooling's main advantage (sharing a small backend pool across many ephemeral
 connections) doesn't apply here.
 
+**THROTTLE_STORE** (D-079): defaults to `memory`, which is only correct because of the same
+single-instance fact above — each instance would otherwise enforce the per-IP rate limit against
+its own counter, not a shared one, quietly multiplying the real limit by the instance count. **If
+this service is ever scaled to 2+ instances, set `THROTTLE_STORE=redis` first.**
+
 **Stack** (confirmed against each provider's free-tier terms as of Oct 2026 — re-check before
 relying on this long-term, free tiers change):
 

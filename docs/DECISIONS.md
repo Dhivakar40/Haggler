@@ -842,3 +842,76 @@ what to show: no `WorkerProfile`/role → "become a Ranger" entry point; tier 0-
 visible but marked pending, matching the existing "Finish verification level 2" message; tier ≥2 →
 fully unlocked, same threshold the API already enforces server-side. No new backend endpoint or
 column was needed for the lock state itself — it was already the right shape.
+
+## D-079: confirm() latency — root cause and fix (five changes, D-078 follow-up)
+
+**The 3.0-4.0s confirm() latency (D-078) was round-trip count, not Postgres work, not region
+mismatch, not pooler misconfiguration.** A temporary admin-gated endpoint, deployed and removed
+twice during this investigation (nothing left in the repo or running), measured the real
+Render-to-DB round trip from inside the service: session pooler (5432) averages 65ms; the
+transaction pooler (6543) averages 306ms (~4.7x worse — confirmed NOT to be in use). `EXPLAIN
+(ANALYZE, BUFFERS)` on every query `loadForParty()` issues showed each one executes in under 1ms
+server-side — all index scans, zero disk I/O, no missing index anywhere. Full instrumented traces
+of two live confirm() calls (no-promotion: 2751ms; double-promotion: 2795ms) summed exactly to
+their measured totals with no unexplained residual: every step cost a multiple of that same ~65ms
+round trip. The fix is therefore reducing round trips, not touching the database, the pooler mode,
+or the region pairing (Mumbai Supabase + Singapore Render is correct and stays as-is).
+
+**Fix 1 — parallelize independent queries.** `wallet.consume()`'s and `grantLeagueBonus()`'s final
+two writes don't read each other's result; `view.build()`'s `requestPoint`/`stats`/`myReview`
+reads don't depend on the existing customer/worker/media/sla batch or each other. All now go out
+together via `Promise.all` instead of sequentially.
+
+**Fix 2 — `relationLoadStrategy: 'join'` for `loadForParty()`.** Prisma's default `include`
+strategy issued one query per relation — 7 for this call — instead of one joined round trip.
+Enables the `relationJoins` preview feature in the Prisma client generator (client codegen only,
+no database schema change, no migration). Verified live against the hosted DB, including a real
+3-round negotiation with 2 photos, that the joined and per-relation results are byte-identical
+after normalization; the comparison is now a permanent e2e test (`test/jobs.e2e-spec.ts`).
+
+**Fix 3 — auth guard: one joined query, not a cache.** `JwtAuthGuard` still re-reads status/roles
+from the database on every request — a suspension or role change still takes effect immediately,
+not when the token expires. No TTL cache was added; `relationLoadStrategy: 'join'` on the same
+query measured faster (46.8ms vs 60.2ms avg) than the default strategy for this exact shape.
+
+**Fix 4 — throttler storage behind `THROTTLE_STORE` (default `memory`).** The global `ThrottlerGuard`
+paid a Redis round trip on every request. In-memory storage (the new default) skips it, but **only
+counts requests this process has seen** — correct only while the API runs as a single instance.
+Render currently runs `WEB_CONCURRENCY=1`, so this holds today. **Before scaling to 2+ instances,
+set `THROTTLE_STORE=redis`** (the previous behavior, unchanged and still available) — otherwise
+each instance enforces the per-IP limit independently and the real limit becomes
+`THROTTLE_LIMIT × instance count`.
+
+**Fix 5 — defer confirm()'s league recompute off the synchronous path. No BullMQ, no new `Job`
+column, by explicit instruction.** `confirm()`'s own transaction still synchronously increments
+`jobsCompleted`/`bookingsCompleted` — the durable record that the booking happened — but no longer
+calls `recomputeWorkerLeague`/`recomputeCustomerLeague` inline. A `setImmediate`-scheduled step runs
+them in a fresh transaction right after the main one commits, so the recompute (and any league-up
+bonus grant) never adds to confirm()'s response time. `cancel()`/`reportNoShow()`/
+`reviews.service.ts`/`admin-reviews.service.ts` keep calling the recompute functions synchronously,
+unchanged — those paths were never reported slow and stayed out of scope.
+
+Durability without a queue: `WorkerStats`/`CustomerStats` are themselves the "is this done yet?"
+record. If the process restarts between the counter-increment commit and the deferred step running,
+the row is left with a detectable mismatch — its stored `league` doesn't match what its stored
+counters actually compute to. `ReputationService.onModuleInit` runs a sweep once at boot
+(`sweepStaleLeagues`, bounded to rows touched in the last 24h, so it never scans the whole table)
+that finds and fixes exactly those rows. Idempotent either way via the existing `highestLeague`
+high-water mark (D-077): a retried deferred run, or the sweep re-processing a job the deferred step
+actually did finish, is a no-op, never a second payout.
+
+The future league-up popup (Sub-phase 4, Part F) has nothing new to read: `WorkerStats.league` /
+`CustomerStats.league` are updated by the same `recomputeWorkerLeague`/`recomputeCustomerLeague`
+functions as before, just later — the existing `GET /v1/worker/league` / client-league endpoints are
+still the source of truth. The accepted trade-off is the same brief eventual-consistency window
+already noted when this design was first proposed: a league screen read immediately after confirm()
+returns can very briefly lag until the deferred step runs (now, in practice, within the same event
+loop tick almost always — `setImmediate`, not a queue with real processing latency).
+
+Known test-suite implication: `test/market-helpers.ts`'s `confirmJob()` helper now drains pending
+recomputes (`ReputationService.drainPendingRecomputes()`) after calling `/confirm`, so every
+existing league/wallet assertion that used to run synchronously still passes deterministically
+instead of racing `setImmediate`. New e2e coverage in `test/reputation.e2e-spec.ts` tests the
+deferred path directly: a drained confirm() still reaches the right league and pays its bonus, a
+duplicated/retried deferred recompute never double-pays, and the startup sweep fixes a
+deliberately-stale row without re-paying an already-granted bonus.
