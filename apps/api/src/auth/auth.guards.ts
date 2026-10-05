@@ -54,8 +54,13 @@ export class JwtAuthGuard implements CanActivate {
       throw unauthenticated('Your session has expired.');
     }
 
+    // Deliberately NOT cached: status/roles must be re-read from the database on every request (see
+    // the class comment above) so a suspension or role change takes effect immediately rather than
+    // waiting out the token TTL. relationLoadStrategy: 'join' keeps this to one round trip instead
+    // of trading correctness for speed (D-078).
     const user = await this.prisma.user.findUnique({
       where: { id: claims.sub },
+      relationLoadStrategy: 'join',
       select: { id: true, status: true, roles: { select: { role: true } } },
     });
     if (!user || user.status !== 'ACTIVE') throw unauthenticated('This account is not available.');
