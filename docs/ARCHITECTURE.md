@@ -217,9 +217,22 @@ threshold's `maxDisputeRate` is 1 (never binding) until a real dispute-raising f
 Thresholds are DB-overridable via `system_config.league_thresholds` (`ReputationConfig`, same
 caching/override pattern as `MarketplaceConfig`). A promotion credits a one-time token bonus to the
 Ranger's own wallet row (`WalletService.grantLeagueBonus`, ledger type `BONUS`) — see
-`ReputationService.LEAGUE_UP_BONUS_TOKENS`. `GET /v1/worker/league` (`ReputationService
-.getLeagueStatus`) returns the current league, progress toward the next one (bounded by whichever
-requirement is furthest from being met), and the full ladder, for the Ranger-facing league screen.
+`ReputationService.LEAGUE_UP_BONUS_TOKENS` — paid against `WorkerStats.highestLeague` (a
+high-water mark), not the raw old-vs-new league comparison, so a drop-and-reclimb never pays twice
+(D-077). `GET /v1/worker/league` (`ReputationService.getLeagueStatus`) returns the current league,
+progress toward the next one (bounded by whichever requirement is furthest from being met), and
+the full ladder, for the Ranger-facing league screen.
+
+## Client league system (Phase 12, D-077)
+
+The customer-side mirror of the above, in `reputation/client-league-tier.ts` +
+`ReputationService.{recomputeCustomerLeague,getClientLeagueStatus}`. Three inputs, not five
+(completed bookings, the rating Rangers already leave for customers since Phase 4, and a
+cancellation-rate ceiling — no dispute-rate factor to mirror). `CustomerStats.bookingsCompleted`
+increments in `lifecycle.service.ts`'s `confirm()`, gated on the Ranger being genuinely
+`kycTier >= 2` at that moment (anti-farming). `CustomerStats.bookingsCancelledByCustomer`
+increments at the same two cancellation/no-show transition points as the Ranger side, mirrored.
+`GET /v1/me/league` (`UsersController`) is the client-facing equivalent of `/v1/worker/league`.
 
 ## Blocking (`src/reputation/blocks.service.ts`)
 

@@ -681,6 +681,22 @@ enum LeagueTierName {
   @@map("league_tier")
 }
 
+/// Phase 12 (D-077): the client-side mirror of LeagueTierName. Ascending, different names so the
+/// two ladders are never confused in copy or logs.
+enum ClientLeagueTierName {
+  NEWCOMER
+  REGULAR
+  PREFERRED
+  TRUSTED
+  LOYAL
+  ELITE
+  CHAMPION
+  PATRON
+  LEGEND
+
+  @@map("client_league_tier")
+}
+
 /// What the customer asked for. Address fields are a SNAPSHOT so later edits never change history.
 model ServiceRequest {
   id               String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -960,6 +976,12 @@ model WorkerStats {
   workerUserId  String         @id @map("worker_user_id") @db.Uuid
   jobsCompleted Int            @default(0) @map("jobs_completed")
   league        LeagueTierName @default(WOOD) @map("league")
+  /// The highest league ever reached, distinct from `league` (today's, which can also drop). A
+  /// league-up bonus pays only when `league` newly exceeds `highestLeague` — crossing the same
+  /// boundary twice, or dropping and re-climbing back to a league already recorded here, never
+  /// pays again (D-077 anti-farming/idempotency; retrofitted onto Part D's original logic, which
+  /// had this exact gap).
+  highestLeague LeagueTierName @default(WOOD) @map("highest_league")
   /// Sum and count, not a stored average: integer math avoids float drift (same reasoning as
   /// money), and the average is trivial to compute at read time (ratingSum / ratingCount).
   ratingSum     Int            @default(0) @map("rating_sum")
@@ -983,11 +1005,21 @@ model WorkerStats {
 /// judgement and, later, could gate a customer's ability to keep booking. No badge tier: badges are
 /// a Ranger-facing trust signal only.
 model CustomerStats {
-  customerUserId String   @id @map("customer_user_id") @db.Uuid
-  ratingSum      Int      @default(0) @map("rating_sum")
-  ratingCount    Int      @default(0) @map("rating_count")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customerUserId String               @id @map("customer_user_id") @db.Uuid
+  ratingSum      Int                  @default(0) @map("rating_sum")
+  ratingCount    Int                  @default(0) @map("rating_count")
+  /// Phase 12 (D-077): the client league system. A booking counts only once a job reaches
+  /// CONFIRMED_BY_CUSTOMER with a Ranger who was genuinely KYC-verified (kyc_tier >= 2) at that
+  /// moment — the same anti-self-dealing guard documented on `lifecycle.service.ts`'s confirm().
+  bookingsCompleted           Int                  @default(0) @map("bookings_completed")
+  /// Bookings cancelled or no-showed BY this customer (mirrors WorkerStats.jobsCancelledByWorker).
+  bookingsCancelledByCustomer Int                  @default(0) @map("bookings_cancelled_by_customer")
+  league         ClientLeagueTierName @default(NEWCOMER) @map("league")
+  /// See WorkerStats.highestLeague: the high-water mark a league-up bonus is paid against, so a
+  /// drop-and-reclimb or any other re-crossing of an already-reached league never pays twice.
+  highestLeague  ClientLeagueTierName @default(NEWCOMER) @map("highest_league")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("customer_stats")
 }

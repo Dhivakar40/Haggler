@@ -96,6 +96,13 @@ export function AccountScreen() {
         </Text>
       </View>
 
+      <Button
+        testID="open-client-league"
+        variant="secondary"
+        title={t('clientLeague.title')}
+        onPress={go('/client-league')}
+      />
+
       {message ? (
         <Text color="danger" accessibilityRole="alert">
           {message}

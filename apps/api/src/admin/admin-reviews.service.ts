@@ -83,10 +83,12 @@ export class AdminReviewsService {
         });
         await this.reputation.recomputeWorkerLeague(tx, review.revieweeId);
       } else {
+        // A Ranger's review of a customer fed CustomerStats and possibly the client league.
         await tx.customerStats.update({
           where: { customerUserId: review.revieweeId },
           data: { ratingSum: { decrement: review.rating }, ratingCount: { decrement: 1 } },
         });
+        await this.reputation.recomputeCustomerLeague(tx, review.revieweeId); // D-077
       }
       await this.audit.record(
         {

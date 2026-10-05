@@ -71,6 +71,20 @@ export const LEAGUE_TIERS = [
 ] as const;
 export type LeagueTier = (typeof LEAGUE_TIERS)[number];
 
+/** The client-side mirror of LEAGUE_TIERS (D-077, Phase 12). Ascending. */
+export const CLIENT_LEAGUE_TIERS = [
+  'NEWCOMER',
+  'REGULAR',
+  'PREFERRED',
+  'TRUSTED',
+  'LOYAL',
+  'ELITE',
+  'CHAMPION',
+  'PATRON',
+  'LEGEND',
+] as const;
+export type ClientLeagueTier = (typeof CLIENT_LEAGUE_TIERS)[number];
+
 /** Where a price band came from, best to worst (D3 fallback chain). */
 export const PRICE_BAND_SCOPES = ['PINCODE_CLUSTER', 'CITY', 'DEFAULT'] as const;
 export type PriceBandScope = (typeof PRICE_BAND_SCOPES)[number];

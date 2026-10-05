@@ -16,6 +16,7 @@ import {
   type ProfileUpdate,
   type RegisterPushTokenInput,
   type WorkerProfileUpdate,
+  clientLeagueStatusSchema,
   leagueStatusSchema,
   workerProfileSchema,
 } from '@haggler/shared';
@@ -104,6 +105,8 @@ export const getWorkerProfile = () =>
   apiRequest('/v1/worker/profile', { schema: workerProfileSchema });
 export const getLeagueStatus = () =>
   apiRequest('/v1/worker/league', { schema: leagueStatusSchema });
+export const getClientLeagueStatus = () =>
+  apiRequest('/v1/me/league', { schema: clientLeagueStatusSchema });
 export const updateWorkerProfile = (body: WorkerProfileUpdate) =>
   apiRequest('/v1/worker/profile', { method: 'PATCH', body, schema: workerProfileSchema });
 

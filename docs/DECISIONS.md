@@ -739,6 +739,50 @@ A league can also drop (e.g. a cancellation-rate regression), by the same recomp
 it — `recomputeWorkerLeague` only pays a bonus on a genuine promotion (new league ranks higher),
 never on a drop.
 
+## Phase 12: client league system (Part E) + a Part D idempotency retrofit
+
+**D-077 league-up bonuses are paid against a high-water mark, not the raw old-vs-new comparison —
+retrofitted onto Part D, not just built correctly for Part E.** Designing Part E's "crossing the
+same boundary twice must never pay twice" requirement surfaced that Part D (D-076) had the exact
+same gap: `recomputeWorkerLeague` compared only the league just computed against the league
+currently stored, so a Ranger who reached BRONZE, then regressed to COPPER (a cancellation-rate
+dip), then recovered back to BRONZE, would be paid the BRONZE bonus a second time — nothing
+remembered that BRONZE had already been reached. Fixed by adding `highestLeague` to `WorkerStats`
+(migrated via `UPDATE ... SET highest_league = league` for existing rows, a safe backfill since
+this app has no real production Rangers yet) and changing the bonus condition to "the new league
+outranks `highestLeague`", updating `highestLeague` alongside it. `CustomerStats.highestLeague`
+was built this way from the start. A league can still drop — `league` itself updates on every
+recompute regardless — only the **bonus** is gated by the high-water mark.
+
+**D-077 anti-farming: a booking only counts with a genuinely KYC-verified Ranger.** `confirm()`
+checks `WorkerProfile.kycTier >= 2` — the same threshold `presence.service.ts` already requires to
+go online — before incrementing `CustomerStats.bookingsCompleted` or recomputing the client league.
+Today this is belt-and-braces (matching itself already refuses to surface an unverified Ranger as
+a candidate, so the condition is structurally almost always true), but it documents the intent
+explicitly rather than leaning on that staying true by accident of today's matching code, and it
+is the one place a future direct-assignment or admin-override path would need to keep the guard
+rather than quietly reintroducing a self-dealing vector between two accounts one person controls.
+
+**D-077 the client ladder reuses Part D's mechanism end to end, with a deliberately different
+shape.** `client-league-tier.ts` mirrors `league-tier.ts`'s pure-function structure
+(`computeClientLeagueTier`/`clientLeagueProgress`, exhaustively unit-tested the same way) but
+takes three inputs, not five: completed bookings, the rating Rangers already leave for customers
+(collected since Phase 4, previously unused — D-047), and a cancellation-rate ceiling. There is no
+client-side dispute-rate factor to mirror Part D's inert one — the brief named three inputs for
+this ladder, not four, and inventing a fourth with no backing data would be the opposite of the
+honesty Part D's dispute-rate disclosure was going for. Reward amounts (1/2/2/3/4/6/10 tokens,
+PREFERRED through LEGEND) are the numbers proposed to and approved by the user for this phase.
+**REGULAR pays nothing (0 tokens) by explicit instruction**: with a 1-booking floor, rewarding it
+would let a new customer finish two bookings and have the second effectively free.
+
+**D-077 roadmap (not built): a recurring monthly grant at top client tiers.** The brief offered two
+reward shapes — escalating one-time bonuses (built), or the same bonuses plus a recurring monthly
+token grant for Patron/Legend. The user explicitly chose the one-time-only shape for now, deferring
+the recurring option as a deliberate future addition once there is real usage data to size it
+against — not a cut corner. Implementing it would need a new scheduled job (nothing in
+`maintenance/queues.service.ts` currently runs on a calendar-month cadence) and a way to avoid
+double-granting if a client drops out of and back into a top tier within the same month.
+
 **D-075 Ranger ("dual") profile unlock reuses existing KYC-tier gates, no new state.** A Ranger
 profile is not a new entity to lock/unlock — `WorkerProfile` already exists per-user once the
 `WORKER` role is added, and `kycTier` already gates capability (`presence.service.ts` already

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  CLIENT_LEAGUE_TIERS,
   JOB_STATES,
   LEAGUE_TIERS,
   MAX_REQUEST_PHOTOS,
@@ -208,6 +209,20 @@ export const leagueStatusSchema = z.object({
   ladder: z.array(z.object({ tier: leagueTierSchema, reached: z.boolean() })),
 });
 export type LeagueStatus = z.infer<typeof leagueStatusSchema>;
+
+/** Part E (D-077): the client league screen — the customer-side mirror of leagueStatusSchema. */
+export const clientLeagueTierSchema = z.enum(CLIENT_LEAGUE_TIERS);
+export const clientLeagueStatusSchema = z.object({
+  league: clientLeagueTierSchema,
+  nextLeague: clientLeagueTierSchema.nullable(),
+  progress: z.number().min(0).max(1),
+  bookingsCompleted: z.number().int(),
+  ratingAvg: z.number().nullable(),
+  ratingCount: z.number().int(),
+  cancellationRate: z.number().min(0),
+  ladder: z.array(z.object({ tier: clientLeagueTierSchema, reached: z.boolean() })),
+});
+export type ClientLeagueStatus = z.infer<typeof clientLeagueStatusSchema>;
 
 /** What an invited Ranger sees. Deliberately no exact address until they win the job. */
 export const incomingRequestSchema = z.object({

@@ -186,6 +186,85 @@ describe('reviews (Phase 4, D: money never enters here — see D-037)', () => {
   });
 });
 
+describe('client league system (Phase 12, Part E, D-077)', () => {
+  it('climbs to PREFERRED once a client has a couple of bookings and a decent rating from Rangers', async () => {
+    const c = await m.customer();
+    for (let i = 0; i < 2; i++) {
+      const r = await m.ranger();
+      const { jobId } = await m.match(c, r);
+      await m.agree(c, r, jobId);
+      await m.confirmJob(c, r, jobId);
+      await m.api.post(r, `/v1/jobs/${jobId}/review`, { rating: 4 }).expect(201);
+    }
+    const stats = await m.prisma.customerStats.findUniqueOrThrow({
+      where: { customerUserId: c.userId },
+    });
+    expect(stats.bookingsCompleted).toBe(2);
+    expect(stats.league).toBe('PREFERRED'); // 2 bookings, avg 4.0, 2 ratings
+
+    // The league-up bonus (D-077) was credited, same wallet/ledger mechanism as Part D.
+    const wallet = await m.prisma.customerWallet.findUnique({ where: { userId: c.userId } });
+    const bonus = await m.prisma.walletLedgerEntry.findFirst({
+      where: { walletId: wallet!.id, type: 'BONUS', note: { contains: 'PREFERRED' } },
+    });
+    expect(bonus?.tokensDelta).toBe(1);
+  });
+
+  it('anti-farming: a booking with a non-verified Ranger never counts toward the client league', async () => {
+    const c = await m.customer();
+    const r = await m.ranger();
+    const { jobId } = await m.match(c, r);
+    await m.agree(c, r, jobId);
+    // Simulate the Ranger's verification lapsing between match and confirm (the only way this
+    // guard can ever actually bind, since matching itself already requires kyc_tier >= 2).
+    await m.prisma.workerProfile.update({ where: { userId: r.userId }, data: { kycTier: 1 } });
+    await m.confirmJob(c, r, jobId);
+    const stats = await m.prisma.customerStats.findUnique({
+      where: { customerUserId: c.userId },
+    });
+    expect(stats?.bookingsCompleted ?? 0).toBe(0);
+  });
+
+  it('idempotency: dropping and re-climbing back to an already-reached league never pays the bonus twice', async () => {
+    const c = await m.customer();
+    // Reach PREFERRED (2 bookings, rated 4 each by two different Rangers).
+    for (let i = 0; i < 2; i++) {
+      const r = await m.ranger();
+      const { jobId } = await m.match(c, r);
+      await m.agree(c, r, jobId);
+      await m.confirmJob(c, r, jobId);
+      await m.api.post(r, `/v1/jobs/${jobId}/review`, { rating: 4 }).expect(201);
+    }
+    let wallet = await m.prisma.customerWallet.findUniqueOrThrow({
+      where: { userId: c.userId },
+    });
+    const afterFirstPromotion = wallet.balanceTokens;
+    expect(afterFirstPromotion).toBeGreaterThan(0);
+
+    // Force a drop back to NEWCOMER by directly resetting bookingsCompleted (simulating whatever
+    // future mechanism could reduce it), then recompute and climb back to PREFERRED the same way
+    // a real re-crossing would happen.
+    await m.prisma.customerStats.update({
+      where: { customerUserId: c.userId },
+      data: { bookingsCompleted: 0, league: 'NEWCOMER' },
+    });
+    for (let i = 0; i < 2; i++) {
+      const r = await m.ranger();
+      const { jobId } = await m.match(c, r);
+      await m.agree(c, r, jobId);
+      await m.confirmJob(c, r, jobId);
+      await m.api.post(r, `/v1/jobs/${jobId}/review`, { rating: 4 }).expect(201);
+    }
+    wallet = await m.prisma.customerWallet.findUniqueOrThrow({ where: { userId: c.userId } });
+    // No new BONUS tokens: highestLeague already recorded PREFERRED, so re-crossing it pays nothing.
+    expect(wallet.balanceTokens).toBe(afterFirstPromotion);
+    const bonusCount = await m.prisma.walletLedgerEntry.count({
+      where: { walletId: wallet.id, type: 'BONUS' },
+    });
+    expect(bonusCount).toBe(1);
+  });
+});
+
 describe('blocking (Phase 4: user-facing side of the matching exclusion built in Phase 2)', () => {
   it('starts empty', async () => {
     const c = await m.customer();

@@ -62,6 +62,7 @@ export class ReviewsService {
             update: { ratingSum: { increment: input.rating }, ratingCount: { increment: 1 } },
             create: { customerUserId: revieweeId, ratingSum: input.rating, ratingCount: 1 },
           });
+          await this.reputation.recomputeCustomerLeague(tx, revieweeId); // D-077
         }
       });
     } catch (err) {

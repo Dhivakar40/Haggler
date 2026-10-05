@@ -280,7 +280,8 @@ export class LifecycleService {
   }
 
   /** Customer confirms the work. This is the moment a token is consumed (Phase 3 hooks in here)
-   * and jobsCompleted increments, which can move a Ranger's badge tier even without a new review. */
+   * and jobsCompleted/bookingsCompleted increment, which can move a Ranger's league (D-076) and
+   * the client's own league (D-077) even without a new review. */
   async confirm(customerId: string, jobId: string) {
     const job = await this.customerJob(customerId, jobId);
     await this.prisma.$transaction(async (tx) => {
@@ -293,12 +294,38 @@ export class LifecycleService {
         data: { confirmedAt: new Date() },
       });
       if (job.workerId) {
-        await tx.workerStats.upsert({
-          where: { workerUserId: job.workerId },
-          update: { jobsCompleted: { increment: 1 } },
-          create: { workerUserId: job.workerId, jobsCompleted: 1 },
-        });
+        // workerStats's upsert and the anti-farming kyc_tier lookup below are independent of each
+        // other, so they go over the wire together — one fewer sequential round trip inside a
+        // transaction that a hosted database's per-query latency makes expensive (D-074).
+        //
+        // D-077 anti-farming: a booking only counts toward the CLIENT's league if the Ranger was
+        // genuinely KYC-verified (the same kyc_tier >= 2 threshold presence.service.ts already
+        // requires to go online) at this moment — not just a second account the same person
+        // controls, rushed through confirm() without ever earning the ability to go online for
+        // real. This is belt-and-braces: only a verified Ranger can be matched/accept a broadcast
+        // at all today, but the check documents the intent explicitly rather than relying on that
+        // staying true by accident of today's matching code.
+        const [, wp] = await Promise.all([
+          tx.workerStats.upsert({
+            where: { workerUserId: job.workerId },
+            update: { jobsCompleted: { increment: 1 } },
+            create: { workerUserId: job.workerId, jobsCompleted: 1 },
+          }),
+          tx.workerProfile.findUnique({
+            where: { userId: job.workerId },
+            select: { kycTier: true },
+          }),
+        ]);
         await this.reputation.recomputeWorkerLeague(tx, job.workerId);
+
+        if (wp && wp.kycTier >= 2) {
+          await tx.customerStats.upsert({
+            where: { customerUserId: customerId },
+            update: { bookingsCompleted: { increment: 1 } },
+            create: { customerUserId: customerId, bookingsCompleted: 1 },
+          });
+          await this.reputation.recomputeCustomerLeague(tx, customerId);
+        }
       }
     });
     return this.done(jobId, customerId);
@@ -343,9 +370,10 @@ export class LifecycleService {
         },
         meta: { feeApplies },
       });
-      // D-076: feeds the league's cancellation-rate factor. Only the Ranger's own cancellations
-      // count against them — a customer cancelling is not the Ranger's fault.
+      // D-076/D-077: feeds the cancellation-rate factor on whichever side caused it. A customer
+      // cancelling is not the Ranger's fault (and vice versa), so only the actor's own counter moves.
       if (role === 'WORKER' && job.workerId) await this.markWorkerCancellation(tx, job.workerId);
+      if (role === 'CUSTOMER') await this.markCustomerCancellation(tx, userId);
     });
     if (job.status === 'BROADCASTING' || job.status === 'REQUESTED')
       await this.matching.closeBroadcasts(jobId, 'CANCELLED');
@@ -361,6 +389,16 @@ export class LifecycleService {
       create: { workerUserId: workerId, jobsCancelledByWorker: 1 },
     });
     await this.reputation.recomputeWorkerLeague(tx, workerId);
+  }
+
+  /** The client-league mirror of markWorkerCancellation (D-077). */
+  private async markCustomerCancellation(tx: Prisma.TransactionClient, customerId: string) {
+    await tx.customerStats.upsert({
+      where: { customerUserId: customerId },
+      update: { bookingsCancelledByCustomer: { increment: 1 } },
+      create: { customerUserId: customerId, bookingsCancelledByCustomer: 1 },
+    });
+    await this.reputation.recomputeCustomerLeague(tx, customerId);
   }
 
   /** Straight-line distance between the first and latest GPS points recorded while en route. */
@@ -410,8 +448,8 @@ export class LifecycleService {
           `Wait ${Math.ceil(cfg.customer_no_show_minutes - waited)} more minutes before reporting a no-show.`,
           { code: 'TOO_EARLY' },
         );
-      await this.prisma.$transaction((tx) =>
-        this.transitions.move(tx, {
+      await this.prisma.$transaction(async (tx) => {
+        await this.transitions.move(tx, {
           jobId,
           from: 'ARRIVED',
           to: 'NO_SHOW_CUSTOMER',
@@ -422,8 +460,9 @@ export class LifecycleService {
             cancelledBy: 'SYSTEM',
             cancelReason: 'NO_SHOW_CUSTOMER',
           },
-        }),
-      );
+        });
+        await this.markCustomerCancellation(tx, job.customerId); // D-077
+      });
     }
     return this.done(jobId, userId);
   }

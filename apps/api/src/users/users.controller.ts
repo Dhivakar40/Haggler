@@ -24,6 +24,7 @@ import {
 import { z } from 'zod';
 import { ApiZodBody, ClientIp, CurrentUser, type AuthUser } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
+import { ReputationService } from '../reputation/reputation.service';
 import { AccountLifecycleService } from './account-lifecycle.service';
 import { AddressesService } from './addresses.service';
 import { EmergencyContactsService } from './emergency-contacts.service';
@@ -40,7 +41,16 @@ export class UsersController {
     private readonly lifecycle: AccountLifecycleService,
     private readonly addresses: AddressesService,
     private readonly contacts: EmergencyContactsService,
+    private readonly reputation: ReputationService,
   ) {}
+
+  @Get('league')
+  @ApiOperation({
+    summary: 'My client league, progress toward the next one, and the full ladder (Part E)',
+  })
+  league(@CurrentUser() user: AuthUser) {
+    return this.reputation.getClientLeagueStatus(user.id);
+  }
 
   @Get()
   @ApiOperation({ summary: 'My account, roles and any consents I still need to give' })
