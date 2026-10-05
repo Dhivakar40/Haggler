@@ -57,8 +57,19 @@ export const TERMINAL_JOB_STATES: readonly JobState[] = [
   'REFUNDED',
 ];
 
-export const BADGE_TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'] as const;
-export type BadgeTier = (typeof BADGE_TIERS)[number];
+/** Ascending (D-076, Phase 11; replaces the old 5-tier BADGE_TIERS). */
+export const LEAGUE_TIERS = [
+  'WOOD',
+  'STONE',
+  'COPPER',
+  'BRONZE',
+  'SILVER',
+  'GOLD',
+  'PLATINUM',
+  'DIAMOND',
+  'LEGENDARY',
+] as const;
+export type LeagueTier = (typeof LEAGUE_TIERS)[number];
 
 /** Where a price band came from, best to worst (D3 fallback chain). */
 export const PRICE_BAND_SCOPES = ['PINCODE_CLUSTER', 'CITY', 'DEFAULT'] as const;

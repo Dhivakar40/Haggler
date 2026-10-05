@@ -74,6 +74,7 @@ function TierCard({
 
 export function RangerScreen() {
   const { t } = useTranslation();
+  const router = useRouter();
   const qc = useQueryClient();
   const status = useQuery({ queryKey: KYC_STATUS_KEY, queryFn: getKycStatus });
   const profile = useQuery({ queryKey: ['worker-profile'], queryFn: getWorkerProfile });
@@ -122,6 +123,7 @@ export function RangerScreen() {
   return (
     <Screen scroll>
       <Text color="textMuted">{t('ranger.intro')}</Text>
+      <Button testID="open-league" variant="secondary" title={t('league.title')} onPress={() => router.push('/league')} />
       <TierCard tier={1} check={latest(1)} verified={tier >= 1} locked={false} />
       <TierCard tier={2} check={latest(2)} verified={tier >= 2} locked={tier < 1} />
 

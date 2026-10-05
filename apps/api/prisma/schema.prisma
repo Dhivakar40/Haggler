@@ -663,14 +663,22 @@ enum PaymentMethod {
   @@map("payment_method")
 }
 
-enum BadgeTierName {
+/// Phase 11 (D-076): replaces the flat BadgeTierName ladder. Ascending. BRONZE/SILVER/GOLD/
+/// PLATINUM/DIAMOND keep their old names and relative order (now positions 4-8 of 9) so existing
+/// data migrates by name, not by rebuilding anyone's progress; WOOD/STONE/COPPER are new entry
+/// tiers below, LEGENDARY a new aspirational tier above.
+enum LeagueTierName {
+  WOOD
+  STONE
+  COPPER
   BRONZE
   SILVER
   GOLD
   PLATINUM
   DIAMOND
+  LEGENDARY
 
-  @@map("badge_tier")
+  @@map("league_tier")
 }
 
 /// What the customer asked for. Address fields are a SNAPSHOT so later edits never change history.
@@ -949,15 +957,23 @@ model Block {
 }
 
 model WorkerStats {
-  workerUserId  String        @id @map("worker_user_id") @db.Uuid
-  jobsCompleted Int           @default(0) @map("jobs_completed")
-  badgeTier     BadgeTierName @default(BRONZE) @map("badge_tier")
+  workerUserId  String         @id @map("worker_user_id") @db.Uuid
+  jobsCompleted Int            @default(0) @map("jobs_completed")
+  league        LeagueTierName @default(WOOD) @map("league")
   /// Sum and count, not a stored average: integer math avoids float drift (same reasoning as
   /// money), and the average is trivial to compute at read time (ratingSum / ratingCount).
-  ratingSum     Int           @default(0) @map("rating_sum")
-  ratingCount   Int           @default(0) @map("rating_count")
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ratingSum     Int            @default(0) @map("rating_sum")
+  ratingCount   Int            @default(0) @map("rating_count")
+  /// Jobs cancelled or no-showed by this worker (lifecycle.service.ts increments both at the
+  /// same transition points that already end a job that way), feeding the league's cancellation
+  /// rate factor.
+  jobsCancelledByWorker Int    @default(0) @map("jobs_cancelled_by_worker")
+  /// Reserved for a future dispute-raising feature (JobStatus.DISPUTED exists but nothing sets it
+  /// yet, D-076): always 0 today. Wired into the league formula now so that feature needs zero
+  /// scoring-side changes to plug in later — not a claim that dispute tracking is live.
+  jobsDisputed  Int            @default(0) @map("jobs_disputed")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("worker_stats")
 }
@@ -1025,6 +1041,9 @@ enum WalletLedgerType {
   RELEASE
   CONSUME
   ADJUSTMENT
+  /// The app paying the person (D-076 league-up rewards), never the reverse — distinct from
+  /// ADJUSTMENT (a manual admin correction) so the ledger reads clearly on its own.
+  BONUS
 
   @@map("wallet_ledger_type")
 }

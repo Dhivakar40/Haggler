@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { JOB_STATES, MAX_REQUEST_PHOTOS, MAX_VOICE_SECONDS, PRICE_BAND_SCOPES } from './constants';
+import {
+  JOB_STATES,
+  LEAGUE_TIERS,
+  MAX_REQUEST_PHOTOS,
+  MAX_VOICE_SECONDS,
+  PRICE_BAND_SCOPES,
+} from './constants';
 import { paiseSchema } from './schemas';
 
 /** Contracts for the on-demand marketplace (Phase 2), shared by API and mobile. */
@@ -124,7 +130,7 @@ export const jobDtoSchema = z.object({
   worker: partySchema
     .extend({
       kycTier: z.number().int(),
-      badgeTier: z.string(),
+      league: z.string(),
       jobsCompleted: z.number().int(),
       /** null when the Ranger has no ratings yet (never shown as "0 stars"). */
       ratingAvg: z.number().nullable(),
@@ -186,6 +192,22 @@ export const locationUpdateSchema = z.object({
 export type LocationUpdate = z.infer<typeof locationUpdateSchema>;
 
 export const presenceSchema = z.object({ isOnline: z.boolean() });
+
+/** Part D (D-076): the Ranger league screen — current league, progress toward the next, and the
+ * full ordered ladder so a Ranger can see what's coming. */
+export const leagueTierSchema = z.enum(LEAGUE_TIERS);
+export const leagueStatusSchema = z.object({
+  league: leagueTierSchema,
+  nextLeague: leagueTierSchema.nullable(),
+  /** 0..1, bounded by whichever requirement for nextLeague is furthest from being met. */
+  progress: z.number().min(0).max(1),
+  jobsCompleted: z.number().int(),
+  ratingAvg: z.number().nullable(),
+  ratingCount: z.number().int(),
+  cancellationRate: z.number().min(0),
+  ladder: z.array(z.object({ tier: leagueTierSchema, reached: z.boolean() })),
+});
+export type LeagueStatus = z.infer<typeof leagueStatusSchema>;
 
 /** What an invited Ranger sees. Deliberately no exact address until they win the job. */
 export const incomingRequestSchema = z.object({

@@ -267,9 +267,10 @@ the EAS dashboard (`expo.dev` → your project → Builds).
       launch.
 - [ ] Switch `PAYMENTS_MODE` to `test` with real Razorpay TEST keys and a real webhook subscription
       before any non-sandbox testing; there is still no `live` mode anywhere (D-020).
-- [ ] Review the badge tier thresholds (`badge-tier.ts::DEFAULT_BADGE_THRESHOLDS`, placeholders);
-      override via a `badge_tier_thresholds` row in `system_config` if product/ops want different
-      numbers without a deploy.
+- [ ] Review the league thresholds (`league-tier.ts::DEFAULT_LEAGUE_THRESHOLDS`, placeholders) and
+      the league-up bonus amounts (`reputation.service.ts::LEAGUE_UP_BONUS_TOKENS`, also
+      placeholders); override thresholds via a `league_thresholds` row in `system_config` if
+      product/ops want different numbers without a deploy.
 - [ ] Appoint a real Grievance Officer and update the placeholder name/email/phone shown at
       Legal > Grievance Officer in the app (compliance checklist item 8).
 - [ ] Decide on employer verification for Contract labour before launch (D-056) — today any

@@ -144,7 +144,7 @@ describe('reviews (Phase 4, D: money never enters here — see D-037)', () => {
     );
   });
 
-  it('badge tier climbs to SILVER once a Ranger has enough jobs and a strong enough average', async () => {
+  it('league climbs to COPPER once a Ranger has a few jobs and a strong enough average (D-076)', async () => {
     const r = await m.ranger();
     for (let i = 0; i < 5; i++) {
       const c = await m.customer();
@@ -157,10 +157,19 @@ describe('reviews (Phase 4, D: money never enters here — see D-037)', () => {
       where: { workerUserId: r.userId },
     });
     expect(stats.jobsCompleted).toBe(5);
-    expect(stats.badgeTier).toBe('SILVER');
+    expect(stats.league).toBe('COPPER'); // BRONZE needs 10 jobs; 5 jobs + avg 5.0 clears COPPER
+
+    // A league-up bonus (D-076) was credited to the same wallet row the Ranger already has from
+    // the CUSTOMER role every account starts with.
+    const wallet = await m.prisma.customerWallet.findUnique({ where: { userId: r.userId } });
+    expect(wallet?.balanceTokens).toBeGreaterThan(0);
+    const bonus = await m.prisma.walletLedgerEntry.findFirst({
+      where: { walletId: wallet!.id, type: 'BONUS' },
+    });
+    expect(bonus).toBeTruthy();
   });
 
-  it('badge tier stays BRONZE with plenty of jobs but a poor average', async () => {
+  it('a poor average caps the league at STONE, regardless of job count (D-076)', async () => {
     const r = await m.ranger();
     for (let i = 0; i < 5; i++) {
       const c = await m.customer();
@@ -173,7 +182,7 @@ describe('reviews (Phase 4, D: money never enters here — see D-037)', () => {
       where: { workerUserId: r.userId },
     });
     expect(stats.jobsCompleted).toBe(5);
-    expect(stats.badgeTier).toBe('BRONZE');
+    expect(stats.league).toBe('STONE'); // avg 2.0 is below COPPER's 3.5 floor
   });
 });
 

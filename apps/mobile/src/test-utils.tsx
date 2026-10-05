@@ -152,7 +152,7 @@ export const rangerParty = {
   id: '22222222-2222-4222-8222-222222222222',
   firstName: 'Ravi',
   kycTier: 2,
-  badgeTier: 'SILVER',
+  league: 'SILVER',
   jobsCompleted: 12,
   ratingAvg: 4.6,
   ratingCount: 9,

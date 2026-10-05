@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { randomInt, randomUUID } from 'node:crypto';
 import { ERROR_CODES, type PaymentMethodName } from './lifecycle.types';
 import { StorageService } from '../adapters/storage/storage.service';
@@ -297,7 +298,7 @@ export class LifecycleService {
           update: { jobsCompleted: { increment: 1 } },
           create: { workerUserId: job.workerId, jobsCompleted: 1 },
         });
-        await this.reputation.recomputeWorkerBadge(tx, job.workerId);
+        await this.reputation.recomputeWorkerLeague(tx, job.workerId);
       }
     });
     return this.done(jobId, customerId);
@@ -327,8 +328,8 @@ export class LifecycleService {
       feeApplies =
         (await this.travelledMeters(job.id)) >= (await this.cfg.get()).cancel_fee_travel_m;
     }
-    await this.prisma.$transaction((tx) =>
-      this.transitions.move(tx, {
+    await this.prisma.$transaction(async (tx) => {
+      await this.transitions.move(tx, {
         jobId,
         from: job.status,
         to: 'CANCELLED',
@@ -341,11 +342,25 @@ export class LifecycleService {
           cancellationFeeApplies: feeApplies,
         },
         meta: { feeApplies },
-      }),
-    );
+      });
+      // D-076: feeds the league's cancellation-rate factor. Only the Ranger's own cancellations
+      // count against them — a customer cancelling is not the Ranger's fault.
+      if (role === 'WORKER' && job.workerId) await this.markWorkerCancellation(tx, job.workerId);
+    });
     if (job.status === 'BROADCASTING' || job.status === 'REQUESTED')
       await this.matching.closeBroadcasts(jobId, 'CANCELLED');
     return this.done(jobId, userId);
+  }
+
+  /** Increments the Ranger's cancellation counter and re-derives their league from it (D-076).
+   * No jobsCompleted change, so a cancellation can only ever push a league down, never up. */
+  private async markWorkerCancellation(tx: Prisma.TransactionClient, workerId: string) {
+    await tx.workerStats.upsert({
+      where: { workerUserId: workerId },
+      update: { jobsCancelledByWorker: { increment: 1 } },
+      create: { workerUserId: workerId, jobsCancelledByWorker: 1 },
+    });
+    await this.reputation.recomputeWorkerLeague(tx, workerId);
   }
 
   /** Straight-line distance between the first and latest GPS points recorded while en route. */
@@ -375,16 +390,17 @@ export class LifecycleService {
           `Wait ${Math.ceil(cfg.worker_no_show_minutes - waited)} more minutes before reporting a no-show.`,
           { code: 'TOO_EARLY' },
         );
-      await this.prisma.$transaction((tx) =>
-        this.transitions.move(tx, {
+      await this.prisma.$transaction(async (tx) => {
+        await this.transitions.move(tx, {
           jobId,
           from: 'EN_ROUTE',
           to: 'NO_SHOW_WORKER',
           actor: 'CUSTOMER',
           actorUserId: userId,
           data: { cancelledAt: new Date(), cancelledBy: 'SYSTEM', cancelReason: 'NO_SHOW_WORKER' },
-        }),
-      );
+        });
+        if (job.workerId) await this.markWorkerCancellation(tx, job.workerId); // D-076
+      });
     } else {
       if (job.status !== 'ARRIVED' || !job.arrivedAt)
         throw conflict('You can report a no-show only after arriving.', { code: 'WRONG_STATE' });

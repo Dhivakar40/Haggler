@@ -512,7 +512,7 @@ describe('RequestStatusScreen', () => {
           id: '22222222-2222-4222-8222-222222222222',
           firstName: 'Ravi',
           kycTier: 2,
-          badgeTier: 'BRONZE',
+          league: 'WOOD',
           jobsCompleted: 0,
           ratingAvg: null,
           ratingCount: 0,

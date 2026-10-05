@@ -5,7 +5,7 @@ import { EncryptionService } from '../common/crypto';
 import { notFound } from '../common/http-errors';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ratingAverage } from '../reputation/badge-tier';
+import { ratingAverage } from '../reputation/league-tier';
 import { MarketplaceConfig } from './marketplace-config.service';
 import { estimateAcceptMinutes } from './sla';
 
@@ -161,7 +161,7 @@ export class JobViewService {
             id: worker.id,
             firstName: firstName(worker.fullName),
             kycTier: worker.workerProfile?.kycTier ?? 0,
-            badgeTier: stats?.badgeTier ?? 'BRONZE',
+            league: stats?.league ?? 'WOOD',
             jobsCompleted: stats?.jobsCompleted ?? 0,
             ratingAvg:
               stats && stats.ratingCount > 0

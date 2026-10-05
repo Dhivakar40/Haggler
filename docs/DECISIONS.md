@@ -698,6 +698,47 @@ verified identity data. The onboarding endpoint is one-time by design (`UsersSer
 .completeOnboarding` refuses once `profileCompletedAt` is set); further edits go through the
 existing `PATCH /me` (`profileUpdateSchema`), which now also accepts `email`/`dateOfBirth`/`gender`.
 
+## Phase 11: Ranger league system (replaces Phase 4's badge tiers)
+
+**D-076 the league ladder extends the existing scoring engine; it does not run alongside it.**
+Part D's brief was explicit that this replaces Phase 4's flat 5-tier badge system, not adds a
+second parallel one — `reputation/badge-tier.ts` is gone, not kept dormant. `league-tier.ts`'s
+`computeLeagueTier` is the same shape of pure, exhaustively-tested function as `computeBadgeTier`
+was, walking a ladder top-down on the same core inputs (completed jobs, rating count, rating
+average) plus two new ones. `WorkerStats.badgeTier` was renamed to `league` (not a new column) via
+a migration that casts the column's enum type directly (`badge_tier::text::league_tier`), so
+BRONZE/SILVER/GOLD/PLATINUM/DIAMOND — which keep their exact names at positions 4-8 of the new
+9-tier ladder — carry every existing Ranger's standing across unchanged. Nobody's progress reset.
+
+**D-076 cancellation rate is real; dispute rate is wired in but structurally inert.** The brief
+named both as inputs "same as today's scoring function" — but neither was actually tracked in
+`WorkerStats` before this phase; only jobs/ratings were. Cancellation rate is new and real:
+`WorkerStats.jobsCancelledByWorker` increments at the exact two places in `lifecycle.service.ts`
+that already end a job because of the Ranger (`cancel()` when the WORKER is the actor,
+`reportNoShow()`'s `NO_SHOW_WORKER` branch) — a customer cancelling never counts against the
+Ranger. Dispute rate could not be made equally real: `JobStatus.DISPUTED` exists in the schema but
+no flow in this codebase ever sets it (a dispute-raising feature was evidently planned — `cancel()`
+already says "Raise a dispute instead" in one error message — but never built, and building one is
+out of this phase's scope). Rather than fabricate a stand-in signal, `WorkerStats.jobsDisputed` and
+every threshold's `maxDisputeRate` exist and are threaded through the whole formula (so a future
+dispute feature needs zero scoring-side changes to plug in), but `maxDisputeRate` is set to `1`
+(never binding) everywhere today. This is a disclosed, structural gap, not a bug — the formula is
+complete and tested with `jobsDisputed` as a live parameter, there is simply no current producer
+of a nonzero value for it.
+
+**D-076 a league-up bonus is proposed, not pre-negotiated, and lands in the same wallet a Ranger
+already has.** `ReputationService.LEAGUE_UP_BONUS_TOKENS` (1/1/2/2/3/4/6/10 tokens, STONE through
+LEGENDARY) are placeholder amounts for product/ops to tune, same status as the thresholds
+themselves — not numbers the brief asked to be pre-approved before implementing (unlike Part E's
+client rewards, which the brief explicitly gates on approval). They are credited via
+`WalletService.grantLeagueBonus`, a new method on the existing Phase 3 wallet service using a new
+`BONUS` ledger type (distinct from `ADJUSTMENT`, a manual admin correction) — into the SAME
+`CustomerWallet` row a Ranger already has, because every account is granted the CUSTOMER role at
+sign-up regardless of whether WORKER is added later. No Ranger-specific wallet model was needed.
+A league can also drop (e.g. a cancellation-rate regression), by the same recompute that can raise
+it — `recomputeWorkerLeague` only pays a bonus on a genuine promotion (new league ranks higher),
+never on a drop.
+
 **D-075 Ranger ("dual") profile unlock reuses existing KYC-tier gates, no new state.** A Ranger
 profile is not a new entity to lock/unlock — `WorkerProfile` already exists per-user once the
 `WORKER` role is added, and `kycTier` already gates capability (`presence.service.ts` already

@@ -4,6 +4,7 @@ import { goOnlineSchema, locationUpdateSchema } from '@haggler/shared';
 import type { z } from 'zod';
 import { ApiZodBody, CurrentUser, Roles, type AuthUser } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
+import { ReputationService } from '../reputation/reputation.service';
 import { MatchingService } from './matching.service';
 import { PresenceService } from './presence.service';
 
@@ -16,7 +17,16 @@ export class WorkerPresenceController {
   constructor(
     private readonly presence: PresenceService,
     private readonly matching: MatchingService,
+    private readonly reputation: ReputationService,
   ) {}
+
+  @Get('league')
+  @ApiOperation({
+    summary: 'My league, progress toward the next one, and the full ladder (Part D)',
+  })
+  league(@CurrentUser() u: AuthUser) {
+    return this.reputation.getLeagueStatus(u.id);
+  }
 
   @Post('online')
   @HttpCode(200)

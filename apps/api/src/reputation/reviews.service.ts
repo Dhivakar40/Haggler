@@ -55,7 +55,7 @@ export class ReviewsService {
             update: { ratingSum: { increment: input.rating }, ratingCount: { increment: 1 } },
             create: { workerUserId: revieweeId, ratingSum: input.rating, ratingCount: 1 },
           });
-          await this.reputation.recomputeWorkerBadge(tx, revieweeId);
+          await this.reputation.recomputeWorkerLeague(tx, revieweeId);
         } else {
           await tx.customerStats.upsert({
             where: { customerUserId: revieweeId },

@@ -3,7 +3,7 @@ import { type Candidate, rankCandidates, scoreCandidate } from './ranking';
 const base: Candidate = {
   userId: 'a',
   distanceM: 1000,
-  badgeTier: 'BRONZE',
+  league: 'WOOD',
   jobsLast7d: 0,
   offersReceived: 0,
   offersAccepted: 0,
@@ -12,18 +12,18 @@ const base: Candidate = {
 const ctx = { radiusM: 5000, genderPreference: 'ANY' as const };
 
 describe('scoreCandidate', () => {
-  it('matches the worked example (Asha .558, Ravi .524)', () => {
+  it('matches the worked example (Asha .608, Ravi .524)', () => {
     const asha = {
       ...base,
       userId: 'asha',
       distanceM: 800,
-      badgeTier: 'SILVER',
+      league: 'SILVER',
       jobsLast7d: 12,
       offersReceived: 10,
       offersAccepted: 9,
     };
     const ravi = { ...base, userId: 'ravi', distanceM: 2200 };
-    expect(scoreCandidate(asha, ctx)).toBeCloseTo(0.558, 2);
+    expect(scoreCandidate(asha, ctx)).toBeCloseTo(0.608, 2);
     expect(scoreCandidate(ravi, ctx)).toBeCloseTo(0.524, 2);
   });
 
@@ -33,10 +33,26 @@ describe('scoreCandidate', () => {
     );
   });
 
-  it('a higher badge tier beats a lower one, all else equal', () => {
-    expect(scoreCandidate({ ...base, badgeTier: 'GOLD' }, ctx)).toBeGreaterThan(
-      scoreCandidate({ ...base, badgeTier: 'BRONZE' }, ctx),
+  it('a higher league beats a lower one, all else equal', () => {
+    expect(scoreCandidate({ ...base, league: 'GOLD' }, ctx)).toBeGreaterThan(
+      scoreCandidate({ ...base, league: 'WOOD' }, ctx),
     );
+  });
+
+  it('every rung of the ladder outranks the one below it', () => {
+    const order = [
+      'WOOD',
+      'STONE',
+      'COPPER',
+      'BRONZE',
+      'SILVER',
+      'GOLD',
+      'PLATINUM',
+      'DIAMOND',
+      'LEGENDARY',
+    ] as const;
+    const scores = order.map((league) => scoreCandidate({ ...base, league }, ctx));
+    for (let i = 1; i < scores.length; i++) expect(scores[i]).toBeGreaterThan(scores[i - 1]!);
   });
 
   it('fairness: a Ranger with fewer recent jobs gets a boost', () => {
@@ -51,7 +67,7 @@ describe('scoreCandidate', () => {
         {
           ...base,
           distanceM: 5000,
-          badgeTier: 'BRONZE',
+          league: 'WOOD',
           jobsLast7d: 1e9,
           offersAccepted: accepted,
           offersReceived: received,
@@ -92,7 +108,7 @@ describe('scoreCandidate', () => {
       userId: 'strong',
       gender: 'MALE' as const,
       distanceM: 200,
-      badgeTier: 'DIAMOND',
+      league: 'LEGENDARY',
     };
     expect(
       rankCandidates([weakPreferred, strong], { ...ctx, genderPreference: 'FEMALE' })[0]?.userId,

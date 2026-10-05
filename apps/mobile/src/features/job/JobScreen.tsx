@@ -101,7 +101,7 @@ export function JobScreen() {
             {!isRanger && job.worker ? (
               <>
                 <Text color="textMuted" testID="ranger-meta">
-                  {t('job.level', { tier: job.worker.kycTier })} · {job.worker.badgeTier} ·{' '}
+                  {t('job.level', { tier: job.worker.kycTier })} · {job.worker.league} ·{' '}
                   {t('job.jobsDone', { count: job.worker.jobsCompleted })}
                 </Text>
                 <Text

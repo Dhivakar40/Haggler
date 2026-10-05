@@ -108,7 +108,7 @@ Customer: create request (media + optional voice, price band shown)
    │  RequestsService ──▶ status REQUESTED ──▶ BROADCASTING (wave 1 built immediately)
    ▼
 SchedulerService.tick() [DB poller] ──▶ builds wave 2 (5km) / wave 3 (10km) as deadlines pass
-   │  each wave: top 5 candidates by rankCandidates() (distance .4, badge .2, fairness .2,
+   │  each wave: top 5 candidates by rankCandidates() (distance .4, league .2, fairness .2,
    │             smoothed acceptance .2, soft gender-match bonus .1); pushed over Socket.IO
    ▼
 Ranger: request.accept ──▶ Redis NX lock (10s) ──▶ KeyedMutex(jobId) ──▶ Postgres txn:
@@ -191,25 +191,35 @@ top-ups — see the Phase 9 section below.
 
 # Phase 4 additions
 
-## Reviews and badge tiers (`src/reputation`)
+## Reviews and Ranger leagues (`src/reputation`)
 
 ```
 Job reaches CONFIRMED_BY_CUSTOMER
    │  ReviewsService.submit() [one row per (jobId, raterRole), enforced by a DB unique index]:
    │    CUSTOMER rates WORKER ──▶ WorkerStats.ratingSum/ratingCount += rating
-   │                                ──▶ ReputationService.recomputeWorkerBadge() [pure fn, see below]
-   │    WORKER rates CUSTOMER   ──▶ CustomerStats.ratingSum/ratingCount += rating (no badge; D-047)
+   │                                ──▶ ReputationService.recomputeWorkerLeague() [pure fn, see below]
+   │    WORKER rates CUSTOMER   ──▶ CustomerStats.ratingSum/ratingCount += rating (no league; D-047)
    ▼
 JobTransitions.move() [same Phase 2 choke point]:
-   to CONFIRMED_BY_CUSTOMER ──▶ WorkerStats.jobsCompleted += 1 ──▶ recomputeWorkerBadge() again
+   to CONFIRMED_BY_CUSTOMER ──▶ WorkerStats.jobsCompleted += 1 ──▶ recomputeWorkerLeague() again
+   to CANCELLED (actor WORKER), NO_SHOW_WORKER ──▶ WorkerStats.jobsCancelledByWorker += 1
+                                                     ──▶ recomputeWorkerLeague() again
 ```
 
-`computeBadgeTier(jobsCompleted, ratingSum, ratingCount, thresholds)` in `reputation/badge-tier.ts`
-is pure and exhaustively unit-tested: it walks a ladder of thresholds (DIAMOND down to BRONZE),
-each requiring both a job-count floor AND a rating-count-and-average floor, so neither volume alone
-nor one lucky review can buy a tier (D-045). Thresholds are DB-overridable via
-`system_config.badge_tier_thresholds` (`ReputationConfig`, same caching/override pattern as
-`MarketplaceConfig`).
+`computeLeagueTier(jobsCompleted, ratingSum, ratingCount, jobsCancelledByWorker, jobsDisputed,
+thresholds)` in `reputation/league-tier.ts` (Phase 11, D-076; replaces Phase 4's flat
+`badge-tier.ts`) is pure and exhaustively unit-tested: it walks a 9-rung ladder (LEGENDARY down to
+WOOD: Wood, Stone, Copper, Bronze, Silver, Gold, Platinum, Diamond, Legendary), each rung requiring
+a job-count floor, a rating-count-and-average floor, AND a cancellation-rate ceiling, so neither
+volume alone nor one lucky review can buy a league (D-045, extended). `jobsDisputed`/
+`maxDisputeRate` are wired in but inert today — no flow sets `JobStatus.DISPUTED` yet, so every
+threshold's `maxDisputeRate` is 1 (never binding) until a real dispute-raising feature exists.
+Thresholds are DB-overridable via `system_config.league_thresholds` (`ReputationConfig`, same
+caching/override pattern as `MarketplaceConfig`). A promotion credits a one-time token bonus to the
+Ranger's own wallet row (`WalletService.grantLeagueBonus`, ledger type `BONUS`) — see
+`ReputationService.LEAGUE_UP_BONUS_TOKENS`. `GET /v1/worker/league` (`ReputationService
+.getLeagueStatus`) returns the current league, progress toward the next one (bounded by whichever
+requirement is furthest from being met), and the full ladder, for the Ranger-facing league screen.
 
 ## Blocking (`src/reputation/blocks.service.ts`)
 
@@ -312,7 +322,7 @@ AdminListingsService   browseContracts(q?) / browseCampus(q?)
 ```
 
 `hide()` reverses the review's rating out of `WorkerStats`/`CustomerStats` and recomputes the
-badge tier if it was a customer -> Ranger review, reusing the ledger self-auditing pattern
+league if it was a customer -> Ranger review, reusing the ledger self-auditing pattern
 (D-046) — an aggregate is only ever moved by a recorded event, never edited in place. Both
 services write an `audit_logs` row per action, same as every other admin decision. There is no
 report/flag mechanic yet for a user to surface a bad review or listing; moderation is entirely

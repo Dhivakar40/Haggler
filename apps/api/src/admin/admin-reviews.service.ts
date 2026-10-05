@@ -10,7 +10,7 @@ import { ReputationService } from '../reputation/reputation.service';
 /**
  * Review moderation (Phase 8, D-049 known gap closed): an admin can hide a fraudulent or abusive
  * review. Hiding reverses its rating out of the aggregate it fed (WorkerStats or CustomerStats)
- * and, if it affected a Ranger's badge tier, recomputes that too — the same self-auditing pattern
+ * and, if it affected a Ranger's league, recomputes that too — the same self-auditing pattern
  * as the wallet ledger (D-046): the aggregate is never "just edited," only ever moved by a real
  * event with its own record. No `unhide` exists yet — a one-way moderation action for now.
  */
@@ -76,12 +76,12 @@ export class AdminReviewsService {
         data: { hiddenAt: new Date(), hiddenReason: reason },
       });
       if (review.raterRole === 'CUSTOMER') {
-        // A customer's review of a Ranger fed WorkerStats and possibly the badge tier.
+        // A customer's review of a Ranger fed WorkerStats and possibly the league.
         await tx.workerStats.update({
           where: { workerUserId: review.revieweeId },
           data: { ratingSum: { decrement: review.rating }, ratingCount: { decrement: 1 } },
         });
-        await this.reputation.recomputeWorkerBadge(tx, review.revieweeId);
+        await this.reputation.recomputeWorkerLeague(tx, review.revieweeId);
       } else {
         await tx.customerStats.update({
           where: { customerUserId: review.revieweeId },

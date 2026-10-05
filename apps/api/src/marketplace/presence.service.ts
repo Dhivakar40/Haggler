@@ -132,7 +132,7 @@ export class PresenceService {
         user_id: string;
         distance_m: number;
         gender: 'FEMALE' | 'MALE' | 'OTHER' | null;
-        badge: string | null;
+        league: string | null;
         jobs7d: bigint;
         received: bigint;
         accepted: bigint;
@@ -141,7 +141,7 @@ export class PresenceService {
       SELECT wp.user_id::text AS user_id,
              ST_Distance(wp.last_location, ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326)::geography)::int AS distance_m,
              wp.gender::text AS gender,
-             ws.badge_tier::text AS badge,
+             ws.league::text AS league,
              (SELECT count(*) FROM jobs j WHERE j.worker_id = wp.user_id AND j.created_at > now() - interval '7 days'
                 AND j.status IN ('COMPLETED_BY_WORKER','CONFIRMED_BY_CUSTOMER','IN_PROGRESS','ARRIVED','EN_ROUTE','AGREED')) AS jobs7d,
              (SELECT count(*) FROM request_broadcasts rb WHERE rb.worker_id = wp.user_id AND rb.sent_at > now() - interval '30 days') AS received,
@@ -166,7 +166,7 @@ export class PresenceService {
       userId: r.user_id,
       distanceM: r.distance_m,
       gender: r.gender,
-      badgeTier: r.badge ?? 'BRONZE',
+      league: r.league ?? 'WOOD',
       jobsLast7d: Number(r.jobs7d),
       offersReceived: Number(r.received),
       offersAccepted: Number(r.accepted),

@@ -96,6 +96,7 @@ function Navigator() {
         <Stack.Screen name="address-new" options={{ ...header, title: t('addresses.newTitle') }} />
         <Stack.Screen name="contacts" options={{ ...header, title: t('contacts.title') }} />
         <Stack.Screen name="ranger" options={{ ...header, title: t('ranger.title') }} />
+        <Stack.Screen name="league" options={{ ...header, title: t('league.title') }} />
         <Stack.Screen name="kyc/[tier]" options={{ ...header, title: t('ranger.title') }} />
         <Stack.Screen
           name="delete-account"

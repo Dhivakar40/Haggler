@@ -494,6 +494,29 @@ export class WalletService {
     const m = await this.plus.myMembership(userId);
     return m?.active ?? false;
   }
+
+  /**
+   * The one place a worker's own userId is used in this file (D-076, Phase 11): a league-up
+   * bonus, paying a Ranger for reaching a new league. Still consistent with "Rangers are never
+   * charged" above — this only ever credits. Reuses the same wallet row a Ranger already has from
+   * being auto-granted the CUSTOMER role at sign-up (users/auth.service.ts findOrCreateUser), so
+   * no Ranger-specific wallet model was needed.
+   */
+  async grantLeagueBonus(tx: Tx, workerId: string, tokens: number, note: string): Promise<void> {
+    if (tokens <= 0) return;
+    const wallet = await tx.customerWallet.upsert({
+      where: { userId: workerId },
+      update: {},
+      create: { userId: workerId },
+    });
+    await tx.customerWallet.update({
+      where: { id: wallet.id },
+      data: { balanceTokens: { increment: tokens } },
+    });
+    await tx.walletLedgerEntry.create({
+      data: { walletId: wallet.id, type: 'BONUS', tokensDelta: tokens, heldDelta: 0, note },
+    });
+  }
 }
 
 function applyDiscount(pricePaise: number, discountBps: number): number {
