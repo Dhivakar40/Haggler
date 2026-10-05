@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { ClientLeagueTierName, LeagueTierName, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
@@ -83,12 +83,128 @@ export interface ClientLeagueUpResult {
  * (reviews.service.ts). Returns the promotion that happened, if any — Part F (sub-phase 4)
  * surfaces this as the league-up celebration popup; this phase only computes and pays it. */
 @Injectable()
-export class ReputationService {
+export class ReputationService implements OnModuleInit {
+  private readonly logger = new Logger(ReputationService.name);
+  private readonly pendingRecomputes = new Set<Promise<void>>();
+
   constructor(
     private readonly cfg: ReputationConfig,
     private readonly wallet: WalletService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /** D-078: confirm() defers the league recompute below (scheduleConfirmLeagueRecompute) to after
+   * its own transaction commits, so a hosted database's per-query latency isn't paid synchronously
+   * for work that doesn't change what confirm() returns to the caller. If the process restarts
+   * between that commit and the deferred step running, the counter increment (jobsCompleted /
+   * bookingsCompleted) is already durably saved — only the league/bonus recompute is missing — so
+   * this sweep runs once at boot and fixes up exactly those rows: anything whose stored `league`
+   * doesn't match what the stored counters actually compute to. No BullMQ, no new Job column: the
+   * existing WorkerStats/CustomerStats rows are themselves the durable "is this done yet?" record. */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.sweepStaleLeagues();
+    } catch (err) {
+      this.logger.error(err, 'startup league sweep failed; will retry on next boot');
+    }
+  }
+
+  /** Bounded to rows touched in the last 24h: a confirm() whose deferred step never ran would have
+   * updated its WorkerStats/CustomerStats row right before the process went down, so anything older
+   * has certainly already been reconciled — no need to scan the whole table on every boot. */
+  async sweepStaleLeagues(sinceMs = 24 * 3600 * 1000): Promise<{ worker: number; customer: number }> {
+    const cutoff = new Date(Date.now() - sinceMs);
+    const [thresholds, clientThresholds] = await Promise.all([
+      this.cfg.leagueThresholds(),
+      this.cfg.clientLeagueThresholds(),
+    ]);
+
+    const workerRows = await this.prisma.workerStats.findMany({
+      where: { updatedAt: { gte: cutoff } },
+    });
+    let workerFixed = 0;
+    for (const row of workerRows) {
+      const computed = computeLeagueTier(
+        row.jobsCompleted,
+        row.ratingSum,
+        row.ratingCount,
+        row.jobsCancelledByWorker,
+        row.jobsDisputed,
+        thresholds,
+      );
+      if (computed !== row.league) {
+        await this.prisma.$transaction((tx) => this.recomputeWorkerLeague(tx, row.workerUserId));
+        workerFixed++;
+      }
+    }
+
+    const customerRows = await this.prisma.customerStats.findMany({
+      where: { updatedAt: { gte: cutoff } },
+    });
+    let customerFixed = 0;
+    for (const row of customerRows) {
+      const computed = computeClientLeagueTier(
+        row.bookingsCompleted,
+        row.ratingSum,
+        row.ratingCount,
+        row.bookingsCancelledByCustomer,
+        clientThresholds,
+      );
+      if (computed !== row.league) {
+        await this.prisma.$transaction((tx) =>
+          this.recomputeCustomerLeague(tx, row.customerUserId),
+        );
+        customerFixed++;
+      }
+    }
+
+    if (workerFixed || customerFixed)
+      this.logger.warn(
+        { workerFixed, customerFixed },
+        'startup league sweep found and fixed stale rows (a deferred recompute did not finish before a restart)',
+      );
+    return { worker: workerFixed, customer: customerFixed };
+  }
+
+  /** D-078: confirm()'s replacement for calling recomputeWorkerLeague/recomputeCustomerLeague
+   * synchronously inside its own transaction. Fires after that transaction has already committed,
+   * so a slow recompute (and any league-up bonus grant) never adds to confirm()'s response time —
+   * the counter increments it's based on are already durably saved by then. Idempotent via the
+   * existing highestLeague high-water mark, so running it twice (a retry, or the startup sweep
+   * above also catching this same job) never double-pays. Errors are logged, not thrown — there is
+   * no caller left to hand them to — and the startup sweep is the safety net if one is ever missed. */
+  scheduleConfirmLeagueRecompute(input: { workerId: string; customerId: string | null }): void {
+    let settle: () => void = () => {};
+    const task = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    this.pendingRecomputes.add(task);
+    setImmediate(() => {
+      this.prisma
+        .$transaction(async (tx) => {
+          await this.recomputeWorkerLeague(tx, input.workerId);
+          if (input.customerId) await this.recomputeCustomerLeague(tx, input.customerId);
+        })
+        .catch((err) => {
+          this.logger.error(
+            err,
+            `deferred league recompute failed for worker ${input.workerId}; the startup sweep will catch it on next boot`,
+          );
+        })
+        .finally(() => {
+          this.pendingRecomputes.delete(task);
+          settle();
+        });
+    });
+  }
+
+  /** Test-only: waits for every scheduleConfirmLeagueRecompute() call still in flight. Production
+   * code never needs this — the whole point of deferring is that nothing waits for it — but a test
+   * asserting on league/wallet state right after confirm() needs a deterministic point to check at,
+   * not a race against setImmediate (D-078). */
+  async drainPendingRecomputes(): Promise<void> {
+    while (this.pendingRecomputes.size > 0) await Promise.all(this.pendingRecomputes);
+  }
 
   /** What a Ranger sees on their league screen (Part D): current league, progress toward the
    * next one, and the full ordered ladder. A Ranger with no WorkerStats row yet (never completed

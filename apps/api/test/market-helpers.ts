@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { MatchingService } from '../src/marketplace/matching.service';
 import { MarketplaceConfig } from '../src/marketplace/marketplace-config.service';
 import { SchedulerService } from '../src/marketplace/scheduler.service';
+import { ReputationService } from '../src/reputation/reputation.service';
 import { WalletService } from '../src/wallet/wallet.service';
 import { Api, type Session } from './helpers';
 
@@ -236,6 +237,9 @@ export class Market {
   async confirmJob(c: Customer, r: Ranger, jobId: string): Promise<void> {
     await this.runToCompletion(c, r, jobId);
     await this.api.post(c, `/v1/jobs/${jobId}/confirm`).then((x) => expectOk(x, 'confirm'));
+    // D-078: confirm()'s league recompute runs after the HTTP response, not before — tests that
+    // check league/wallet state right after confirmJob() need this settled first.
+    await this.app.get(ReputationService).drainPendingRecomputes();
   }
 }
 

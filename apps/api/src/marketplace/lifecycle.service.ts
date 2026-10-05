@@ -284,6 +284,12 @@ export class LifecycleService {
    * the client's own league (D-077) even without a new review. */
   async confirm(customerId: string, jobId: string) {
     const job = await this.customerJob(customerId, jobId);
+    // The league recompute (and any bonus it pays) doesn't change what this call returns, so it
+    // runs after the transaction below commits rather than inside it — see
+    // reputation.service.ts's scheduleConfirmLeagueRecompute (D-078). The counter increments it
+    // depends on (jobsCompleted/bookingsCompleted) stay inside the transaction: they're part of
+    // what confirm() is recording as having happened.
+    let kycVerifiedBooking = false;
     await this.prisma.$transaction(async (tx) => {
       await this.transitions.move(tx, {
         jobId,
@@ -316,7 +322,6 @@ export class LifecycleService {
             select: { kycTier: true },
           }),
         ]);
-        await this.reputation.recomputeWorkerLeague(tx, job.workerId);
 
         if (wp && wp.kycTier >= 2) {
           await tx.customerStats.upsert({
@@ -324,10 +329,16 @@ export class LifecycleService {
             update: { bookingsCompleted: { increment: 1 } },
             create: { customerUserId: customerId, bookingsCompleted: 1 },
           });
-          await this.reputation.recomputeCustomerLeague(tx, customerId);
+          kycVerifiedBooking = true;
         }
       }
     });
+    if (job.workerId) {
+      this.reputation.scheduleConfirmLeagueRecompute({
+        workerId: job.workerId,
+        customerId: kycVerifiedBooking ? customerId : null,
+      });
+    }
     return this.done(jobId, customerId);
   }
 

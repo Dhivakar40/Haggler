@@ -1,3 +1,4 @@
+import { ReputationService } from '../src/reputation/reputation.service';
 import { type Harness, startHarness } from './harness';
 import { Market } from './market-helpers';
 
@@ -258,6 +259,86 @@ describe('client league system (Phase 12, Part E, D-077)', () => {
     wallet = await m.prisma.customerWallet.findUniqueOrThrow({ where: { userId: c.userId } });
     // No new BONUS tokens: highestLeague already recorded PREFERRED, so re-crossing it pays nothing.
     expect(wallet.balanceTokens).toBe(afterFirstPromotion);
+    const bonusCount = await m.prisma.walletLedgerEntry.count({
+      where: { walletId: wallet.id, type: 'BONUS' },
+    });
+    expect(bonusCount).toBe(1);
+  });
+});
+
+describe('D-078: confirm() defers the league recompute off its own transaction', () => {
+  it('a confirmed job still reaches the right league and pays the bonus, once drained', async () => {
+    const c = await m.customer();
+    const r = await m.ranger();
+    const { jobId } = await m.match(c, r);
+    await m.agree(c, r, jobId);
+    // confirmJob() already drains — this is the same path every other league test in this file
+    // uses, asserted explicitly here to document that the deferral is transparent to callers.
+    await m.confirmJob(c, r, jobId);
+    const stats = await m.prisma.workerStats.findUniqueOrThrow({ where: { workerUserId: r.userId } });
+    expect(stats.jobsCompleted).toBe(1);
+    expect(stats.league).toBe('STONE');
+    const wallet = await m.prisma.customerWallet.findUnique({ where: { userId: r.userId } });
+    const bonus = await m.prisma.walletLedgerEntry.findFirst({
+      where: { walletId: wallet!.id, type: 'BONUS', note: { contains: 'STONE' } },
+    });
+    expect(bonus?.tokensDelta).toBe(1);
+  });
+
+  it('running the deferred recompute twice for the same job never double-pays (retry safety)', async () => {
+    const c = await m.customer();
+    const r = await m.ranger();
+    const { jobId } = await m.match(c, r);
+    await m.agree(c, r, jobId);
+    await m.confirmJob(c, r, jobId); // one real promotion + one real bonus, already drained
+
+    const reputation = h.app.get(ReputationService);
+    // Simulates a retried/duplicate delivery of the same deferred work (e.g. two process restarts
+    // racing the startup sweep) — recomputeWorkerLeague's highestLeague high-water mark must make
+    // this a no-op, not a second payout.
+    reputation.scheduleConfirmLeagueRecompute({ workerId: r.userId, customerId: null });
+    reputation.scheduleConfirmLeagueRecompute({ workerId: r.userId, customerId: null });
+    await reputation.drainPendingRecomputes();
+
+    const wallet = await m.prisma.customerWallet.findUniqueOrThrow({ where: { userId: r.userId } });
+    const bonusCount = await m.prisma.walletLedgerEntry.count({
+      where: { walletId: wallet.id, type: 'BONUS' },
+    });
+    expect(bonusCount).toBe(1);
+  });
+
+  it('the startup sweep fixes a league left stale by a never-run deferred step, without re-paying the bonus', async () => {
+    const c = await m.customer();
+    const r = await m.ranger();
+    const { jobId } = await m.match(c, r);
+    await m.agree(c, r, jobId);
+    await m.confirmJob(c, r, jobId); // drains normally first: jobsCompleted=1, league=STONE,
+    // highestLeague=STONE, one STONE bonus already paid.
+
+    // Simulate the deferred step having never run after that confirm (e.g. the process restarted
+    // between the counter-increment commit and the setImmediate callback firing): the league field
+    // is stuck at the pre-promotion value even though the durable counter already moved.
+    await m.prisma.workerStats.update({
+      where: { workerUserId: r.userId },
+      data: { league: 'WOOD' },
+    });
+    const beforeSweep = await m.prisma.workerStats.findUniqueOrThrow({
+      where: { workerUserId: r.userId },
+    });
+    expect(beforeSweep.jobsCompleted).toBe(1);
+    expect(beforeSweep.league).toBe('WOOD'); // stale: counters already say STONE
+
+    const fixed = await h.app.get(ReputationService).sweepStaleLeagues();
+    expect(fixed.worker).toBeGreaterThanOrEqual(1);
+
+    const afterSweep = await m.prisma.workerStats.findUniqueOrThrow({
+      where: { workerUserId: r.userId },
+    });
+    expect(afterSweep.league).toBe('STONE'); // the sweep caught it up to what the counters say
+
+    // highestLeague already recorded STONE from the real promotion, so re-reaching it here (a
+    // consistency fix-up, not a new promotion) must not pay the bonus a second time.
+    const wallet = await m.prisma.customerWallet.findUniqueOrThrow({ where: { userId: r.userId } });
     const bonusCount = await m.prisma.walletLedgerEntry.count({
       where: { walletId: wallet.id, type: 'BONUS' },
     });
