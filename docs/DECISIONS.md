@@ -739,6 +739,47 @@ A league can also drop (e.g. a cancellation-rate regression), by the same recomp
 it — `recomputeWorkerLeague` only pays a bonus on a genuine promotion (new league ranks higher),
 never on a drop.
 
+## Infrastructure: moving the hosted deployment to region-matched services
+
+**D-078 Mumbai Supabase + Singapore Render, replacing Sydney + a US Render region.** The original
+hosted-testing deployment (D-074) landed each free-tier service wherever its signup flow defaulted
+to, which put the database in Sydney and the API host on a US Render region — a real cross-
+continent latency tax on every request, compounding with D-074's own Postgres-pooler-mode fix. This
+move is infrastructure only: no application code, API contract, schema design or timeout changed as
+part of it (the Prisma transaction timeout was already 60s from Phase 12's work, unrelated to this
+move). `DATABASE_URL` still uses the **session** pooler (port 5432), for the same reasons documented
+in D-074 and now in the runbook's "Current hosting layout" section — there is still no `directUrl`
+split in `schema.prisma`'s `datasource` block, so migrate and runtime share one connection string.
+
+Migration was verified directly rather than assumed: all 15 committed migrations applied cleanly
+(`prisma migrate deploy`, `migrate status` reports no drift); every GIST index, the NULL-safe
+`price_bands_unique_scope` COALESCE index, all 38 CHECK constraints, and the `audit_logs` append-
+only trigger were confirmed present, with the trigger proven by actually attempting (and having
+rejected) an UPDATE and a DELETE against a real row, not just checking the trigger exists; table/
+column/index counts matched the old database exactly (53/523/142). A fresh admin account and the
+idempotent seed (categories/price bands/bundles/plans) were recreated on the new database — no
+customer/Ranger/employer/student accounts carry over, since none were ever seeded data to begin
+with (every account is created via sign-in + `TESTING_MODE`'s fixed OTP); any KYC approvals for
+test Rangers need redoing manually.
+
+**The old Sydney deployment is kept running, untouched, as a fallback** until a new APK (pointing
+at the new Render URL, which differs from the old one) is built and verified — teammates stay on
+the old APK/backend pair until then. The two backends' data is independent and not synchronized.
+
+**A real, unrelated finding surfaced during this move**: the old Supabase project's per-query
+latency had become highly volatile under sustained session load (300ms-10s+ for the same simple
+query at different moments; one query outright dropped the connection). This is a free-tier
+instance degrading over time, not a code or query-shape problem — flagged honestly rather than
+chased with more timeout increases, per instruction, since the new region-matched stack sidesteps
+it rather than needing to withstand it.
+
+**Secrets were deliberately reused, not rotated, as part of this move** — `JWT_ACCESS_SECRET`,
+`ADMIN_JWT_SECRET` and `FIELD_ENCRYPTION_KEY` are unchanged on the new service. This was an infra-
+move-only decision; a rotation procedure (and why `FIELD_ENCRYPTION_KEY` specifically cannot be a
+drop-in swap — it would make every already-encrypted DOB/Aadhaar-digits/arrival-code field
+permanently undecryptable without a re-encrypt-under-the-new-key pass first) is documented in the
+runbook for whenever rotation is actually done.
+
 ## Phase 12: client league system (Part E) + a Part D idempotency retrofit
 
 **D-077 league-up bonuses are paid against a high-water mark, not the raw old-vs-new comparison —

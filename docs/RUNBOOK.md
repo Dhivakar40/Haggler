@@ -173,6 +173,45 @@ reachable deployment so teammates can install one APK and use the app end-to-end
 server, a LAN IP, or anyone's PC being on — not a production launch. `TESTING_MODE=true` and the
 sandbox adapters stay on here; this is explicitly a testing environment.
 
+### Current hosting layout (D-078, as of the Mumbai/Singapore move)
+
+The original deployment (D-074) put every service in its provider's default/nearest-signup region,
+which landed on Sydney (Supabase) with Render on a US region — a real cross-continent latency tax
+on every database round trip, made worse by Postgres interactive-transaction semantics (D-074's own
+PgBouncer/transaction-pooler fix). D-078 moved the backend onto a region-matched pair instead:
+
+| Piece      | Region                   | Why                                                             |
+| ---------- | ------------------------ | ---------------------------------------------------------------- |
+| Supabase   | Mumbai (`ap-south-1`)    | Closest Supabase region to where this app's users/testers are. |
+| Render     | Singapore (Southeast Asia) | Closest Render region to Mumbai; same provider/plan otherwise. |
+| Upstash    | Mumbai (unchanged)       | Was already correctly placed; `REDIS_URL` did not change.      |
+
+Measured effect (warm, same moment, both stacks): `/health/ready` ~0.3-0.5s new vs ~1.0-1.2s old
+(when old wasn't actively unstable — see below); `GET /v1/categories` ~0.65s new vs ~2.1s old.
+
+**The old Sydney/US deployment is kept running as a fallback**, untouched, with its own Render
+service and Supabase project. Teammates stay on the old APK (pointing at the old backend) until a
+new APK is built and confirmed against the new one — the two backends have independent,
+non-synchronized data (new accounts/requests/KYC made on one do not appear on the other).
+
+**A real, unrelated finding from this move**: the old Supabase project's per-query latency was
+observed to be highly volatile during sustained use late in this project's testing — anywhere from
+~300ms to 10s+ for the identical simple query at different moments, and on one occasion the
+connection was dropped mid-query ("server has closed the connection") on an unrelated background
+query. This reads as the old free-tier instance degrading under cumulative session load, not
+something any query shape or timeout value fixes — worth keeping in mind if the old deployment is
+ever relied on again.
+
+**DATABASE_URL**: use the Supabase **session pooler** string, port 5432 — not the transaction
+pooler (6543) this doc originally suggested. Prisma's `datasource` block here has no `directUrl`,
+so migrations and runtime share one connection string; transaction-mode pooling caused real,
+reproduced `P2028` failures under Prisma's interactive transactions earlier in this project (see
+D-074's troubleshooting history) and was empirically slower in this setup besides. Session mode
+suits this deployment's shape well regardless of the usual tradeoff: Render's free tier runs one
+single long-lived Node process (`WEB_CONCURRENCY=1`), not many short-lived serverless invocations,
+so transaction-pooling's main advantage (sharing a small backend pool across many ephemeral
+connections) doesn't apply here.
+
 **Stack** (confirmed against each provider's free-tier terms as of Oct 2026 — re-check before
 relying on this long-term, free tiers change):
 
@@ -187,8 +226,11 @@ relying on this long-term, free tiers change):
 ### One-time setup (you — these all need interactive signup I can't do)
 
 1. **Supabase**: create a project → Database → Extensions → enable `postgis` → Project Settings →
-   Database → copy the connection string (`postgresql://postgres:[password]@...supabase.co:5432/postgres`,
-   use the **pooler/transaction** connection string if offered, port 6543) → that's `DATABASE_URL`.
+   Database → Connection pooling → copy the **Session** pooler connection string (port 5432, not
+   the Transaction pooler's 6543 — see "Current hosting layout" above for why) → that's
+   `DATABASE_URL`. The direct (non-pooler) connection string is IPv6-only on newer Supabase
+   projects and will fail to connect from most IPv4-only hosts, including Render — always use the
+   pooler.
 2. **Upstash**: create a Redis database (any region close to Render's) → copy the `rediss://`
    connection string from the dashboard → that's `REDIS_URL`.
 3. **Backblaze B2**: create an account (no card) → create two buckets (`haggler-media`,
@@ -227,6 +269,31 @@ has `development | test | production`, and `production` is what refuses `TESTING
 adapters, D-074 — a "hosted but still a test environment" deploy is `development` by this schema's
 own definition, not a new value), point `eas.json`'s `preview` profile's `EXPO_PUBLIC_API_URL` at
 the Render URL, and trigger `eas build --profile preview --platform android` from `apps/mobile`.
+
+### Rotating secrets later (D-078 note)
+
+The Mumbai/Singapore move (D-078) **reused** the existing `JWT_ACCESS_SECRET`, `ADMIN_JWT_SECRET`
+and `FIELD_ENCRYPTION_KEY` on the new Render service rather than generating fresh ones — a
+deliberate choice for this migration (infra move only, no secret rotation bundled in), not an
+oversight. They should still be rotated eventually, since all three were pasted in plaintext chat
+earlier in this project's history (flagged at the time). Procedure:
+
+- **`JWT_ACCESS_SECRET` / `ADMIN_JWT_SECRET`**: safe to rotate anytime — just generate a new value
+  (`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`) and update the
+  env var. Every existing access token (15 min TTL) and admin session (30 min TTL) stops validating
+  immediately; everyone simply signs in again. Refresh tokens are unaffected (they're opaque,
+  DB-stored, not JWTs) — no one is logged out at the refresh-token level, only the current access
+  token needs refreshing, which `doRefresh()` does automatically.
+- **`FIELD_ENCRYPTION_KEY`**: **not** a drop-in rotation. This key decrypts every already-encrypted
+  field at rest: `User.dateOfBirthEnc`, `WorkerProfile.dateOfBirthEnc`, `WorkerProfile.aadhaarLast4Enc`,
+  `StudentProfile.dateOfBirthEnc`, and any `Job.arrivalCodeEnc` for an in-flight job. Swapping the
+  env var alone makes every one of those values permanently undecryptable (D-017's own warning:
+  "losing it = losing that data" applies equally to silently changing it). To rotate it safely:
+  write a one-off script that, in a transaction, reads each encrypted column with the OLD key
+  (`EncryptionService.decrypt`), re-encrypts with a freshly-instantiated `EncryptionService` using
+  the NEW key, and writes it back — for every row, across every table above — before the env var is
+  switched over on the running service. This does not exist as a script today; write one when
+  rotation is actually needed, don't improvise it live against a running deployment.
 
 ### Redeploying after a code change
 
