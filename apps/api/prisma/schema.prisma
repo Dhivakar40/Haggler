@@ -7,7 +7,10 @@
 //    `Unsupported` and read/written with raw SQL. GIST indexes live in the raw SQL migration.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // D-078: lets a specific query opt into one joined round trip instead of one query per relation
+  // (relationLoadStrategy: 'join'). Client codegen only — no database schema change, no migration.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

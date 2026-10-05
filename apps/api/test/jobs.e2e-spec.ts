@@ -1,3 +1,5 @@
+import { JobViewService } from '../src/marketplace/job-view.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import { type Harness, startHarness } from './harness';
 import { CENTER, type Customer, Market, northOf, type Ranger } from './market-helpers';
@@ -169,6 +171,68 @@ describe('negotiation', () => {
     expect(res.body.error.details.code).toBe('ROUND_LIMIT');
     await m.api.post(c, `/v1/offers/${r3.id}/accept`, {}).expect(200);
     expect(await statusOf(jobId)).toBe('AGREED');
+  });
+
+  it('D-078: relationLoadStrategy join returns the same shape as one-query-per-relation, on a job with multiple offers and photos', async () => {
+    const { c, r, jobId } = await pair();
+    const o1 = (await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 50000 }).expect(201))
+      .body.offers[0];
+    const o2 = (
+      await m.api.post(c, `/v1/offers/${o1.id}/counter`, { amountPaise: 40000 }).expect(201)
+    ).body.offers[1];
+    const o3 = (
+      await m.api.post(r, `/v1/offers/${o2.id}/counter`, { amountPaise: 45000 }).expect(201)
+    ).body.offers[2];
+    await m.api.post(c, `/v1/offers/${o3.id}/accept`, {}).expect(200);
+    await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+    await m.ping(r, CENTER);
+    await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(200);
+    const code = (await m.api.get(c, `/v1/jobs/${jobId}`)).body.arrivalCode as string;
+    await m.api.post(r, `/v1/jobs/${jobId}/verify-arrival`, { code }).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'BEFORE');
+    await m.api.post(r, `/v1/jobs/${jobId}/start`).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'AFTER');
+
+    const job = await m.prisma.job.findUniqueOrThrow({
+      where: { id: jobId },
+      include: { _count: { select: { offers: true, photos: true } } },
+    });
+    expect(job._count.offers).toBeGreaterThan(1); // real multi-round negotiation, not a stub
+    expect(job._count.photos).toBe(2);
+
+    // Mirrors job-view.service.ts's loadForParty() include exactly, so this proves the joined
+    // strategy that method now uses returns the identical nested shape the old one-query-per-
+    // relation approach did (D-078).
+    const include = {
+      request: { include: { category: true, media: { where: { status: 'UPLOADED' as const } } } },
+      offers: { orderBy: { round: 'asc' as const } },
+      photos: { where: { status: 'UPLOADED' as const } },
+      thread: true,
+    };
+    const prisma = h.app.get(PrismaService);
+    const perRelation = await prisma.job.findUniqueOrThrow({ where: { id: jobId }, include });
+    const joined = await prisma.job.findUniqueOrThrow({
+      where: { id: jobId },
+      relationLoadStrategy: 'join',
+      include,
+    });
+    const normalize = (x: unknown): unknown => {
+      if (Array.isArray(x)) return x.map(normalize);
+      if (x && typeof x === 'object')
+        return Object.fromEntries(
+          Object.keys(x as object)
+            .sort()
+            .map((k) => [k, normalize((x as Record<string, unknown>)[k])]),
+        );
+      return x;
+    };
+    expect(normalize(joined)).toEqual(normalize(perRelation));
+
+    // And the real service, which now always uses the joined strategy, still builds the same DTO.
+    const view = h.app.get(JobViewService);
+    const dto = await view.build(jobId, c.userId);
+    expect(dto.id).toBe(jobId);
+    expect(dto.status).toBe('IN_PROGRESS');
   });
 
   it('prices outside the band need explicit confirmation from BOTH sides', async () => {

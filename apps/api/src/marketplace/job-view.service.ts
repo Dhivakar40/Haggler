@@ -30,8 +30,15 @@ export class JobViewService {
   ) {}
 
   async loadForParty(jobId: string, viewerId: string) {
+    // Prisma's default include strategy issues one query per relation (7 here) instead of a single
+    // joined query — each costs a full hosted-DB round trip regardless of how trivial the SQL is
+    // (D-078: confirmed via EXPLAIN ANALYZE that every one of these executes in under 1ms server
+    // side; the ~450ms this call used to take was entirely round trips, not query cost).
+    // relationLoadStrategy: 'join' collapses them into one round trip; Prisma deduplicates the
+    // joined rows back into the same nested shape, so the result is unchanged.
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
+      relationLoadStrategy: 'join',
       include: {
         request: { include: { category: true, media: { where: { status: 'UPLOADED' } } } },
         offers: { orderBy: { round: 'asc' } },
