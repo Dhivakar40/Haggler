@@ -72,7 +72,10 @@ export const LOG_REDACT_PATHS = [
         };
       },
     }),
-    // Global per-IP limit, stored in Redis so it holds across instances (D-022).
+    // Global per-IP limit (D-022). Redis-backed storage holds the count across instances; the
+    // default in-memory storage (THROTTLE_STORE=memory, D-078) saves a Redis round trip on every
+    // request but only counts requests THIS process has seen — correct only for a single instance.
+    // See docs/DECISIONS.md before scaling to 2+ instances.
     ThrottlerModule.forRootAsync({
       inject: [EnvService, RedisService],
       useFactory: (envService: EnvService, redis: RedisService) => ({
@@ -82,7 +85,8 @@ export const LOG_REDACT_PATHS = [
             limit: envService.env.THROTTLE_LIMIT,
           },
         ],
-        storage: new RedisThrottlerStorage(redis),
+        storage:
+          envService.env.THROTTLE_STORE === 'redis' ? new RedisThrottlerStorage(redis) : undefined,
       }),
     }),
     PrismaModule,

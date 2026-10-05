@@ -38,6 +38,11 @@ const envSchema = z
     /** Global per-IP limit (requests per window). Auth routes have stricter, dedicated limits. */
     THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
     THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
+    /** D-078: 'memory' saves a Redis round trip on every request (~65-130ms on this hosted stack)
+     * but only counts requests seen by THIS process — correct only while the API runs as a single
+     * instance. 'redis' holds the limit across instances; required before scaling to 2+. See
+     * docs/DECISIONS.md. */
+    THROTTLE_STORE: z.enum(['memory', 'redis']).default('memory'),
 
     /** Base URL used in links people share (live trip links). */
     PUBLIC_BASE_URL: z.string().url().default('http://localhost:3000'),
