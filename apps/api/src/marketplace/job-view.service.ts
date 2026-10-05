@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import type { JobDto } from '@haggler/shared';
 import { StorageService } from '../adapters/storage/storage.service';
 import { EncryptionService } from '../common/crypto';
-import { diagMark } from '../common/diag-timing'; // TEMPORARY — D-078
 import { notFound } from '../common/http-errors';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -80,11 +79,9 @@ export class JobViewService {
 
   async build(jobId: string, viewerId: string): Promise<JobDto> {
     const { job, role } = await this.loadForParty(jobId, viewerId);
-    diagMark('view.build:after loadForParty'); // TEMPORARY — D-078
     const req = job.request;
     const matched = !!job.workerId;
     const point = await this.requestPoint(req.id);
-    diagMark('view.build:after requestPoint'); // TEMPORARY — D-078
     const showAddress = role === 'CUSTOMER' || matched;
 
     const [customer, worker, media, sla] = await Promise.all([
@@ -109,18 +106,15 @@ export class JobViewService {
         ? this.slaEstimateMinutes(req.categoryId, req.pincode)
         : Promise.resolve(0),
     ]);
-    diagMark('view.build:after Promise.all(customer,worker,media,sla)'); // TEMPORARY — D-078
     const stats = job.workerId
       ? await this.prisma.workerStats.findUnique({ where: { workerUserId: job.workerId } })
       : null;
-    diagMark('view.build:after stats lookup'); // TEMPORARY — D-078
     const myReview =
       job.status === 'CONFIRMED_BY_CUSTOMER'
         ? await this.prisma.review.findUnique({
             where: { jobId_raterRole: { jobId, raterRole: role } },
           })
         : null;
-    diagMark('view.build:after myReview lookup'); // TEMPORARY — D-078
 
     const arrivalCode =
       role === 'CUSTOMER' &&

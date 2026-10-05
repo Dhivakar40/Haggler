@@ -4,7 +4,6 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { ERROR_CODES, type PaymentMethodName } from './lifecycle.types';
 import { StorageService } from '../adapters/storage/storage.service';
 import { EncryptionService, hmacHex, safeEqualHex } from '../common/crypto';
-import { diagMark } from '../common/diag-timing'; // TEMPORARY — D-078
 import {
   CodedException,
   conflict,
@@ -53,10 +52,7 @@ export class LifecycleService {
   }
   private async done(jobId: string, viewerId: string) {
     await this.transitions.notify(jobId);
-    diagMark('done:after notify()'); // TEMPORARY — D-078
-    const result = await this.view.build(jobId, viewerId);
-    diagMark('done:after view.build()'); // TEMPORARY — D-078
-    return result;
+    return this.view.build(jobId, viewerId);
   }
 
   async enRoute(workerId: string, jobId: string) {
@@ -287,11 +283,8 @@ export class LifecycleService {
    * and jobsCompleted/bookingsCompleted increment, which can move a Ranger's league (D-076) and
    * the client's own league (D-077) even without a new review. */
   async confirm(customerId: string, jobId: string) {
-    diagMark('confirm:start'); // TEMPORARY — D-078
     const job = await this.customerJob(customerId, jobId);
-    diagMark('confirm:after customerJob lookup (pre-tx)'); // TEMPORARY — D-078
     await this.prisma.$transaction(async (tx) => {
-      diagMark('confirm:tx BEGIN'); // TEMPORARY — D-078
       await this.transitions.move(tx, {
         jobId,
         from: job.status,
@@ -300,7 +293,6 @@ export class LifecycleService {
         actorUserId: customerId,
         data: { confirmedAt: new Date() },
       });
-      diagMark('confirm:after move()'); // TEMPORARY — D-078
       if (job.workerId) {
         // workerStats's upsert and the anti-farming kyc_tier lookup below are independent of each
         // other, so they go over the wire together — one fewer sequential round trip inside a
@@ -324,9 +316,7 @@ export class LifecycleService {
             select: { kycTier: true },
           }),
         ]);
-        diagMark('confirm:after workerStats.upsert + kyc lookup'); // TEMPORARY — D-078
         await this.reputation.recomputeWorkerLeague(tx, job.workerId);
-        diagMark('confirm:after recomputeWorkerLeague'); // TEMPORARY — D-078
 
         if (wp && wp.kycTier >= 2) {
           await tx.customerStats.upsert({
@@ -334,16 +324,11 @@ export class LifecycleService {
             update: { bookingsCompleted: { increment: 1 } },
             create: { customerUserId: customerId, bookingsCompleted: 1 },
           });
-          diagMark('confirm:after customerStats.upsert'); // TEMPORARY — D-078
           await this.reputation.recomputeCustomerLeague(tx, customerId);
-          diagMark('confirm:after recomputeCustomerLeague'); // TEMPORARY — D-078
         }
       }
     });
-    diagMark('confirm:tx COMMIT done'); // TEMPORARY — D-078
-    const result = await this.done(jobId, customerId);
-    diagMark('confirm:after done() [view.build+notify]'); // TEMPORARY — D-078
-    return result;
+    return this.done(jobId, customerId);
   }
 
   /**

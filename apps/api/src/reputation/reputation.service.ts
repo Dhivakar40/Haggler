@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import type { ClientLeagueTierName, LeagueTierName, Prisma } from '@prisma/client';
-import { diagMark } from '../common/diag-timing'; // TEMPORARY — D-078
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import {
@@ -160,10 +159,8 @@ export class ReputationService {
     workerId: string,
   ): Promise<LeagueUpResult | null> {
     const stats = await tx.workerStats.findUnique({ where: { workerUserId: workerId } });
-    diagMark('recomputeWorker:after workerStats.findUnique'); // TEMPORARY — D-078
     if (!stats) return null;
     const thresholds = await this.cfg.leagueThresholds();
-    diagMark('recomputeWorker:after leagueThresholds'); // TEMPORARY — D-078
     const league = computeLeagueTier(
       stats.jobsCompleted,
       stats.ratingSum,
@@ -187,13 +184,11 @@ export class ReputationService {
       where: { workerUserId: workerId },
       data: { league, ...(promoted ? { highestLeague: league } : {}) },
     });
-    diagMark('recomputeWorker:after workerStats.update'); // TEMPORARY — D-078
     if (!promoted) return null;
 
     const bonusTokens = LEAGUE_UP_BONUS_TOKENS[league] ?? 0;
     if (bonusTokens > 0)
       await this.wallet.grantLeagueBonus(tx, workerId, bonusTokens, `Reached ${league} league`);
-    diagMark('recomputeWorker:after grantLeagueBonus'); // TEMPORARY — D-078
     return { from: stats.league, to: league, bonusTokens };
   }
 
@@ -203,10 +198,8 @@ export class ReputationService {
     customerId: string,
   ): Promise<ClientLeagueUpResult | null> {
     const stats = await tx.customerStats.findUnique({ where: { customerUserId: customerId } });
-    diagMark('recomputeCustomer:after customerStats.findUnique'); // TEMPORARY — D-078
     if (!stats) return null;
     const thresholds = await this.cfg.clientLeagueThresholds();
-    diagMark('recomputeCustomer:after clientLeagueThresholds'); // TEMPORARY — D-078
     const league = computeClientLeagueTier(
       stats.bookingsCompleted,
       stats.ratingSum,
@@ -223,13 +216,11 @@ export class ReputationService {
       where: { customerUserId: customerId },
       data: { league, ...(promoted ? { highestLeague: league } : {}) },
     });
-    diagMark('recomputeCustomer:after customerStats.update'); // TEMPORARY — D-078
     if (!promoted) return null;
 
     const bonusTokens = CLIENT_LEAGUE_UP_BONUS_TOKENS[league] ?? 0;
     if (bonusTokens > 0)
       await this.wallet.grantLeagueBonus(tx, customerId, bonusTokens, `Reached ${league} league`);
-    diagMark('recomputeCustomer:after grantLeagueBonus'); // TEMPORARY — D-078
     return { from: stats.league, to: league, bonusTokens };
   }
 }

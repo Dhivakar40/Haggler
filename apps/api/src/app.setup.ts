@@ -2,7 +2,6 @@ import { type INestApplication, ValidationPipe, VersioningType } from '@nestjs/c
 import { DocumentBuilder, type OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
-import { diagMark, diagReset, diagShouldTrace, TRIGGER_HEADER } from './common/diag-timing'; // TEMPORARY — D-078
 import { ErrorEnvelopeFilter } from './common/error-envelope.filter';
 
 /**
@@ -20,15 +19,6 @@ export function configureApp(app: INestApplication): void {
       hops,
     );
   app.use(helmet());
-  // TEMPORARY — D-078: stamps the very start of request handling, before routing/guards, so the
-  // full account of confirm()'s time has no gap between "request arrived" and "JwtAuthGuard ran".
-  app.use((req: { headers: Record<string, unknown> }, _res: unknown, next: () => void) => {
-    if (diagShouldTrace(req.headers[TRIGGER_HEADER] as string | undefined)) {
-      diagReset();
-      diagMark('middleware:request received');
-    }
-    next();
-  });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
     new ValidationPipe({

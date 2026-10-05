@@ -3,7 +3,6 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { UserRole } from '@haggler/shared';
 import { type AuthedRequest, IS_PUBLIC, ROLES_KEY } from '../common/decorators';
-import { diagMark } from '../common/diag-timing'; // TEMPORARY — D-078
 import { forbidden, unauthenticated } from '../common/http-errors';
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -40,7 +39,6 @@ export class JwtAuthGuard implements CanActivate {
     ) {
       return true;
     }
-    diagMark('guard:JwtAuthGuard start'); // TEMPORARY — D-078
     const req = context.switchToHttp().getRequest<AuthedRequest>();
     const token = bearerToken(req);
     if (!token) throw unauthenticated('Sign in to continue.');
@@ -55,13 +53,11 @@ export class JwtAuthGuard implements CanActivate {
     } catch {
       throw unauthenticated('Your session has expired.');
     }
-    diagMark('guard:after jwt verify'); // TEMPORARY — D-078
 
     const user = await this.prisma.user.findUnique({
       where: { id: claims.sub },
       select: { id: true, status: true, roles: { select: { role: true } } },
     });
-    diagMark('guard:after user db lookup'); // TEMPORARY — D-078
     if (!user || user.status !== 'ACTIVE') throw unauthenticated('This account is not available.');
 
     req.user = { id: user.id, roles: user.roles.map((r) => r.role), deviceRefId: claims.did };
