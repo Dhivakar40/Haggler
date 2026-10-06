@@ -1,6 +1,7 @@
 import {
   contrastRatio,
   darkColors,
+  leagueColors,
   lightColors,
   MIN_TOUCH_TARGET,
   type ColorTokens,
@@ -40,4 +41,20 @@ describe('contrastRatio', () => {
 
 it('touch target is at least 48dp', () => {
   expect(MIN_TOUCH_TARGET).toBeGreaterThanOrEqual(48);
+});
+
+describe('league badge colors', () => {
+  it.each(Object.entries(leagueColors))('%s: foreground on its own badge meets WCAG AA', (_tier, c) => {
+    expect(contrastRatio(c.on, c.bg)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it('covers every Ranger and client league tier', () => {
+    const rangerTiers = [
+      'WOOD', 'STONE', 'COPPER', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'LEGENDARY',
+    ];
+    const clientTiers = [
+      'NEWCOMER', 'REGULAR', 'PREFERRED', 'TRUSTED', 'LOYAL', 'ELITE', 'CHAMPION', 'PATRON', 'LEGEND',
+    ];
+    for (const tier of [...rangerTiers, ...clientTiers]) expect(leagueColors[tier]).toBeDefined();
+  });
 });

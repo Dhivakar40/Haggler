@@ -69,7 +69,9 @@
           "color": "#0F766E"
         }
       ],
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      "expo-font",
+      "expo-splash-screen"
     ],
     "extra": {
       "router": {},

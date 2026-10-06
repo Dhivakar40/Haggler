@@ -1,20 +1,31 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
+import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import type { JobDto, Me, OfferDto } from '@haggler/shared';
 import '../src/i18n';
 import { useSession } from './auth/session';
 import { ThemeProvider } from './theme/ThemeProvider';
 
-/** Renders with the same providers the real app uses (theme, i18n, react-query). */
+// A fixed, plausible phone frame — components reading useSafeAreaInsets() (Sheet, Toast, ...)
+// need a real value in tests, not the "no provider" error react-native-safe-area-context throws
+// without this. Values are arbitrary but stable across runs.
+const TEST_SAFE_AREA_METRICS: Metrics = {
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+};
+
+/** Renders with the same providers the real app uses (theme, i18n, react-query, safe-area). */
 export function renderWithProviders(ui: ReactElement) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={client}>
-      <ThemeProvider>{ui}</ThemeProvider>
-    </QueryClientProvider>,
+    <SafeAreaProvider initialMetrics={TEST_SAFE_AREA_METRICS}>
+      <QueryClientProvider client={client}>
+        <ThemeProvider>{ui}</ThemeProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>,
   );
 }
 

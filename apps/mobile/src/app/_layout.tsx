@@ -1,13 +1,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import {
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+  useFonts,
+} from '@expo-google-fonts/manrope';
+import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppState, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSession } from '../auth/session';
-import { LeagueUpModal } from '../components';
+import { LeagueUpModal, ToastHost } from '../components';
 import { TrackerHost } from '../features/work/TrackerHost';
 import { checkLeagueUp } from '../lib/league-up-check';
 import { defineBackgroundTask } from '../location/tracker';
@@ -17,6 +25,11 @@ import { configureNotificationHandler } from '../notifications/push';
 import { usePushRegistration } from '../notifications/usePushRegistration';
 import { useSettings } from '../store/settings';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
+
+// Phase UI: holds the native splash screen up until Manrope is loaded, so the app never renders a
+// frame in the wrong font. Registered at module scope (not inside a component) per Expo's own
+// guidance, so it runs before the first render regardless of mount order.
+void SplashScreen.preventAutoHideAsync();
 
 /** Sub-phase 4, Part F: checks on login and on every foreground while signed in. Not a polling
  * loop — each trigger is a real "the person might have new information" moment. */
@@ -216,6 +229,12 @@ export default function RootLayout() {
   );
   const hydrated = useSettingsHydrated();
   const status = useSession((s) => s.status);
+  const [fontsLoaded] = useFonts({
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+  });
   useLanguageSync();
   usePushRegistration(status === 'signedIn');
   useLeagueUpChecks(status === 'signedIn');
@@ -229,8 +248,12 @@ export default function RootLayout() {
     if (status === 'signedOut') queryClient.clear();
   }, [status, queryClient]);
 
-  // Avoid flashing the wrong theme, language or screen before saved state loads.
-  if (!hydrated || status === 'loading') return null;
+  useEffect(() => {
+    if (fontsLoaded && hydrated && status !== 'loading') void SplashScreen.hideAsync();
+  }, [fontsLoaded, hydrated, status]);
+
+  // Avoid flashing the wrong theme, language, font or screen before everything is ready.
+  if (!fontsLoaded || !hydrated || status === 'loading') return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -242,6 +265,7 @@ export default function RootLayout() {
               <TrackerHost />
               <Navigator />
               <LeagueUpModal />
+              <ToastHost />
             </ThemeProvider>
           </RealtimeProvider>
         </QueryClientProvider>
