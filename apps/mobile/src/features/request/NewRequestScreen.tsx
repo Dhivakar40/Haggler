@@ -5,7 +5,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { type CreateRequestInput, MAX_REQUEST_PHOTOS } from '@haggler/shared';
+import {
+  type CreateRequestInput,
+  MAX_REQUEST_PHOTOS,
+  OTHER_CATEGORY_MIN_DESCRIPTION,
+  OTHER_CATEGORY_SLUG,
+} from '@haggler/shared';
 import { listAddresses } from '../../api/endpoints';
 import { createRequest, getPriceBand } from '../../api/market';
 import { Button, Card, Chip, LoadingState, Screen, Text, TextField } from '../../components';
@@ -41,6 +46,7 @@ export function NewRequestScreen() {
   const router = useRouter();
   const { colors: c } = useTheme();
   const { category = 'electrician' } = useLocalSearchParams<{ category: string }>();
+  const isOther = category === OTHER_CATEGORY_SLUG;
   const addresses = useQuery({ queryKey: ['addresses'], queryFn: listAddresses });
 
   const [description, setDescription] = useState('');
@@ -61,7 +67,9 @@ export function NewRequestScreen() {
   const band = useQuery({
     queryKey: ['band', category, selected?.pincode, selected?.city],
     queryFn: () => getPriceBand(category, selected!.pincode, selected!.city),
-    enabled: !!selected,
+    // "Other" has no trade to price against — its DEFAULT band exists only so request creation
+    // doesn't fail (D-078 Part G), never shown to the customer, so there's no reason to fetch it.
+    enabled: !!selected && !isOther,
   });
 
   async function addPhoto(source: 'camera' | 'library') {
@@ -95,7 +103,9 @@ export function NewRequestScreen() {
 
   async function submit() {
     setError(undefined);
-    if (description.trim().length < 5) return setError(t('request.tooShort'));
+    const minDescription = isOther ? OTHER_CATEGORY_MIN_DESCRIPTION : 5;
+    if (description.trim().length < minDescription)
+      return setError(t(isOther ? 'request.tooShortOther' : 'request.tooShort'));
     if (!selected) return setError(t('request.noAddress'));
     if (selected.latitude === null || selected.longitude === null)
       return setError(t('apiErrors.ADDRESS_NEEDS_LOCATION'));
@@ -151,7 +161,7 @@ export function NewRequestScreen() {
         maxLength={1000}
       />
       <Text variant="caption" color="textMuted">
-        {t('request.describeHint')}
+        {t(isOther ? 'request.describeHintOther' : 'request.describeHint')}
       </Text>
 
       {/* A flat, hairline-divided list instead of Chips — the same "booking-history row"
@@ -263,6 +273,11 @@ export function NewRequestScreen() {
             />
           </View>
         ))}
+        {isOther && photos.length === 0 ? (
+          <Text testID="photos-encourage-other" variant="caption" color="textMuted">
+            {t('request.photosEncourageOther')}
+          </Text>
+        ) : null}
       </View>
 
       <VoiceNoteRecorder
@@ -293,7 +308,11 @@ export function NewRequestScreen() {
         </Text>
       </View>
 
-      {band.data ? (
+      {isOther ? (
+        <Text testID="other-quote-note" variant="caption" color="textMuted">
+          {t('request.otherQuoteNote')}
+        </Text>
+      ) : band.data ? (
         // The one elevated surface on this screen: this is the price the customer is about to
         // commit to. Everything else here is flat by the elevation policy in theme/tokens.ts.
         <Card testID="price-band" elevated>

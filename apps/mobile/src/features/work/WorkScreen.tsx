@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
-import type { IncomingRequest } from '@haggler/shared';
+import { OTHER_CATEGORY_SLUG, type IncomingRequest } from '@haggler/shared';
 import {
   acceptRequest,
   declineRequest,
@@ -15,7 +15,7 @@ import {
   usePresence,
 } from '../../api/market';
 import { useSession } from '../../auth/session';
-import { Button, Card, Countdown, EmptyState, Screen, Text } from '../../components';
+import { Button, Card, Chip, Countdown, EmptyState, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { isActive } from '../../lib/job-status';
 import { formatRupees } from '../../lib/money';
@@ -48,9 +48,15 @@ function IncomingCard({
         <Text color="textMuted">
           {t('work.away', { distance: distanceLabel(item.distanceM) })} · {item.city} {item.pincode}
         </Text>
-        <Text testID={`band-${item.requestId}`} color="textMuted">
-          {formatRupees(item.band.minPaise)} – {formatRupees(item.band.maxPaise)}
-        </Text>
+        {item.categorySlug === OTHER_CATEGORY_SLUG ? (
+          <Text testID={`band-${item.requestId}`} color="textMuted">
+            {t('work.noPriceGuide')}
+          </Text>
+        ) : (
+          <Text testID={`band-${item.requestId}`} color="textMuted">
+            {formatRupees(item.band.minPaise)} – {formatRupees(item.band.maxPaise)}
+          </Text>
+        )}
         {item.photoCount > 0 || item.hasVoiceNote ? (
           <Text color="textMuted">
             {[
@@ -101,6 +107,11 @@ export function WorkScreen() {
   const [error, setError] = useState<string>();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
+  // D-078 Part G: lets a Ranger see just the "Other" requests, or everything (the default).
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | typeof OTHER_CATEGORY_SLUG>('ALL');
+  const visibleIncoming = incoming.data?.filter(
+    (item) => categoryFilter === 'ALL' || item.categorySlug === categoryFilter,
+  );
 
   async function toggle() {
     setError(undefined);
@@ -218,10 +229,26 @@ export function WorkScreen() {
       {online && !activeJob ? (
         <View style={{ gap: spacing.md }}>
           <Text variant="heading">{t('work.incoming')}</Text>
+          {incoming.data && incoming.data.length > 0 ? (
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Chip
+                testID="filter-all"
+                label={t('work.filterAll')}
+                selected={categoryFilter === 'ALL'}
+                onPress={() => setCategoryFilter('ALL')}
+              />
+              <Chip
+                testID="filter-other"
+                label={t('work.filterOther')}
+                selected={categoryFilter === OTHER_CATEGORY_SLUG}
+                onPress={() => setCategoryFilter(OTHER_CATEGORY_SLUG)}
+              />
+            </View>
+          ) : null}
           {incoming.data && incoming.data.length === 0 ? (
             <EmptyState message={t('work.waiting')} />
           ) : null}
-          {incoming.data?.map((item) => (
+          {visibleIncoming?.map((item) => (
             <IncomingCard
               key={item.requestId}
               item={item}

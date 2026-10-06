@@ -184,6 +184,38 @@ describe('WorkScreen', () => {
     expect(screen.getByTestId(`countdown-${REQ1}`).props.children).toMatch(/^2:[0-9]{2}$/);
   });
 
+  it('D-078 Part G: an "Other" request shows no price band, and can be filtered to on its own', async () => {
+    const REQ2 = '22222222-aaaa-4aaa-8aaa-222222222222';
+    backend({
+      online: true,
+      incoming: [
+        incoming(),
+        incoming({
+          requestId: REQ2,
+          jobId: 'bbbbbbbb-aaaa-4aaa-8aaa-bbbbbbbbbbbb',
+          categorySlug: 'other',
+          description: 'Need 2 people to move a sofa up to the 3rd floor',
+        }),
+      ],
+    });
+    await renderWithProviders(<WorkScreen />);
+    await screen.findByTestId(`incoming-${REQ1}`);
+    expect(screen.getByTestId(`incoming-${REQ2}`)).toBeTruthy();
+    expect(screen.getByTestId(`band-${REQ2}`)).toHaveTextContent(
+      'No price guide — quote directly',
+    );
+    // The electrician request still shows its real band, unaffected.
+    expect(screen.getByTestId(`band-${REQ1}`)).toHaveTextContent('₹199 – ₹699');
+
+    await fireEvent.press(screen.getByTestId('filter-other'));
+    expect(screen.queryByTestId(`incoming-${REQ1}`)).toBeNull();
+    expect(screen.getByTestId(`incoming-${REQ2}`)).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('filter-all'));
+    expect(screen.getByTestId(`incoming-${REQ1}`)).toBeTruthy();
+    expect(screen.getByTestId(`incoming-${REQ2}`)).toBeTruthy();
+  });
+
   it('formats long distances in km', async () => {
     backend({ online: true, incoming: [incoming({ distanceM: 3450 })] });
     await renderWithProviders(<WorkScreen />);

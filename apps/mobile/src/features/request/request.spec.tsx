@@ -200,6 +200,40 @@ describe('NewRequestScreen', () => {
     expect(calls.some((c) => c.path === '/v1/requests' && c.method === 'POST')).toBe(false);
   });
 
+  it('D-078 Part G: "Other" shows no price band, needs a longer description, and nudges a photo', async () => {
+    (useLocalSearchParams as jest.Mock).mockReturnValue({ category: 'other' });
+    const { calls } = backend();
+    await renderWithProviders(<NewRequestScreen />);
+    await screen.findByText(
+      'There is no price guide for this category — mention a budget above if you have one, or leave it open. Rangers will quote you directly and you can negotiate.',
+    );
+    expect(screen.queryByTestId('price-band')).toBeNull();
+    expect(screen.queryByTestId('price-range')).toBeNull();
+    expect(calls.some((c) => c.path.startsWith('/v1/price-bands'))).toBe(false);
+    expect(
+      screen.getByText(
+        'A photo helps Rangers understand the job and quote accurately.',
+      ),
+    ).toBeTruthy();
+
+    // 19 chars: under the 20-char floor for "Other".
+    await fireEvent.changeText(screen.getByTestId('description'), 'Need a hand with so');
+    await fireEvent.press(screen.getByTestId('submit-request'));
+    expect(
+      await screen.findByText('Please describe what you need in at least 20 characters.'),
+    ).toBeTruthy();
+    expect(calls.some((c) => c.path === '/v1/requests' && c.method === 'POST')).toBe(false);
+
+    await fireEvent.changeText(
+      screen.getByTestId('description'),
+      'Need 2 people to move a sofa up to the 3rd floor',
+    );
+    await fireEvent.press(screen.getByTestId('submit-request'));
+    await waitFor(() =>
+      expect(calls.some((c) => c.path === '/v1/requests' && c.method === 'POST')).toBe(true),
+    );
+  });
+
   it('with no saved address it asks the person to add one', async () => {
     backend({ addresses: [] });
     await renderWithProviders(<NewRequestScreen />);

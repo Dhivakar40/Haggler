@@ -250,6 +250,13 @@ const en = {
       LEGEND: 'Legend',
     },
   },
+  leagueUp: {
+    title: 'League up!',
+    workerBody: "You've reached {{league}} league.",
+    clientBody: "You've reached {{league}} status.",
+    viewLeague: 'View my league',
+    dismiss: 'Nice!',
+  },
   kyc: {
     title1: 'Identity verification',
     title2: 'Ready-to-work check',
@@ -338,6 +345,10 @@ const en = {
     submit: 'Find a Ranger',
     tooShort: 'Please describe the problem (at least 5 characters).',
     failed: 'Could not send your request. Try again.',
+    describeHintOther: 'For example: Need 2 people to move a sofa up to the 3rd floor, budget around ₹500 if possible',
+    tooShortOther: 'Please describe what you need in at least 20 characters.',
+    photosEncourageOther: 'A photo helps Rangers understand the job and quote accurately.',
+    otherQuoteNote: 'There is no price guide for this category — mention a budget above if you have one, or leave it open. Rangers will quote you directly and you can negotiate.',
   },
   requestStatus: {
     finding: 'Finding a Ranger near you…',
@@ -375,6 +386,9 @@ const en = {
     openJob: 'Open job',
     keepOpen: 'Keep the app open to receive requests.',
     scheduledFor: 'For {{when}}',
+    filterAll: 'All',
+    filterOther: 'Other',
+    noPriceGuide: 'No price guide — quote directly',
   },
   activity: {
     title: 'Activity',
