@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Share, View } from 'react-native';
 import { addRole, exportMyData } from '../../api/endpoints';
 import { useSession } from '../../auth/session';
-import { Button, Card, Screen, Text } from '../../components';
+import { Avatar, Button, Card, ListRow, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatIndianPhone } from '../../lib/phone';
 import { spacing } from '../../theme/tokens';
@@ -86,22 +86,18 @@ export function AccountScreen() {
 
   return (
     <Screen scroll>
-      <View style={{ gap: spacing.xs }}>
-        <Text variant="title">{user.fullName ?? t('account.noName')}</Text>
-        <Text color="textMuted">
-          {t('account.signedInAs', { phone: formatIndianPhone(user.phone) })}
-        </Text>
-        <Text color="textMuted" testID="roles">
-          {t('account.roles')}: {user.roles.map((r) => t(ROLE_KEY[r])).join(', ')}
-        </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <Avatar name={user.fullName} />
+        <View style={{ flex: 1, gap: spacing.xs }}>
+          <Text variant="title">{user.fullName ?? t('account.noName')}</Text>
+          <Text color="textMuted">
+            {t('account.signedInAs', { phone: formatIndianPhone(user.phone) })}
+          </Text>
+          <Text color="textMuted" testID="roles">
+            {t('account.roles')}: {user.roles.map((r) => t(ROLE_KEY[r])).join(', ')}
+          </Text>
+        </View>
       </View>
-
-      <Button
-        testID="open-client-league"
-        variant="secondary"
-        title={t('clientLeague.title')}
-        onPress={go('/client-league')}
-      />
 
       {message ? (
         <Text color="danger" accessibilityRole="alert">
@@ -109,12 +105,24 @@ export function AccountScreen() {
         </Text>
       ) : null}
 
-      {isRanger ? (
-        <Button
-          testID="ranger-verification"
-          title={t('account.rangerVerification')}
-          onPress={go('/ranger')}
+      <Card>
+        <ListRow
+          testID="open-client-league"
+          icon="ribbon-outline"
+          title={t('clientLeague.title')}
+          onPress={go('/client-league')}
         />
+      </Card>
+
+      {isRanger ? (
+        <Card>
+          <ListRow
+            testID="ranger-verification"
+            icon="shield-checkmark-outline"
+            title={t('account.rangerVerification')}
+            onPress={go('/ranger')}
+          />
+        </Card>
       ) : (
         <Card>
           <View style={{ gap: spacing.sm }}>
@@ -131,11 +139,14 @@ export function AccountScreen() {
       )}
 
       {isEmployer ? (
-        <Button
-          testID="employer-listings"
-          title={t('employer.myListingsTitle')}
-          onPress={go('/employer/listings')}
-        />
+        <Card>
+          <ListRow
+            testID="employer-listings"
+            icon="briefcase-outline"
+            title={t('employer.myListingsTitle')}
+            onPress={go('/employer/listings')}
+          />
+        </Card>
       ) : (
         <Card>
           <View style={{ gap: spacing.sm }}>
@@ -152,11 +163,14 @@ export function AccountScreen() {
       )}
 
       {isStudent ? (
-        <Button
-          testID="student-profile"
-          title={t('campus.profileTitle')}
-          onPress={go('/student/profile')}
-        />
+        <Card>
+          <ListRow
+            testID="student-profile"
+            icon="school-outline"
+            title={t('campus.profileTitle')}
+            onPress={go('/student/profile')}
+          />
+        </Card>
       ) : (
         <Card>
           <View style={{ gap: spacing.sm }}>
@@ -172,58 +186,93 @@ export function AccountScreen() {
         </Card>
       )}
 
-      <View style={{ gap: spacing.sm }}>
-        <Button
-          testID="browse-contracts"
-          variant="secondary"
-          title={t('employer.browseTitle')}
-          onPress={go('/contracts')}
-        />
-        {isRanger ? (
-          <Button
-            testID="my-contract-applications"
-            variant="secondary"
-            title={t('employer.myApplicationsTitle')}
-            onPress={go('/contracts/my-applications')}
+      <View style={{ gap: spacing.xs }}>
+        <Text variant="label" color="textMuted">
+          {t('account.sectionMarketplace')}
+        </Text>
+        <Card>
+          <ListRow
+            testID="browse-contracts"
+            icon="document-text-outline"
+            title={t('employer.browseTitle')}
+            onPress={go('/contracts')}
           />
-        ) : null}
-        <Button
-          testID="browse-campus"
-          variant="secondary"
-          title={t('campus.browseTitle')}
-          onPress={go('/campus')}
-        />
-        {isStudent ? (
-          <Button
-            testID="my-campus-applications"
-            variant="secondary"
-            title={t('employer.myApplicationsTitle')}
-            onPress={go('/campus/my-applications')}
+          {isRanger ? (
+            <ListRow
+              testID="my-contract-applications"
+              icon="list-outline"
+              title={t('employer.myApplicationsTitle')}
+              onPress={go('/contracts/my-applications')}
+            />
+          ) : null}
+          <ListRow
+            testID="browse-campus"
+            icon="school-outline"
+            title={t('campus.browseTitle')}
+            onPress={go('/campus')}
           />
-        ) : null}
-        <Button testID="open-wallet" title={t('account.wallet')} onPress={go('/wallet')} />
-        <Button variant="secondary" title={t('account.editProfile')} onPress={go('/profile')} />
-        <Button variant="secondary" title={t('account.addresses')} onPress={go('/addresses')} />
-        <Button
-          testID="open-blocked-users"
-          variant="secondary"
-          title={t('account.blockedUsers')}
-          onPress={go('/blocked-users')}
-        />
-        <Button variant="secondary" title={t('account.contacts')} onPress={go('/contacts')} />
-        <Button variant="secondary" title={t('account.legal')} onPress={go('/legal')} />
-        <Button
-          variant="secondary"
-          title={t('account.exportData')}
-          onPress={() => void download()}
-        />
-        <Button variant="secondary" title={t('account.signOut')} onPress={() => void signOut()} />
-        <Button
-          testID="delete-account"
-          variant="danger"
-          title={t('account.deleteAccount')}
-          onPress={go('/delete-account')}
-        />
+          {isStudent ? (
+            <ListRow
+              testID="my-campus-applications"
+              icon="list-outline"
+              title={t('employer.myApplicationsTitle')}
+              onPress={go('/campus/my-applications')}
+            />
+          ) : null}
+          <ListRow
+            testID="open-wallet"
+            icon="wallet-outline"
+            title={t('account.wallet')}
+            onPress={go('/wallet')}
+          />
+        </Card>
+      </View>
+
+      <View style={{ gap: spacing.xs }}>
+        <Text variant="label" color="textMuted">
+          {t('account.sectionProfile')}
+        </Text>
+        <Card>
+          <ListRow icon="person-outline" title={t('account.editProfile')} onPress={go('/profile')} />
+          <ListRow
+            icon="location-outline"
+            title={t('account.addresses')}
+            onPress={go('/addresses')}
+          />
+          <ListRow
+            testID="open-blocked-users"
+            icon="ban-outline"
+            title={t('account.blockedUsers')}
+            onPress={go('/blocked-users')}
+          />
+          <ListRow icon="call-outline" title={t('account.contacts')} onPress={go('/contacts')} />
+          <ListRow icon="document-lock-outline" title={t('account.legal')} onPress={go('/legal')} />
+          <ListRow
+            icon="download-outline"
+            title={t('account.exportData')}
+            onPress={() => void download()}
+          />
+        </Card>
+      </View>
+
+      <View style={{ gap: spacing.xs }}>
+        <Text variant="label" color="textMuted">
+          {t('account.sectionAccount')}
+        </Text>
+        <Card>
+          <ListRow
+            icon="log-out-outline"
+            title={t('account.signOut')}
+            onPress={() => void signOut()}
+          />
+          <ListRow
+            testID="delete-account"
+            icon="trash-outline"
+            tone="danger"
+            title={t('account.deleteAccount')}
+            onPress={go('/delete-account')}
+          />
+        </Card>
       </View>
     </Screen>
   );

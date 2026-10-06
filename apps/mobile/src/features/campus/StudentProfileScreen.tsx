@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { createStudentProfile, getStudentProfile, useStudentProfile } from '../../api/campus';
 import { Button, Card, Screen, Text, TextField } from '../../components';
+import { type DobParts, partsToDob } from '../../lib/dob';
 import { errorMessage } from '../../lib/errors';
 import { spacing } from '../../theme/tokens';
 
@@ -16,19 +17,20 @@ export function StudentProfileScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const profile = useStudentProfile(true);
-  const [dob, setDob] = useState('');
+  const [dob, setDob] = useState<DobParts>({ day: '', month: '', year: '' });
   const [institute, setInstitute] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
-  const dobValid = /^\d{4}-\d{2}-\d{2}$/.test(dob);
+  const dateOfBirth = partsToDob(dob);
 
   async function save() {
+    if (!dateOfBirth) return setError(t('onboarding.dobInvalid'));
     setError(undefined);
     setBusy(true);
     try {
       await createStudentProfile({
-        dateOfBirth: dob,
+        dateOfBirth,
         instituteName: institute.trim() || undefined,
       });
       await qc.invalidateQueries({ queryKey: ['student', 'profile'] });
@@ -59,14 +61,41 @@ export function StudentProfileScreen() {
       <Text color="textMuted">{t('campus.profileIntro')}</Text>
       <Card>
         <View style={{ gap: spacing.md }}>
-          <TextField
-            testID="student-dob"
-            label={t('campus.dateOfBirth')}
-            value={dob}
-            onChangeText={setDob}
-            keyboardType="numbers-and-punctuation"
-            maxLength={10}
-          />
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="label">{t('campus.dateOfBirth')}</Text>
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <View style={{ flex: 1 }}>
+                <TextField
+                  testID="student-dob-day"
+                  label={t('onboarding.dobDay')}
+                  value={dob.day}
+                  onChangeText={(v) => setDob({ ...dob, day: v.replace(/\D/g, '').slice(0, 2) })}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <TextField
+                  testID="student-dob-month"
+                  label={t('onboarding.dobMonth')}
+                  value={dob.month}
+                  onChangeText={(v) => setDob({ ...dob, month: v.replace(/\D/g, '').slice(0, 2) })}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                />
+              </View>
+              <View style={{ flex: 1.4 }}>
+                <TextField
+                  testID="student-dob-year"
+                  label={t('onboarding.dobYear')}
+                  value={dob.year}
+                  onChangeText={(v) => setDob({ ...dob, year: v.replace(/\D/g, '').slice(0, 4) })}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
+              </View>
+            </View>
+          </View>
           <TextField
             testID="student-institute"
             label={t('campus.instituteName')}
@@ -84,7 +113,6 @@ export function StudentProfileScreen() {
             title={t('common.save')}
             onPress={() => void save()}
             loading={busy}
-            disabled={!dobValid}
           />
         </View>
       </Card>

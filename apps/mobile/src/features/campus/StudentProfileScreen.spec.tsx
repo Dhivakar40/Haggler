@@ -17,10 +17,7 @@ describe('StudentProfileScreen', () => {
         : undefined,
     );
     await renderWithProviders(<StudentProfileScreen />);
-    await waitFor(() => expect(screen.getByTestId('student-dob')).toBeTruthy());
-    expect(screen.getByTestId('student-save-profile').props.accessibilityState?.disabled).toBe(
-      true,
-    );
+    await waitFor(() => expect(screen.getByTestId('student-dob-day')).toBeTruthy());
   });
 
   it('shows a server refusal (under 18) as an error, not a crash', async () => {
@@ -41,15 +38,14 @@ describe('StudentProfileScreen', () => {
       return undefined;
     });
     await renderWithProviders(<StudentProfileScreen />);
-    await waitFor(() => expect(screen.getByTestId('student-dob')).toBeTruthy());
-    fireEvent.changeText(screen.getByTestId('student-dob'), '2015-01-01');
+    await waitFor(() => expect(screen.getByTestId('student-dob-day')).toBeTruthy());
+    await fireEvent.changeText(screen.getByTestId('student-dob-day'), '01');
+    await fireEvent.changeText(screen.getByTestId('student-dob-month'), '01');
+    await fireEvent.changeText(screen.getByTestId('student-dob-year'), '2015');
+    await fireEvent.press(screen.getByTestId('student-save-profile'));
     await waitFor(() =>
-      expect(screen.getByTestId('student-save-profile').props.accessibilityState?.disabled).toBe(
-        false,
-      ),
+      expect(screen.getByRole('alert')).toHaveTextContent('You must be 18 or older to use Campus.'),
     );
-    fireEvent.press(screen.getByTestId('student-save-profile'));
-    await waitFor(() => expect(screen.getByText(/18 or older/)).toBeTruthy());
   });
 
   it('shows a read-only summary once a profile exists', async () => {
@@ -60,7 +56,7 @@ describe('StudentProfileScreen', () => {
     );
     await renderWithProviders(<StudentProfileScreen />);
     await waitFor(() => expect(screen.getByText('Anna University')).toBeTruthy());
-    expect(screen.queryByTestId('student-dob')).toBeNull();
+    expect(screen.queryByTestId('student-dob-day')).toBeNull();
   });
 
   // Kept last: this is the only test whose component keeps re-rendering from a background
@@ -83,15 +79,12 @@ describe('StudentProfileScreen', () => {
       return undefined;
     });
     await renderWithProviders(<StudentProfileScreen />);
-    await waitFor(() => expect(screen.getByTestId('student-dob')).toBeTruthy());
-    fireEvent.changeText(screen.getByTestId('student-dob'), '2003-06-15');
-    fireEvent.changeText(screen.getByTestId('student-institute'), 'IIT Madras');
-    await waitFor(() =>
-      expect(screen.getByTestId('student-save-profile').props.accessibilityState?.disabled).toBe(
-        false,
-      ),
-    );
-    fireEvent.press(screen.getByTestId('student-save-profile'));
+    await waitFor(() => expect(screen.getByTestId('student-dob-day')).toBeTruthy());
+    await fireEvent.changeText(screen.getByTestId('student-dob-day'), '15');
+    await fireEvent.changeText(screen.getByTestId('student-dob-month'), '06');
+    await fireEvent.changeText(screen.getByTestId('student-dob-year'), '2003');
+    await fireEvent.changeText(screen.getByTestId('student-institute'), 'IIT Madras');
+    await fireEvent.press(screen.getByTestId('student-save-profile'));
     await waitFor(() => expect(screen.getByText('IIT Madras')).toBeTruthy());
     expect(routerMock().push).toHaveBeenCalledWith('/campus');
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
