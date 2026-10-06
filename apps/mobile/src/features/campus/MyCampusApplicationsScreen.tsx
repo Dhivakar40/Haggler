@@ -2,16 +2,17 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { FlatList, View } from 'react-native';
 import { useMyCampusApplications } from '../../api/campus';
-import { Card, EmptyState, ErrorState, LoadingState, Screen, Text } from '../../components';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Screen,
+  StatusPill,
+  Text,
+} from '../../components';
+import { applicationStatusTone } from '../../lib/status-tone';
 import { spacing } from '../../theme/tokens';
-
-const STATUS_COLOR: Record<string, 'text' | 'success' | 'danger' | 'textMuted'> = {
-  APPLIED: 'text',
-  SHORTLISTED: 'success',
-  REJECTED: 'danger',
-  HIRED: 'success',
-  WITHDRAWN: 'textMuted',
-};
 
 export function MyCampusApplicationsScreen() {
   const { t } = useTranslation();
@@ -50,9 +51,11 @@ export function MyCampusApplicationsScreen() {
               <View style={{ gap: spacing.xs }}>
                 <Text variant="heading">{item.listingTitle}</Text>
                 <Text color="textMuted">{item.businessName}</Text>
-                <Text color={STATUS_COLOR[item.status] ?? 'text'}>
-                  {t(`employer.applicationStatus.${item.status}`)}
-                </Text>
+                <StatusPill
+                  testID={`my-campus-application-${item.id}-status`}
+                  tone={applicationStatusTone(item.status)}
+                  label={t(`employer.applicationStatus.${item.status}`)}
+                />
               </View>
             </Card>
           )}

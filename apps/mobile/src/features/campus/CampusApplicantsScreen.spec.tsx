@@ -1,22 +1,10 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { Alert } from 'react-native';
 import i18n from '../../i18n';
 import { mockApi, renderWithProviders, signInAs } from '../../test-utils';
 import { CampusApplicantsScreen } from './CampusApplicantsScreen';
 
 const LISTING_ID = 'aaaaaaaa-1111-4111-8111-111111111111';
-
-const pressAlertButton = (label: string) => {
-  const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
-    string,
-    string | undefined,
-    { text: string; onPress?: () => void }[],
-  ];
-  const btn = args[2].find((b) => b.text === label);
-  if (!btn?.onPress) throw new Error(`no alert button ${label}`);
-  btn.onPress();
-};
 
 const listing = (over: Record<string, unknown> = {}) => ({
   id: LISTING_ID,
@@ -57,7 +45,6 @@ beforeEach(async () => {
   jest.clearAllMocks();
   signInAs({ roles: ['CUSTOMER', 'EMPLOYER'] });
   (useLocalSearchParams as jest.Mock).mockReturnValue({ id: LISTING_ID });
-  jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 });
 
 describe('CampusApplicantsScreen', () => {
@@ -102,7 +89,8 @@ describe('CampusApplicantsScreen', () => {
       expect(screen.getByTestId('campus-hire-cccccccc-1111-4111-8111-111111111111')).toBeTruthy(),
     );
     fireEvent.press(screen.getByTestId('campus-hire-cccccccc-1111-4111-8111-111111111111'));
-    pressAlertButton('Hire');
+    await waitFor(() => expect(screen.getByTestId('hire-dialog-confirm')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('hire-dialog-confirm'));
     await waitFor(() =>
       expect(
         calls.some(
@@ -138,7 +126,8 @@ describe('CampusApplicantsScreen', () => {
       expect(screen.getByTestId('campus-hire-cccccccc-1111-4111-8111-111111111111')).toBeTruthy(),
     );
     fireEvent.press(screen.getByTestId('campus-hire-cccccccc-1111-4111-8111-111111111111'));
-    pressAlertButton('Hire');
+    await waitFor(() => expect(screen.getByTestId('hire-dialog-confirm')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('hire-dialog-confirm'));
     await waitFor(() => expect(screen.getByText(/weekly hours cap/)).toBeTruthy());
   });
 

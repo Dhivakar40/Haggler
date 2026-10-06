@@ -2,9 +2,18 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { applyToContract, useContract, withdrawFromContract } from '../../api/contracts';
-import { Button, Card, ErrorState, LoadingState, Screen, Text, TextField } from '../../components';
+import {
+  Button,
+  Card,
+  Dialog,
+  ErrorState,
+  LoadingState,
+  Screen,
+  Text,
+  TextField,
+} from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
 import { spacing } from '../../theme/tokens';
@@ -17,6 +26,7 @@ export function ContractDetailScreen() {
   const [coverNote, setCoverNote] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
 
   async function refresh() {
     await qc.invalidateQueries({ queryKey: ['contracts', listingId] });
@@ -48,12 +58,6 @@ export function ContractDetailScreen() {
     }
   }
 
-  function confirmWithdraw() {
-    Alert.alert(t('employer.withdrawConfirmTitle'), t('employer.withdrawConfirmBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('employer.withdraw'), style: 'destructive', onPress: () => void withdraw() },
-    ]);
-  }
 
   if (listing.isLoading)
     return (
@@ -116,7 +120,7 @@ export function ContractDetailScreen() {
                 testID="withdraw-application"
                 variant="danger"
                 title={t('employer.withdraw')}
-                onPress={confirmWithdraw}
+                onPress={() => setConfirmingWithdraw(true)}
                 loading={busy}
               />
             ) : null}
@@ -144,6 +148,21 @@ export function ContractDetailScreen() {
       ) : (
         <Text color="textMuted">{t('employer.listingNotOpen')}</Text>
       )}
+
+      <Dialog
+        testID="withdraw-dialog"
+        visible={confirmingWithdraw}
+        title={t('employer.withdrawConfirmTitle')}
+        message={t('employer.withdrawConfirmBody')}
+        confirmLabel={t('employer.withdraw')}
+        onConfirm={() => {
+          setConfirmingWithdraw(false);
+          void withdraw();
+        }}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setConfirmingWithdraw(false)}
+        destructive
+      />
     </Screen>
   );
 }

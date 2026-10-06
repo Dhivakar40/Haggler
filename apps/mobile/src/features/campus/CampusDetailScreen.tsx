@@ -2,12 +2,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { applyToCampus, useCampusListing, withdrawFromCampus } from '../../api/campus';
 import {
   Button,
   Card,
   Chip,
+  Dialog,
   ErrorState,
   LoadingState,
   Screen,
@@ -27,6 +28,7 @@ export function CampusDetailScreen() {
   const [acceptsNightShift, setAcceptsNightShift] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
 
   async function refresh() {
     await qc.invalidateQueries({ queryKey: ['campus', listingId] });
@@ -61,12 +63,6 @@ export function CampusDetailScreen() {
     }
   }
 
-  function confirmWithdraw() {
-    Alert.alert(t('employer.withdrawConfirmTitle'), t('employer.withdrawConfirmBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('employer.withdraw'), style: 'destructive', onPress: () => void withdraw() },
-    ]);
-  }
 
   if (listing.isLoading)
     return (
@@ -137,7 +133,7 @@ export function CampusDetailScreen() {
                 testID="withdraw-campus-application"
                 variant="danger"
                 title={t('employer.withdraw')}
-                onPress={confirmWithdraw}
+                onPress={() => setConfirmingWithdraw(true)}
                 loading={busy}
               />
             ) : null}
@@ -185,6 +181,21 @@ export function CampusDetailScreen() {
       ) : (
         <Text color="textMuted">{t('employer.listingNotOpen')}</Text>
       )}
+
+      <Dialog
+        testID="withdraw-dialog"
+        visible={confirmingWithdraw}
+        title={t('employer.withdrawConfirmTitle')}
+        message={t('employer.withdrawConfirmBody')}
+        confirmLabel={t('employer.withdraw')}
+        onConfirm={() => {
+          setConfirmingWithdraw(false);
+          void withdraw();
+        }}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setConfirmingWithdraw(false)}
+        destructive
+      />
     </Screen>
   );
 }

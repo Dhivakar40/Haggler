@@ -2,17 +2,19 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { FlatList, View } from 'react-native';
 import { useMyCampusListings } from '../../api/campus';
-import { Button, Card, EmptyState, ErrorState, LoadingState, Screen, Text } from '../../components';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Screen,
+  StatusPill,
+  Text,
+} from '../../components';
 import { formatRupees } from '../../lib/money';
+import { listingStatusTone } from '../../lib/status-tone';
 import { spacing } from '../../theme/tokens';
-
-const STATUS_COLOR: Record<string, 'text' | 'success' | 'danger' | 'textMuted'> = {
-  OPEN: 'success',
-  PAUSED: 'textMuted',
-  FILLED: 'text',
-  CLOSED: 'textMuted',
-  CANCELLED: 'danger',
-};
 
 export function MyCampusListingsScreen() {
   const { t } = useTranslation();
@@ -64,9 +66,11 @@ export function MyCampusListingsScreen() {
                   {item.isNightShift ? ` · ${t('campus.nightShift')}` : ''}
                 </Text>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text color={STATUS_COLOR[item.status] ?? 'text'}>
-                    {t(`employer.listingStatus.${item.status}`)}
-                  </Text>
+                  <StatusPill
+                    testID={`campus-listing-${item.id}-status`}
+                    tone={listingStatusTone(item.status)}
+                    label={t(`employer.listingStatus.${item.status}`)}
+                  />
                   <Text color="textMuted" testID={`campus-listing-${item.id}-applicants`}>
                     {t('employer.applicantCount', { count: item.applicationCount ?? 0 })}
                   </Text>
