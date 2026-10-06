@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import type { JobDto } from '@haggler/shared';
 import { ApiError } from '../../api/client';
 import {
@@ -13,7 +13,7 @@ import {
   startJob,
   verifyArrival,
 } from '../../api/market';
-import { Button, Card, Chip, Text, TextField } from '../../components';
+import { Button, Card, Chip, Dialog, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { spacing } from '../../theme/tokens';
 import { uploadJobPhoto } from '../media/upload';
@@ -28,6 +28,7 @@ export function RangerActions({ job, action }: { job: JobDto; action: Action }) 
   const [payment, setPayment] = useState<'CASH' | 'UPI'>('CASH');
   const [photoError, setPhotoError] = useState<string>();
   const [photoBusy, setPhotoBusy] = useState<'BEFORE' | 'AFTER' | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const s = job.status;
 
   /** The job photo must be taken with the camera at the site, never picked from the gallery. */
@@ -48,16 +49,6 @@ export function RangerActions({ job, action }: { job: JobDto; action: Action }) 
       setPhotoBusy(null);
     }
   }
-
-  const confirmCancel = () =>
-    Alert.alert(t('job.cancelAsk'), undefined, [
-      { text: t('job.keep'), style: 'cancel' },
-      {
-        text: t('job.cancel'),
-        style: 'destructive',
-        onPress: () => void action.run('cancel', () => cancelJob(job.id)),
-      },
-    ]);
 
   const cancellable = ['MATCHED', 'NEGOTIATING', 'AGREED', 'EN_ROUTE', 'ARRIVED'].includes(s);
 
@@ -201,9 +192,23 @@ export function RangerActions({ job, action }: { job: JobDto; action: Action }) 
           testID="cancel-job"
           variant="danger"
           title={t('job.cancel')}
-          onPress={confirmCancel}
+          onPress={() => setCancelDialogOpen(true)}
         />
       ) : null}
+
+      <Dialog
+        testID="cancel-dialog"
+        visible={cancelDialogOpen}
+        title={t('job.cancelAsk')}
+        confirmLabel={t('job.cancel')}
+        onConfirm={() => {
+          setCancelDialogOpen(false);
+          void action.run('cancel', () => cancelJob(job.id));
+        }}
+        cancelLabel={t('job.keep')}
+        onCancel={() => setCancelDialogOpen(false)}
+        destructive
+      />
     </View>
   );
 }

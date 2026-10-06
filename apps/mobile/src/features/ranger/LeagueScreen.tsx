@@ -2,18 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { getLeagueStatus } from '../../api/endpoints';
-import { Card, ErrorState, LoadingState, Screen, Text } from '../../components';
+import { Card, ErrorState, LeagueBadge, LoadingState, Screen, Skeleton, Text } from '../../components';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radii, spacing } from '../../theme/tokens';
 
 export const LEAGUE_STATUS_KEY = ['league-status'];
 
-/**
- * Part D (D-076): current league, progress toward the next, and the full ladder. Functional only
- * — this is the screen Part H (sub-phase 5) gives real visual weight (progress rings, league
- * badges/icons), per the plan's "show key screens before applying app-wide" step. For now it uses
- * the existing token system and a plain percentage bar, same spirit as the onboarding screen.
- */
+/** Part D (D-076), given real visual weight in Phase UI: the current league shown as a
+ * LeagueBadge (the same component the league-up popup and job screens use, so a Ranger's tier
+ * always looks the same everywhere), and the ladder as a column of badges — reached tiers full
+ * color, the rest dimmed — rather than a plain dot-and-text list. */
 export function LeagueScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -22,7 +20,18 @@ export function LeagueScreen() {
   if (status.isLoading)
     return (
       <Screen>
-        <LoadingState />
+        <View testID="league-skeleton" style={{ gap: spacing.lg }}>
+          <Card>
+            <View style={{ gap: spacing.sm, alignItems: 'center' }}>
+              <Skeleton width="40%" height={14} />
+              <Skeleton width="50%" height={32} radius={radii.pill} />
+              <Skeleton width="70%" height={10} radius={radii.pill} />
+            </View>
+          </Card>
+          <Card>
+            <Skeleton width="60%" height={18} />
+          </Card>
+        </View>
       </Screen>
     );
   if (status.isError || !status.data)
@@ -38,13 +47,11 @@ export function LeagueScreen() {
   return (
     <Screen scroll>
       <Card testID="league-current">
-        <View style={{ gap: spacing.sm }}>
+        <View style={{ gap: spacing.md, alignItems: 'center' }}>
           <Text variant="label" color="textMuted">
             {t('league.currentLeague')}
           </Text>
-          <Text variant="title" testID="league-name">
-            {t(`league.tier.${s.league}`)}
-          </Text>
+          <LeagueBadge tier={s.league} kind="worker" testID="league-name" />
           {s.nextLeague ? (
             <>
               <View
@@ -84,22 +91,12 @@ export function LeagueScreen() {
         <Text variant="heading">{t('league.ladder')}</Text>
         {[...s.ladder].reverse().map((rung) => (
           <View key={rung.tier} style={styles.rungRow} testID={`ladder-${rung.tier}`}>
-            <View
-              style={[
-                styles.dot,
-                {
-                  backgroundColor: rung.reached ? colors.primary : colors.surface,
-                  borderColor: rung.reached ? colors.primary : colors.border,
-                },
-              ]}
-            />
-            <Text
-              color={rung.tier === s.league ? 'text' : rung.reached ? 'textMuted' : 'textMuted'}
-              style={rung.tier === s.league ? { fontWeight: '700' } : undefined}
-            >
-              {t(`league.tier.${rung.tier}`)}
-              {rung.tier === s.league ? ` · ${t('league.youAreHere')}` : ''}
-            </Text>
+            <View style={!rung.reached ? styles.dimmed : undefined}>
+              <LeagueBadge tier={rung.tier} kind="worker" size="sm" />
+            </View>
+            {rung.tier === s.league ? (
+              <Text variant="label">{t('league.youAreHere')}</Text>
+            ) : null}
           </View>
         ))}
       </View>
@@ -112,6 +109,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: radii.pill,
     overflow: 'hidden',
+    width: '100%',
   },
   fill: {
     height: '100%',
@@ -122,10 +120,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1.5,
-  },
+  dimmed: { opacity: 0.35 },
 });

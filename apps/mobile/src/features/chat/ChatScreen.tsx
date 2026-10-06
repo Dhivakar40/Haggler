@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radii.lg,
     marginVertical: spacing.xs,
-    gap: 2,
+    gap: spacing.xs,
   },
   mine: { alignSelf: 'flex-end' },
   theirs: { alignSelf: 'flex-start' },

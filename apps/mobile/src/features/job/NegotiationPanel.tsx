@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { MAX_NEGOTIATION_ROUNDS, type JobDto } from '@haggler/shared';
 import { acceptOffer, counterOffer, makeOffer, rejectOffer } from '../../api/market';
-import { Button, Card, Countdown, Text, TextField } from '../../components';
+import { Button, Card, Countdown, Dialog, Text, TextField } from '../../components';
 import { isOutsideBand, pendingOffer } from '../../lib/job-status';
 import { formatRupees, parseRupeesToPaise } from '../../lib/money';
 import { useNow } from '../../lib/useNow';
@@ -22,6 +22,10 @@ export function NegotiationPanel({ job, action }: { job: JobDto; action: Action 
   const now = useNow(1000);
   const [amount, setAmount] = useState('');
   const [invalid, setInvalid] = useState(false);
+  const [outsideBand, setOutsideBand] = useState<{ amountPaise: number; onConfirm: () => void } | null>(
+    null,
+  );
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const pending = pendingOffer(job, now);
   const mine = pending && pending.fromRole === job.viewerRole;
   const theirs = pending && pending.fromRole !== job.viewerRole;
@@ -33,29 +37,7 @@ export function NegotiationPanel({ job, action }: { job: JobDto; action: Action 
   /** Ask before sending or accepting a price outside the band. */
   function confirmOutside(amountPaise: number, then: (confirmed: boolean) => void) {
     if (!isOutsideBand(amountPaise, job.band)) return then(false);
-    Alert.alert(
-      t('job.outsideTitle'),
-      t('job.outsideBody', {
-        amount: money(amountPaise),
-        min: money(job.band.minPaise),
-        max: money(job.band.maxPaise),
-      }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('job.continueAnyway'), onPress: () => then(true) },
-      ],
-    );
-  }
-
-  function confirmReject() {
-    Alert.alert(t('job.rejectConfirmTitle'), t('job.rejectConfirmBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('job.reject'),
-        style: 'destructive',
-        onPress: () => void action.run('reject', () => rejectOffer(pending!.id)),
-      },
-    ]);
+    setOutsideBand({ amountPaise, onConfirm: () => then(true) });
   }
 
   function send(kind: 'offer' | 'counter') {
@@ -140,7 +122,7 @@ export function NegotiationPanel({ job, action }: { job: JobDto; action: Action 
                 variant="danger"
                 title={t('job.reject')}
                 loading={action.busy === 'reject'}
-                onPress={confirmReject}
+                onPress={() => setRejectDialogOpen(true)}
               />
             </View>
             {job.offers.length < MAX_NEGOTIATION_ROUNDS ? (
@@ -179,6 +161,43 @@ export function NegotiationPanel({ job, action }: { job: JobDto; action: Action 
           </>
         ) : null}
       </View>
+
+      <Dialog
+        testID="outside-band-dialog"
+        visible={!!outsideBand}
+        title={t('job.outsideTitle')}
+        message={
+          outsideBand
+            ? t('job.outsideBody', {
+                amount: money(outsideBand.amountPaise),
+                min: money(job.band.minPaise),
+                max: money(job.band.maxPaise),
+              })
+            : undefined
+        }
+        confirmLabel={t('job.continueAnyway')}
+        onConfirm={() => {
+          const onConfirm = outsideBand?.onConfirm;
+          setOutsideBand(null);
+          onConfirm?.();
+        }}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setOutsideBand(null)}
+      />
+      <Dialog
+        testID="reject-dialog"
+        visible={rejectDialogOpen}
+        title={t('job.rejectConfirmTitle')}
+        message={t('job.rejectConfirmBody')}
+        confirmLabel={t('job.reject')}
+        onConfirm={() => {
+          setRejectDialogOpen(false);
+          if (pending) void action.run('reject', () => rejectOffer(pending.id));
+        }}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setRejectDialogOpen(false)}
+        destructive
+      />
     </Card>
   );
 }

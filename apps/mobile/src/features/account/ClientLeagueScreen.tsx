@@ -2,17 +2,22 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { getClientLeagueStatus } from '../../api/endpoints';
-import { Card, ErrorState, LoadingState, Screen, Text } from '../../components';
+import {
+  Card,
+  ErrorState,
+  LeagueBadge,
+  LoadingState,
+  Screen,
+  Skeleton,
+  Text,
+} from '../../components';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radii, spacing } from '../../theme/tokens';
 
 export const CLIENT_LEAGUE_STATUS_KEY = ['client-league-status'];
 
-/**
- * Part E (D-077): the customer-side mirror of the Ranger LeagueScreen — current league, progress,
- * and the full ladder, built on bookings + the ratings Rangers already leave for customers.
- * Functional only, same as the Ranger screen; Part H gives both their real visual treatment.
- */
+/** Part E (D-077), given real visual weight in Phase UI: see ranger/LeagueScreen.tsx — same
+ * LeagueBadge-based treatment, the client ladder's own nine tiers and colors. */
 export function ClientLeagueScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -24,7 +29,18 @@ export function ClientLeagueScreen() {
   if (status.isLoading)
     return (
       <Screen>
-        <LoadingState />
+        <View testID="client-league-skeleton" style={{ gap: spacing.lg }}>
+          <Card>
+            <View style={{ gap: spacing.sm, alignItems: 'center' }}>
+              <Skeleton width="40%" height={14} />
+              <Skeleton width="50%" height={32} radius={radii.pill} />
+              <Skeleton width="70%" height={10} radius={radii.pill} />
+            </View>
+          </Card>
+          <Card>
+            <Skeleton width="60%" height={18} />
+          </Card>
+        </View>
       </Screen>
     );
   if (status.isError || !status.data)
@@ -40,13 +56,11 @@ export function ClientLeagueScreen() {
   return (
     <Screen scroll>
       <Card testID="client-league-current">
-        <View style={{ gap: spacing.sm }}>
+        <View style={{ gap: spacing.md, alignItems: 'center' }}>
           <Text variant="label" color="textMuted">
             {t('clientLeague.currentLeague')}
           </Text>
-          <Text variant="title" testID="client-league-name">
-            {t(`clientLeague.tier.${s.league}`)}
-          </Text>
+          <LeagueBadge tier={s.league} kind="client" testID="client-league-name" />
           {s.nextLeague ? (
             <>
               <View
@@ -91,19 +105,12 @@ export function ClientLeagueScreen() {
         <Text variant="heading">{t('clientLeague.ladder')}</Text>
         {[...s.ladder].reverse().map((rung) => (
           <View key={rung.tier} style={styles.rungRow} testID={`client-ladder-${rung.tier}`}>
-            <View
-              style={[
-                styles.dot,
-                {
-                  backgroundColor: rung.reached ? colors.primary : colors.surface,
-                  borderColor: rung.reached ? colors.primary : colors.border,
-                },
-              ]}
-            />
-            <Text style={rung.tier === s.league ? { fontWeight: '700' } : undefined}>
-              {t(`clientLeague.tier.${rung.tier}`)}
-              {rung.tier === s.league ? ` · ${t('clientLeague.youAreHere')}` : ''}
-            </Text>
+            <View style={!rung.reached ? styles.dimmed : undefined}>
+              <LeagueBadge tier={rung.tier} kind="client" size="sm" />
+            </View>
+            {rung.tier === s.league ? (
+              <Text variant="label">{t('clientLeague.youAreHere')}</Text>
+            ) : null}
           </View>
         ))}
       </View>
@@ -112,8 +119,8 @@ export function ClientLeagueScreen() {
 }
 
 const styles = StyleSheet.create({
-  track: { height: 10, borderRadius: radii.pill, overflow: 'hidden' },
+  track: { height: 10, borderRadius: radii.pill, overflow: 'hidden', width: '100%' },
   fill: { height: '100%', borderRadius: radii.pill },
   rungRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
+  dimmed: { opacity: 0.35 },
 });

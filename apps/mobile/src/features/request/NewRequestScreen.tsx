@@ -3,8 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, View } from 'react-native';
 import {
   type CreateRequestInput,
   MAX_REQUEST_PHOTOS,
@@ -13,7 +12,7 @@ import {
 } from '@haggler/shared';
 import { listAddresses } from '../../api/endpoints';
 import { createRequest, getPriceBand } from '../../api/market';
-import { Button, Card, Chip, LoadingState, Screen, Text, TextField } from '../../components';
+import { Button, Card, Chip, ListRow, LoadingState, Screen, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -164,11 +163,9 @@ export function NewRequestScreen() {
         {t(isOther ? 'request.describeHintOther' : 'request.describeHint')}
       </Text>
 
-      {/* A flat, hairline-divided list instead of Chips — the same "booking-history row"
-          treatment as everywhere else a list of choices reads like a record, not a menu. Every
-          address is a plain, always-tappable row; "Use a different address" is its own row, never
-          hidden. No card, no shadow: choosing an address isn't the urgent moment on this screen,
-          the price confirmation below is. */}
+      {/* ListRow throughout — a flat, hairline-divided list reading like a record, not a menu.
+          Choosing an address isn't the urgent moment on this screen, the price confirmation
+          below is, so nothing here is elevated. */}
       <View style={[styles.listGroup, { borderColor: c.border }]}>
         <Text variant="heading" style={{ color: c.text, marginBottom: spacing.sm }}>
           {t('request.where')}
@@ -177,44 +174,25 @@ export function NewRequestScreen() {
           <Text style={{ color: c.textMuted }}>{t('request.noAddress')}</Text>
         ) : (
           list.map((a) => (
-            <Pressable
+            <ListRow
               key={a.id}
               testID={`address-${a.label}`}
               accessibilityRole="radio"
               accessibilityLabel={`${a.label}: ${a.line1}`}
-              accessibilityState={{ selected: selected?.id === a.id }}
+              selected={selected?.id === a.id}
               onPress={() => setAddressId(a.id)}
-              style={({ pressed }) => [
-                styles.listRow,
-                { borderColor: c.border },
-                pressed && { opacity: 0.6 },
-              ]}
-            >
-              <Ionicons
-                name={selected?.id === a.id ? 'radio-button-on' : 'radio-button-off'}
-                size={20}
-                color={selected?.id === a.id ? c.primary : c.textMuted}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: c.text, fontWeight: '600' }}>{a.label}</Text>
-                <Text variant="caption" style={{ color: c.textMuted }}>
-                  {a.line1}
-                </Text>
-              </View>
-            </Pressable>
+              icon={selected?.id === a.id ? 'radio-button-on' : 'radio-button-off'}
+              title={a.label}
+              subtitle={a.line1}
+            />
           ))
         )}
-        <Pressable
+        <ListRow
           testID="add-address"
-          accessibilityRole="button"
           onPress={() => router.push('/address-new')}
-          style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.6 }]}
-        >
-          <Ionicons name="add-circle-outline" size={20} color={c.primary} />
-          <Text style={{ color: c.primary, fontWeight: '600' }}>
-            {list.length === 0 ? t('request.addAddress') : t('request.addAnotherAddress')}
-          </Text>
-        </Pressable>
+          icon="add-circle-outline"
+          title={list.length === 0 ? t('request.addAddress') : t('request.addAnotherAddress')}
+        />
       </View>
 
       <View style={{ gap: spacing.sm }}>

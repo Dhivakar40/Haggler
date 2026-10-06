@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Share, View } from 'react-native';
+import { Share, View } from 'react-native';
 import { type JobDto, SOCKET_EVENTS, type TrackDto } from '@haggler/shared';
 import { cancelJob, confirmJob, createShareLink, getTrack, reportNoShow } from '../../api/market';
-import { Button, Card, Text, TrackingMap } from '../../components';
+import { Button, Card, Dialog, Text, TrackingMap } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { checkLeagueUp } from '../../lib/league-up-check';
 import { formatRupees } from '../../lib/money';
@@ -20,6 +20,7 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [shareError, setShareError] = useState<string>();
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const s = job.status;
   const tracked = TRACKED.includes(s);
 
@@ -67,16 +68,6 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
     }
   }
 
-  const confirmCancel = () =>
-    Alert.alert(t('job.cancelAsk'), undefined, [
-      { text: t('job.keep'), style: 'cancel' },
-      {
-        text: t('job.cancel'),
-        style: 'destructive',
-        onPress: () => void action.run('cancel', () => cancelJob(job.id)),
-      },
-    ]);
-
   const cancellable = ['MATCHED', 'NEGOTIATING', 'AGREED', 'EN_ROUTE', 'ARRIVED'].includes(s);
   const shareable = [
     'MATCHED',
@@ -106,8 +97,8 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
             <Text variant="heading">{t('job.codeTitle')}</Text>
             <Text
               testID="arrival-code-value"
-              variant="title"
-              style={{ fontSize: 48, lineHeight: 56, letterSpacing: 8 }}
+              variant="display"
+              style={{ letterSpacing: 8 }}
               accessibilityLabel={job.arrivalCode.split('').join(' ')}
             >
               {job.arrivalCode}
@@ -180,9 +171,23 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
           testID="cancel-job"
           variant="danger"
           title={t('job.cancel')}
-          onPress={confirmCancel}
+          onPress={() => setCancelDialogOpen(true)}
         />
       ) : null}
+
+      <Dialog
+        testID="cancel-dialog"
+        visible={cancelDialogOpen}
+        title={t('job.cancelAsk')}
+        confirmLabel={t('job.cancel')}
+        onConfirm={() => {
+          setCancelDialogOpen(false);
+          void action.run('cancel', () => cancelJob(job.id));
+        }}
+        cancelLabel={t('job.keep')}
+        onCancel={() => setCancelDialogOpen(false)}
+        destructive
+      />
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams } from 'expo-router';
-import { Alert, Linking, Share } from 'react-native';
+import { Linking, Share } from 'react-native';
 import type { JobDto } from '@haggler/shared';
 import i18n from '../../i18n';
 import {
@@ -92,23 +92,12 @@ const asCustomer = (over: Partial<JobDto> = {}) =>
   makeJob({ viewerRole: 'CUSTOMER', worker: rangerParty, ...over });
 const post = (calls: MockCall[], path: string) =>
   calls.find((c) => c.method === 'POST' && c.path === path);
-const pressAlertButton = (label: string) => {
-  const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
-    string,
-    string | undefined,
-    { text: string; onPress?: () => void }[],
-  ];
-  const btn = args[2].find((b) => b.text === label);
-  if (!btn?.onPress) throw new Error(`no alert button ${label}`);
-  btn.onPress();
-};
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');
   jest.clearAllMocks();
   for (const k of Object.keys(mockHandlers)) delete mockHandlers[k];
   (useLocalSearchParams as jest.Mock).mockReturnValue({ id: JOB_ID });
-  jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
   jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
   picker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true });
@@ -178,9 +167,7 @@ describe('JobScreen: negotiation', () => {
   it('shows the Ranger, the usual range, the round, and the agreed price once there is one', async () => {
     serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }));
     await renderWithProviders(<JobScreen />);
-    expect(await screen.findByTestId('ranger-meta')).toHaveTextContent(
-      'Level 2 · SILVER · 12 jobs done',
-    );
+    expect(await screen.findByTestId('ranger-meta')).toHaveTextContent('Level 2 · 12 jobs done');
     expect(screen.getByTestId('band')).toHaveTextContent('Usual range: ₹199 to ₹699');
     expect(screen.getByTestId('round')).toHaveTextContent('Round 1 of 3');
     expect(screen.getByTestId('their-offer')).toHaveTextContent('₹500 offered to you');
@@ -203,7 +190,7 @@ describe('JobScreen: negotiation', () => {
     expect(post(calls, `/v1/offers/${OFFER_ID}/accept`)?.body).toEqual({
       confirmOutsideBand: false,
     });
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(screen.queryByText('Outside the usual range')).toBeNull();
     expect(screen.getByTestId('wait-ranger')).toBeTruthy();
   });
 
@@ -216,12 +203,11 @@ describe('JobScreen: negotiation', () => {
     );
     await renderWithProviders(<JobScreen />);
     await fireEvent.press(await screen.findByTestId('accept-offer'));
-    const [title, body] = (Alert.alert as jest.Mock).mock.calls[0] as [string, string];
-    expect(title).toBe('Outside the usual range');
-    expect(body).toBe('₹1,200 is outside ₹199 to ₹699. Continue anyway?');
-    // the dismiss/"Cancel" button has no onPress (the alert just closes): nothing is sent yet
+    expect(screen.getByText('Outside the usual range')).toBeTruthy();
+    expect(screen.getByText('₹1,200 is outside ₹199 to ₹699. Continue anyway?')).toBeTruthy();
+    // cancelling the dialog closes it without acting: nothing is sent yet
     expect(post(calls, `/v1/offers/${OFFER_ID}/accept`)).toBeUndefined();
-    await act(async () => pressAlertButton('Yes, continue'));
+    await fireEvent.press(screen.getByTestId('outside-band-dialog-confirm'));
     await waitFor(() =>
       expect(post(calls, `/v1/offers/${OFFER_ID}/accept`)?.body).toEqual({
         confirmOutsideBand: true,
@@ -276,9 +262,7 @@ describe('JobScreen: negotiation', () => {
     await renderWithProviders(<JobScreen />);
     await fireEvent.changeText(await screen.findByTestId('offer-amount'), '50');
     await fireEvent.press(screen.getByTestId('counter-offer'));
-    expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe(
-      '₹50 is outside ₹199 to ₹699. Continue anyway?',
-    );
+    expect(screen.getByText('₹50 is outside ₹199 to ₹699. Continue anyway?')).toBeTruthy();
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
   });
 
@@ -290,8 +274,8 @@ describe('JobScreen: negotiation', () => {
     );
     await renderWithProviders(<JobScreen />);
     await fireEvent.press(await screen.findByTestId('reject-offer'));
-    expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe('Reject this offer?');
-    await act(async () => pressAlertButton('Reject'));
+    expect(screen.getByText('Reject this offer?')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('reject-dialog-confirm'));
     expect(await screen.findByText('Cancelled')).toBeTruthy();
     expect(post(calls, `/v1/offers/${OFFER_ID}/reject`)).toBeTruthy();
   });
@@ -507,10 +491,10 @@ describe('JobScreen: customer side of the visit', () => {
     );
     await renderWithProviders(<JobScreen />);
     await fireEvent.press(await screen.findByTestId('cancel-job'));
-    expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe('Cancel this job?');
-    // "Keep job" has no onPress (the alert just closes): nothing is sent unless the destructive button is pressed
+    expect(screen.getByText('Cancel this job?')).toBeTruthy();
+    // "Keep job" closes the dialog without acting: nothing is sent unless the destructive button is pressed
     expect(post(calls, `/v1/jobs/${JOB_ID}/cancel`)).toBeUndefined();
-    await act(async () => pressAlertButton('Cancel job'));
+    await fireEvent.press(screen.getByTestId('cancel-dialog-confirm'));
     expect(await screen.findByText('Cancelled')).toBeTruthy();
   });
 
@@ -922,24 +906,27 @@ describe('JobScreen: reviews and blocking (Phase 4)', () => {
     expect(await screen.findByTestId('ranger-rating')).toHaveTextContent('No ratings yet');
   });
 
-  it('blocking asks for confirmation, then blocks and shows "Blocked"', async () => {
+  it('blocking asks for confirmation (via the in-app Dialog), then blocks and shows "Blocked"', async () => {
     const { calls } = serve(asCustomer({ status: 'AGREED', agreedPricePaise: 40000 }), (c) =>
       c.path === '/v1/me/blocks' ? { status: 201, body: { blocked: true } } : undefined,
     );
     await renderWithProviders(<JobScreen />);
     await fireEvent.press(await screen.findByTestId('block-user'));
-    expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe('Block this Ranger?');
-    await act(async () => {
-      const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
-        string,
-        string,
-        { text: string; onPress?: () => void }[],
-      ];
-      args[2].find((b) => b.text === 'Block')?.onPress?.();
-    });
+    expect(screen.getByText('Block this Ranger?')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('block-dialog-confirm'));
     expect(await screen.findByTestId('blocked-note')).toBeTruthy();
     expect(post(calls, '/v1/me/blocks')?.body).toEqual({ userId: rangerParty.id });
     expect(screen.queryByTestId('block-user')).toBeNull();
+  });
+
+  it('the block dialog can be dismissed without blocking', async () => {
+    const { calls } = serve(asCustomer({ status: 'AGREED', agreedPricePaise: 40000 }));
+    await renderWithProviders(<JobScreen />);
+    await fireEvent.press(await screen.findByTestId('block-user'));
+    await fireEvent.press(screen.getByTestId('block-dialog-cancel'));
+    expect(screen.queryByText('Block this Ranger?')).toBeNull();
+    expect(post(calls, '/v1/me/blocks')).toBeUndefined();
+    expect(screen.getByTestId('block-user')).toBeTruthy();
   });
 
   it('a failed block shows an error and does not mark them blocked', async () => {
@@ -950,14 +937,7 @@ describe('JobScreen: reviews and blocking (Phase 4)', () => {
     );
     await renderWithProviders(<JobScreen />);
     await fireEvent.press(await screen.findByTestId('block-user'));
-    await act(async () => {
-      const args = (Alert.alert as jest.Mock).mock.calls.at(-1) as [
-        string,
-        string,
-        { text: string; onPress?: () => void }[],
-      ];
-      args[2].find((b) => b.text === 'Block')?.onPress?.();
-    });
+    await fireEvent.press(screen.getByTestId('block-dialog-confirm'));
     expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(screen.getByTestId('block-user')).toBeTruthy();
   });

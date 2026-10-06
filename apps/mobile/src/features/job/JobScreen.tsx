@@ -1,15 +1,27 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Linking, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import type { LeagueTier } from '@haggler/shared';
 import { useJob } from '../../api/market';
 import { blockUser } from '../../api/reputation';
-import { Button, Card, ErrorState, LoadingState, Screen, Text } from '../../components';
+import {
+  Avatar,
+  Button,
+  Card,
+  Dialog,
+  ErrorState,
+  LeagueBadge,
+  LoadingState,
+  PriceTag,
+  Screen,
+  Text,
+} from '../../components';
 import { mapsUrl } from '../../components/TrackingMap';
 import { errorMessage } from '../../lib/errors';
 import { isWaitingForRanger, statusKeys } from '../../lib/job-status';
 import { formatRupees } from '../../lib/money';
-import { spacing } from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, spacing } from '../../theme/tokens';
 import { CustomerActions } from './CustomerActions';
 import { NegotiationPanel } from './NegotiationPanel';
 import { RangerActions } from './RangerActions';
@@ -26,6 +38,7 @@ export function JobScreen() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [blockError, setBlockError] = useState<string>();
   const [blocked, setBlocked] = useState(false);
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
 
   // Still looking for a Ranger: that is the request screen's job.
   useEffect(() => {
@@ -64,15 +77,6 @@ export function JobScreen() {
       setBlockBusy(false);
     }
   }
-  const confirmBlock = () =>
-    Alert.alert(
-      isRanger ? t('job.blockCustomerAsk') : t('job.blockRangerAsk'),
-      t('job.blockExplain'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('job.block'), style: 'destructive', onPress: () => void block() },
-      ],
-    );
 
   return (
     <Screen scroll>
@@ -93,17 +97,25 @@ export function JobScreen() {
 
       {other ? (
         <Card testID="party">
-          <View style={{ gap: spacing.xs }}>
-            <Text variant="label" color="textMuted">
-              {isRanger ? t('job.customer') : t('job.ranger')}
-            </Text>
-            <Text variant="heading">{other.firstName ?? '—'}</Text>
+          <View style={{ gap: spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <Avatar name={other.firstName} />
+              <View style={{ gap: spacing.xs }}>
+                <Text variant="label" color="textMuted">
+                  {isRanger ? t('job.customer') : t('job.ranger')}
+                </Text>
+                <Text variant="heading">{other.firstName ?? '—'}</Text>
+              </View>
+            </View>
             {!isRanger && job.worker ? (
               <>
-                <Text color="textMuted" testID="ranger-meta">
-                  {t('job.level', { tier: job.worker.kycTier })} · {job.worker.league} ·{' '}
-                  {t('job.jobsDone', { count: job.worker.jobsCompleted })}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text color="textMuted" testID="ranger-meta">
+                    {t('job.level', { tier: job.worker.kycTier })} ·{' '}
+                    {t('job.jobsDone', { count: job.worker.jobsCompleted })}
+                  </Text>
+                  <LeagueBadge tier={job.worker.league as LeagueTier} kind="worker" size="sm" />
+                </View>
                 <Text
                   testID="ranger-rating"
                   color="textMuted"
@@ -125,15 +137,20 @@ export function JobScreen() {
               </>
             ) : null}
             {!blocked ? (
-              <Text
+              <Pressable
                 testID="block-user"
-                color="danger"
                 accessibilityRole="button"
-                onPress={confirmBlock}
-                style={blockBusy ? { opacity: 0.5 } : undefined}
+                accessibilityLabel={isRanger ? t('job.blockCustomer') : t('job.blockRanger')}
+                onPress={() => setBlockDialogOpen(true)}
+                disabled={blockBusy}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.blockLink,
+                  (pressed || blockBusy) && { opacity: 0.5 },
+                ]}
               >
-                {isRanger ? t('job.blockCustomer') : t('job.blockRanger')}
-              </Text>
+                <Text color="danger">{isRanger ? t('job.blockCustomer') : t('job.blockRanger')}</Text>
+              </Pressable>
             ) : (
               <Text testID="blocked-note" color="textMuted">
                 {t('job.blocked')}
@@ -147,6 +164,21 @@ export function JobScreen() {
           </View>
         </Card>
       ) : null}
+
+      <Dialog
+        testID="block-dialog"
+        visible={blockDialogOpen}
+        title={isRanger ? t('job.blockCustomerAsk') : t('job.blockRangerAsk')}
+        message={t('job.blockExplain')}
+        confirmLabel={t('job.block')}
+        onConfirm={() => {
+          setBlockDialogOpen(false);
+          void block();
+        }}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setBlockDialogOpen(false)}
+        destructive
+      />
 
       {job.addressLine ? (
         <Card testID="address">
@@ -200,3 +232,7 @@ export function JobScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  blockLink: { minHeight: MIN_TOUCH_TARGET, justifyContent: 'center', alignSelf: 'flex-start' },
+});

@@ -15,10 +15,28 @@ import {
   useWallet,
   walletKey,
 } from '../../api/wallet';
-import { Button, Card, EmptyState, ErrorState, LoadingState, Screen, Text } from '../../components';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PriceTag,
+  Screen,
+  Skeleton,
+  StatusPill,
+  Text,
+} from '../../components';
+import type { StatusTone } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
 import { spacing } from '../../theme/tokens';
+
+const ORDER_STATUS_TONE: Record<string, StatusTone> = {
+  PAID: 'positive',
+  FAILED: 'negative',
+  CANCELLED: 'negative',
+};
 
 /** Buy tokens or subscribe to Plus -> a payment order -> pay -> the relevant query refetches.
  * One order in flight at a time (D-069: Plus + rush + boost all share this same checkout flow). */
@@ -81,7 +99,20 @@ export function WalletScreen() {
   if (wallet.isLoading || bundles.isLoading)
     return (
       <Screen>
-        <LoadingState />
+        <View testID="wallet-skeleton" style={{ gap: spacing.lg }}>
+          <Card>
+            <View style={{ gap: spacing.sm, alignItems: 'center' }}>
+              <Skeleton width="50%" height={16} />
+              <Skeleton width="40%" height={48} />
+            </View>
+          </Card>
+          <Card>
+            <Skeleton width="70%" height={20} />
+          </Card>
+          <Card>
+            <Skeleton width="70%" height={20} />
+          </Card>
+        </View>
       </Screen>
     );
   if (wallet.isError || !wallet.data)
@@ -98,7 +129,7 @@ export function WalletScreen() {
       <Card testID="wallet-balance">
         <View style={{ gap: spacing.xs, alignItems: 'center' }}>
           <Text color="textMuted">{t('wallet.balanceLabel')}</Text>
-          <Text variant="title" testID="balance-tokens" style={{ fontSize: 40 }}>
+          <Text variant="display" testID="balance-tokens">
             {t('wallet.tokenCount', { count: wallet.data.balanceTokens })}
           </Text>
           {wallet.data.heldTokens > 0 ? (
@@ -176,7 +207,7 @@ export function WalletScreen() {
                   gap: spacing.sm,
                 }}
               >
-                <View style={{ gap: 2 }}>
+                <View style={{ gap: spacing.xs }}>
                   <Text variant="heading">{p.name}</Text>
                   <Text color="textMuted">
                     {t('wallet.plusPrice', {
@@ -209,9 +240,9 @@ export function WalletScreen() {
                 gap: spacing.sm,
               }}
             >
-              <View style={{ gap: 2 }}>
+              <View style={{ gap: spacing.xs }}>
                 <Text variant="heading">{t('wallet.tokenCount', { count: b.tokens })}</Text>
-                <Text color="textMuted">{formatRupees(b.pricePaise)}</Text>
+                <PriceTag paise={b.pricePaise} variant="muted" />
               </View>
               <Button
                 testID={`buy-${b.slug}`}
@@ -226,25 +257,31 @@ export function WalletScreen() {
 
       <View style={{ gap: spacing.sm }}>
         <Text variant="heading">{t('wallet.history')}</Text>
-        {orders.isLoading ? <LoadingState /> : null}
+        {orders.isLoading ? (
+          <View testID="orders-skeleton" style={{ gap: spacing.sm }}>
+            {[0, 1].map((i) => (
+              <Card key={i}>
+                <View style={{ gap: spacing.xs }}>
+                  <Skeleton width="60%" height={16} />
+                  <Skeleton width="30%" height={14} />
+                </View>
+              </Card>
+            ))}
+          </View>
+        ) : null}
         {orders.data?.items.length === 0 ? <EmptyState message={t('wallet.noOrders')} /> : null}
         {orders.data?.items.map((o) => (
           <Card key={o.id} testID={`order-${o.id}`}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text>{o.itemName}</Text>
-              <Text
-                color={
-                  o.status === 'PAID'
-                    ? 'success'
-                    : o.status === 'FAILED' || o.status === 'CANCELLED'
-                      ? 'danger'
-                      : 'textMuted'
-                }
-              >
-                {t(`wallet.orderStatus.${o.status}`)}
-              </Text>
+            <View style={{ gap: spacing.xs }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text>{o.itemName}</Text>
+                <StatusPill
+                  label={t(`wallet.orderStatus.${o.status}`)}
+                  tone={ORDER_STATUS_TONE[o.status] ?? 'neutral'}
+                />
+              </View>
+              <PriceTag paise={o.amountPaise} variant="muted" />
             </View>
-            <Text color="textMuted">{formatRupees(o.amountPaise)}</Text>
           </Card>
         ))}
       </View>

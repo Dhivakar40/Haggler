@@ -87,6 +87,9 @@ export const fontFamily = {
  * known expo-google-fonts gotcha. The weight is encoded in which file is referenced, not a style
  * prop. */
 export const typography = {
+  // The one large-numeral moment: an arrival code read aloud, nothing else in the app needs
+  // type this big. A real variant, not an inline `{ fontSize: 48 }` on a one-off Text.
+  display: { fontSize: 48, lineHeight: 56, fontFamily: fontFamily.bold },
   title: { fontSize: 28, lineHeight: 34, fontFamily: fontFamily.bold },
   heading: { fontSize: 20, lineHeight: 26, fontFamily: fontFamily.semiBold },
   body: { fontSize: 16, lineHeight: 22, fontFamily: fontFamily.regular },

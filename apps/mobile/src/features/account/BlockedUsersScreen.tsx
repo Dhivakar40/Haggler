@@ -60,7 +60,7 @@ export function BlockedUsersScreen() {
               gap: spacing.sm,
             }}
           >
-            <View style={{ gap: 2, flex: 1 }}>
+            <View style={{ gap: spacing.xs, flex: 1 }}>
               <Text variant="heading">{b.firstName ?? '—'}</Text>
               {b.reason ? <Text color="textMuted">{b.reason}</Text> : null}
             </View>

@@ -36,6 +36,25 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Verified Rangers near you')).toBeTruthy();
   });
 
+  it('shows a skeleton while loading, gone once the categories arrive', async () => {
+    mockFetchOnce({ '/v1/categories': { body: categories } });
+    await renderWithProviders(<HomeScreen />);
+    expect(screen.getByTestId('home-skeleton')).toBeTruthy();
+    await screen.findByText('Electrician');
+    expect(screen.queryByTestId('home-skeleton')).toBeNull();
+  });
+
+  it('falls back to a safe icon when the server sends one Ionicons does not have', async () => {
+    mockFetchOnce({
+      '/v1/categories': {
+        body: [{ ...categories[0], icon: 'not-a-real-icon-name' }],
+      },
+    });
+    await renderWithProviders(<HomeScreen />);
+    expect(await screen.findByText('Electrician')).toBeTruthy();
+    expect(screen.getByTestId('category-electrician')).toBeTruthy();
+  });
+
   it('re-renders in Hindi when the language changes', async () => {
     mockFetchOnce({ '/v1/categories': { body: categories } });
     await renderWithProviders(<HomeScreen />);

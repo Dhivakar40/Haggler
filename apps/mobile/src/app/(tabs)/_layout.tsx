@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSession } from '../../auth/session';
 import { useTheme } from '../../theme/ThemeProvider';
+import { typography } from '../../theme/tokens';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
@@ -19,7 +20,10 @@ export default function TabsLayout() {
           borderTopColor: colors.border,
           minHeight: 60,
         },
-        tabBarLabelStyle: { fontSize: 13, fontWeight: '600' },
+        // Reuses the label typography variant's own values rather than a parallel fontSize/weight
+        // pair that could drift from it — React Navigation needs a plain style object here, not a
+        // Text element, so this is the one place typography is read as raw values, not via <Text>.
+        tabBarLabelStyle: { fontSize: typography.label.fontSize, fontFamily: typography.label.fontFamily },
       }}
     >
       <Tabs.Screen

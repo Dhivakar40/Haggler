@@ -17,6 +17,10 @@ interface ListRowProps {
   tone?: 'default' | 'danger';
   testID?: string;
   accessibilityLabel?: string;
+  /** "button" (default) for a navigating/acting row; "radio" for one option in a single-choice
+   * list (e.g. picking a saved address) — pair with `selected` so assistive tech announces state. */
+  accessibilityRole?: 'button' | 'radio';
+  selected?: boolean;
 }
 
 /** The one tappable-row pattern for the whole app: a settings menu item, an address, an
@@ -32,6 +36,8 @@ export function ListRow({
   tone = 'default',
   testID,
   accessibilityLabel,
+  accessibilityRole = 'button',
+  selected,
 }: ListRowProps) {
   const { colors } = useTheme();
   const fg = tone === 'danger' ? colors.danger : colors.text;
@@ -59,8 +65,9 @@ export function ListRow({
     <Pressable
       testID={testID}
       onPress={onPress}
-      accessibilityRole="button"
+      accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={selected !== undefined ? { selected } : undefined}
       style={({ pressed }) => [
         styles.base,
         { borderBottomColor: colors.border },
@@ -76,5 +83,5 @@ const styles = StyleSheet.create({
   base: { minHeight: MIN_TOUCH_TARGET, justifyContent: 'center', borderBottomWidth: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   icon: { width: 24, textAlign: 'center' },
-  text: { flex: 1, gap: 2 },
+  text: { flex: 1, gap: spacing.xs },
 });

@@ -15,7 +15,7 @@ import {
   usePresence,
 } from '../../api/market';
 import { useSession } from '../../auth/session';
-import { Button, Card, Chip, Countdown, EmptyState, Screen, Text } from '../../components';
+import { Button, Card, Chip, Countdown, EmptyState, Screen, Skeleton, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { isActive } from '../../lib/job-status';
 import { formatRupees } from '../../lib/money';
@@ -243,6 +243,19 @@ export function WorkScreen() {
                 selected={categoryFilter === OTHER_CATEGORY_SLUG}
                 onPress={() => setCategoryFilter(OTHER_CATEGORY_SLUG)}
               />
+            </View>
+          ) : null}
+          {incoming.isLoading ? (
+            <View testID="incoming-skeleton" style={{ gap: spacing.md }}>
+              {[0, 1].map((i) => (
+                <Card key={i} elevated>
+                  <View style={{ gap: spacing.sm }}>
+                    <Skeleton width="50%" height={20} />
+                    <Skeleton width="90%" height={16} />
+                    <Skeleton width="40%" height={14} />
+                  </View>
+                </Card>
+              ))}
             </View>
           ) : null}
           {incoming.data && incoming.data.length === 0 ? (
