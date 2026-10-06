@@ -8,7 +8,16 @@ import { type KycCheckDto, kycReferenceInputSchema, LEGAL_VERSION } from '@haggl
 import { ApiError } from '../../api/client';
 import { grantConsent, startKyc, submitKyc } from '../../api/endpoints';
 import { useSession } from '../../auth/session';
-import { Button, Card, ErrorState, LoadingState, Screen, Text, TextField } from '../../components';
+import {
+  Button,
+  Card,
+  ErrorState,
+  LoadingState,
+  Screen,
+  StatusPill,
+  Text,
+  TextField,
+} from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { normalizeIndianPhone } from '../../lib/phone';
 import { spacing } from '../../theme/tokens';
@@ -178,16 +187,17 @@ export function KycScreen() {
             <View style={{ gap: spacing.sm }}>
               <Text variant="heading">{t(`kyc.docs.${type}`)}</Text>
               {isSelfie ? <Text color="textMuted">{t('kyc.selfieNotice')}</Text> : null}
-              <Text
-                color={uploaded.has(type) ? 'success' : 'textMuted'}
+              <StatusPill
                 testID={`doc-${type}-status`}
-              >
-                {busy
-                  ? t('kyc.uploading')
-                  : uploaded.has(type)
-                    ? t('kyc.uploaded')
-                    : t('kyc.missing')}
-              </Text>
+                tone={busy ? 'neutral' : uploaded.has(type) ? 'positive' : 'neutral'}
+                label={
+                  busy
+                    ? t('kyc.uploading')
+                    : uploaded.has(type)
+                      ? t('kyc.uploaded')
+                      : t('kyc.missing')
+                }
+              />
               {editable ? (
                 <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
                   <Button

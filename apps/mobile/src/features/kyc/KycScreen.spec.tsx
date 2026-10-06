@@ -149,7 +149,7 @@ describe('tier 1: Aadhaar photos + live selfie', () => {
     await screen.findByTestId('doc-AADHAAR_FRONT');
     await fireEvent.press(screen.getByTestId('camera-AADHAAR_FRONT'));
     await waitFor(() =>
-      expect(screen.getByTestId('doc-AADHAAR_FRONT-status').props.children).toBe('Uploaded'),
+      expect(screen.getByTestId('doc-AADHAAR_FRONT-status')).toHaveTextContent('Uploaded'),
     );
     expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
       'POST /v1/kyc/start',
@@ -165,7 +165,7 @@ describe('tier 1: Aadhaar photos + live selfie', () => {
       contentType: 'image/jpeg',
       sizeBytes: 1234,
     });
-    expect(screen.getByTestId('doc-AADHAAR_BACK-status').props.children).toBe('Not added yet');
+    expect(screen.getByTestId('doc-AADHAAR_BACK-status')).toHaveTextContent('Not added yet');
   });
 
   it('a gallery photo works for Aadhaar too', async () => {
@@ -234,7 +234,7 @@ describe('tier 1: Aadhaar photos + live selfie', () => {
     expect(
       await screen.findByText('Upload failed. Check your connection and try again.'),
     ).toBeTruthy();
-    expect(screen.getByTestId('doc-SELFIE-status').props.children).toBe('Not added yet');
+    expect(screen.getByTestId('doc-SELFIE-status')).toHaveTextContent('Not added yet');
   });
 
   it('submit is refused until every document is uploaded; then it submits and goes back', async () => {
@@ -249,7 +249,7 @@ describe('tier 1: Aadhaar photos + live selfie', () => {
       await fireEvent.press(screen.getByTestId(`camera-${type}`));
       await waitFor(() => expect(uploaded.has(type)).toBe(true));
       await waitFor(() =>
-        expect(screen.getByTestId(`doc-${type}-status`).props.children).toBe('Uploaded'),
+        expect(screen.getByTestId(`doc-${type}-status`)).toHaveTextContent('Uploaded'),
       );
     }
     await fireEvent.press(screen.getByTestId('kyc-submit'));
@@ -312,7 +312,7 @@ describe('tier 2: address proof + reference', () => {
     await screen.findByTestId('doc-ADDRESS_PROOF');
     await fireEvent.press(screen.getByTestId('library-ADDRESS_PROOF'));
     await waitFor(() =>
-      expect(screen.getByTestId('doc-ADDRESS_PROOF-status').props.children).toBe('Uploaded'),
+      expect(screen.getByTestId('doc-ADDRESS_PROOF-status')).toHaveTextContent('Uploaded'),
     );
     return be;
   }

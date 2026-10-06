@@ -6,11 +6,28 @@ import { View } from 'react-native';
 import { type KycCheckDto, MAX_WORKER_CATEGORIES } from '@haggler/shared';
 import { useCategories } from '../../api/hooks';
 import { getKycStatus, getWorkerProfile, updateWorkerProfile } from '../../api/endpoints';
-import { Button, Card, Chip, ErrorState, LoadingState, Screen, Text } from '../../components';
+import {
+  Button,
+  Card,
+  Chip,
+  ErrorState,
+  LoadingState,
+  Screen,
+  StatusPill,
+  Text,
+  type StatusTone,
+} from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { spacing } from '../../theme/tokens';
 
 export const KYC_STATUS_KEY = ['kyc-status'];
+
+const TIER_STATUS_TONE: Record<string, StatusTone> = {
+  APPROVED: 'positive',
+  REJECTED: 'negative',
+  NEEDS_INFO: 'warning',
+  PENDING_REVIEW: 'warning',
+};
 
 function TierCard({
   tier,
@@ -41,18 +58,11 @@ function TierCard({
       <View style={{ gap: spacing.sm }}>
         <Text variant="heading">{t(`ranger.tier${tier}`)}</Text>
         <Text color="textMuted">{t(`ranger.tier${tier}Desc`)}</Text>
-        <Text
-          color={
-            verified
-              ? 'success'
-              : status === 'REJECTED' || status === 'NEEDS_INFO'
-                ? 'warning'
-                : 'text'
-          }
+        <StatusPill
           testID={`tier-${tier}-status`}
-        >
-          {t(`ranger.status.${status}`)}
-        </Text>
+          label={t(`ranger.status.${status}`)}
+          tone={TIER_STATUS_TONE[status] ?? 'neutral'}
+        />
         {!verified && check?.reviewerMessage ? (
           <View accessibilityRole="alert">
             <Text variant="label">{t('ranger.messageFromTeam')}</Text>
