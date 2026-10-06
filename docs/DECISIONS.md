@@ -915,3 +915,37 @@ instead of racing `setImmediate`. New e2e coverage in `test/reputation.e2e-spec.
 deferred path directly: a drained confirm() still reaches the right league and pays its bonus, a
 duplicated/retried deferred recompute never double-pays, and the startup sweep fixes a
 deliberately-stale row without re-paying an already-granted bonus.
+
+## Sub-phase 4: league-up celebration popup (Part F) and the "Other" category (Part G)
+
+**Part F: the league-up popup detects a promotion entirely client-side, with no new backend
+signal.** D-079's deferred league recompute means confirm() itself never knows, synchronously,
+whether it just caused a promotion — and per explicit instruction, no new `Job` column or queue was
+added to manufacture one. So the mobile app detects "my league just went up" itself: it stores the
+last-seen league per user id (`store/league-seen.ts`, AsyncStorage-persisted, not global — switching
+accounts on one device must never trigger a stranger's celebration) and compares it against a fresh
+fetch on login, on every app foreground, and once ~2s after a customer's confirm() (a single delayed
+refetch, not a polling loop, timed past where the deferred recompute has almost always already
+landed). A user's first-ever fetch sets the baseline silently — otherwise a fresh install or a
+post-logout sign-in would "celebrate" a league the person already had before the app ever asked.
+Skipping several leagues between checks queues only the highest one reached, shown once.
+
+Accepted trade-off, inherited from D-079's own: if the deferred recompute is unusually slow, or a
+process restart pushes the fix to the startup sweep, the ~2s post-confirm check can occasionally
+miss a promotion that lands later — it will still be caught on the next foreground or login, just
+without the moment feeling tied to that specific job. Given the deferred step normally completes
+within the same event loop tick, this is expected to be rare in practice.
+
+**Part G: "Other" is a real seeded category with its own rules, not a special-cased string
+scattered through the matching path.** A catch-all category needs a longer, mandatory description
+(no trade to infer scope from), no price-band display (seeded with a deliberately wide DEFAULT band
+so the existing outside-band confirmation never fires for a real quote — the existing price/offer
+machinery, unmodified, not a second pricing system), and matching that ignores a Ranger's registered
+`WorkerCategory` rows entirely (`presence.service.ts`'s `matchAnyCategory`, which drops the join
+rather than loosening it, since a `LEFT JOIN` with no category filter would return one row per
+registered category and duplicate the Ranger in the candidate list). Decline-without-penalty needed
+no new code: `MatchingService.decline()` already only flips `RequestBroadcast.response`, never
+touching `WorkerStats`, for every category.
+
+The category is checked by slug (`OTHER_CATEGORY_SLUG`, `packages/shared/src/constants.ts`), not a
+new schema flag — a single special case didn't earn a migration.
