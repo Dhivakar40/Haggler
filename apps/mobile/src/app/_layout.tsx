@@ -1,12 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AppState, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSession } from '../auth/session';
+import { LeagueUpModal } from '../components';
 import { TrackerHost } from '../features/work/TrackerHost';
+import { checkLeagueUp } from '../lib/league-up-check';
 import { defineBackgroundTask } from '../location/tracker';
 import { RealtimeProvider } from '../realtime/RealtimeProvider';
 import i18n, { deviceLanguage } from '../i18n';
@@ -14,6 +17,24 @@ import { configureNotificationHandler } from '../notifications/push';
 import { usePushRegistration } from '../notifications/usePushRegistration';
 import { useSettings } from '../store/settings';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
+
+/** Sub-phase 4, Part F: checks on login and on every foreground while signed in. Not a polling
+ * loop — each trigger is a real "the person might have new information" moment. */
+function useLeagueUpChecks(signedIn: boolean): void {
+  const wasSignedIn = useRef(false);
+  useEffect(() => {
+    if (signedIn && !wasSignedIn.current) void checkLeagueUp();
+    wasSignedIn.current = signedIn;
+  }, [signedIn]);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') void checkLeagueUp();
+    });
+    return () => sub.remove();
+  }, [signedIn]);
+}
 
 // The OS can wake this task with new positions even when no screen is showing, so it is
 // registered at startup rather than inside a component.
@@ -197,6 +218,7 @@ export default function RootLayout() {
   const status = useSession((s) => s.status);
   useLanguageSync();
   usePushRegistration(status === 'signedIn');
+  useLeagueUpChecks(status === 'signedIn');
 
   useEffect(() => {
     void useSession.getState().bootstrap();
@@ -219,6 +241,7 @@ export default function RootLayout() {
               <ThemedStatusBar />
               <TrackerHost />
               <Navigator />
+              <LeagueUpModal />
             </ThemeProvider>
           </RealtimeProvider>
         </QueryClientProvider>

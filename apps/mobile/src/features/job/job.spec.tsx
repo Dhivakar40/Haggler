@@ -15,6 +15,7 @@ import {
   routerMock,
   signInAs,
 } from '../../test-utils';
+import { checkLeagueUp } from '../../lib/league-up-check';
 import { uploadJobPhoto } from '../media/upload';
 import { JobScreen } from './JobScreen';
 
@@ -27,6 +28,7 @@ jest.mock('../media/upload', () => ({
   uploadJobPhoto: jest.fn(async () => undefined),
   uploadRequestMedia: jest.fn(),
 }));
+jest.mock('../../lib/league-up-check', () => ({ checkLeagueUp: jest.fn() }));
 jest.mock('@maplibre/maplibre-react-native', () => {
   throw new Error('native module missing (Expo Go)');
 });
@@ -450,6 +452,53 @@ describe('JobScreen: customer side of the visit', () => {
     expect(await screen.findByText('Completed')).toBeTruthy();
     expect(post(calls, `/v1/jobs/${JOB_ID}/confirm`)).toBeTruthy();
     expect(screen.queryByTestId('confirm-done')).toBeNull();
+  });
+
+  it('D-078/D-079 Part F: a successful confirm schedules a league check ~2s later, not immediately', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+    try {
+      serve(
+        asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'UPI' }),
+        (c) =>
+          c.path === `/v1/jobs/${JOB_ID}/confirm`
+            ? asCustomer({ status: 'CONFIRMED_BY_CUSTOMER', agreedPricePaise: 40000 })
+            : undefined,
+      );
+      await renderWithProviders(<JobScreen />);
+      await screen.findByTestId('confirm-done');
+      await act(async () => {
+        await fireEvent.press(screen.getByTestId('confirm-done'));
+      });
+      expect(checkLeagueUp).not.toHaveBeenCalled();
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      expect(checkLeagueUp).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('D-078/D-079 Part F: a failed confirm never schedules a league check', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+    try {
+      serve(
+        asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'UPI' }),
+        (c) =>
+          c.path === `/v1/jobs/${JOB_ID}/confirm` ? { status: 409, body: {} } : undefined,
+      );
+      await renderWithProviders(<JobScreen />);
+      await screen.findByTestId('confirm-done');
+      await act(async () => {
+        await fireEvent.press(screen.getByTestId('confirm-done'));
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(3000);
+      });
+      expect(checkLeagueUp).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('cancelling asks first; "Keep job" does nothing, "Cancel job" cancels', async () => {

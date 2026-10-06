@@ -3,6 +3,7 @@ export { Card } from './Card';
 export { Checkbox } from './Checkbox';
 export { Chip } from './Chip';
 export { Countdown } from './Countdown';
+export { LeagueUpModal } from './LeagueUpModal';
 export { Screen } from './Screen';
 export { EmptyState, ErrorState, LoadingState } from './StateView';
 export { Text } from './Text';

@@ -6,6 +6,7 @@ import { type JobDto, SOCKET_EVENTS, type TrackDto } from '@haggler/shared';
 import { cancelJob, confirmJob, createShareLink, getTrack, reportNoShow } from '../../api/market';
 import { Button, Card, Text, TrackingMap } from '../../components';
 import { errorMessage } from '../../lib/errors';
+import { checkLeagueUp } from '../../lib/league-up-check';
 import { formatRupees } from '../../lib/money';
 import { useRealtimeEvent } from '../../realtime/RealtimeProvider';
 import { spacing } from '../../theme/tokens';
@@ -133,7 +134,14 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
               testID="confirm-done"
               title={t('job.confirmDone')}
               loading={action.busy === 'confirm'}
-              onPress={() => void action.run('confirm', () => confirmJob(job.id))}
+              onPress={() =>
+                void action.run('confirm', () => confirmJob(job.id)).then((ok) => {
+                  // D-078/D-079: the league recompute runs deferred, not inside confirm() itself —
+                  // one refetch ~2s later, not a polling loop, is enough to catch a promotion the
+                  // moment it's actually landed (Sub-phase 4, Part F).
+                  if (ok) setTimeout(() => void checkLeagueUp(), 2000);
+                })
+              }
             />
           </View>
         </Card>
