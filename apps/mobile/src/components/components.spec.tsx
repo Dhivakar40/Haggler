@@ -2,7 +2,18 @@ import { fireEvent, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { renderWithProviders } from '../test-utils';
 import { MIN_TOUCH_TARGET } from '../theme/tokens';
-import { Avatar, Badge, Button, Chip, ErrorState, LeagueBadge, ListRow, PriceTag, StatusPill } from './index';
+import {
+  Avatar,
+  Badge,
+  Button,
+  Chip,
+  ErrorState,
+  LeagueBadge,
+  ListRow,
+  PriceTag,
+  Rating,
+  StatusPill,
+} from './index';
 
 describe('Button', () => {
   it('calls onPress and is announced as a button with its label', async () => {
@@ -133,6 +144,22 @@ describe('Avatar', () => {
   it('renders a real image when a photo URL is given', async () => {
     await renderWithProviders(<Avatar name="Ravi Kumar" photoUrl="https://x.test/p.jpg" testID="a" />);
     expect(screen.getByTestId('a').props.source).toEqual({ uri: 'https://x.test/p.jpg' });
+  });
+});
+
+describe('Rating', () => {
+  it('read-only mode: no tappable stars, announced as a single "X out of 5" label', async () => {
+    await renderWithProviders(<Rating value={4} testID="r" />);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByTestId('r').props.accessibilityLabel).toBe('4 out of 5 stars');
+  });
+
+  it('interactive mode: five tappable stars that report which was pressed', async () => {
+    const onChange = jest.fn();
+    await renderWithProviders(<Rating value={0} onChange={onChange} />);
+    expect(screen.getAllByRole('button')).toHaveLength(5);
+    await fireEvent.press(screen.getByTestId('star-3'));
+    expect(onChange).toHaveBeenCalledWith(3);
   });
 });
 

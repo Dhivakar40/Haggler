@@ -1,27 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { useWorkerReviews } from '../../api/reputation';
-import { Card, EmptyState, ErrorState, LoadingState, Screen, Text } from '../../components';
-import { useTheme } from '../../theme/ThemeProvider';
+import { Card, EmptyState, ErrorState, LoadingState, Rating, Screen, Text } from '../../components';
 import { spacing } from '../../theme/tokens';
-
-function Stars({ n }: { n: number }) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ flexDirection: 'row' }}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Ionicons
-          key={i}
-          name={i <= n ? 'star' : 'star-outline'}
-          size={16}
-          color={colors.warning}
-        />
-      ))}
-    </View>
-  );
-}
 
 /** A Ranger's public review history: only what customers said, newest first. */
 export function RangerReviewsScreen() {
@@ -49,7 +31,7 @@ export function RangerReviewsScreen() {
       {data.items.map((r) => (
         <Card key={r.id} testID={`review-${r.id}`}>
           <View style={{ gap: spacing.xs }}>
-            <Stars n={r.rating} />
+            <Rating value={r.rating} size={16} />
             <Text variant="label" color="textMuted">
               {r.customerFirstName ?? t('job.customer')}
             </Text>

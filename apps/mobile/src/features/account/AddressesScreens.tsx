@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { addressInputSchema } from '@haggler/shared';
 import {
   createAddress,
@@ -14,6 +14,7 @@ import {
 import {
   Button,
   Card,
+  Dialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -39,12 +40,7 @@ export function AddressesScreen() {
     mutationFn: deleteAddress,
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
-
-  const confirmRemove = (id: string) =>
-    Alert.alert(t('addresses.removeConfirm'), undefined, [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('addresses.remove'), style: 'destructive', onPress: () => remove.mutate(id) },
-    ]);
+  const [removeId, setRemoveId] = useState<string | null>(null);
 
   return (
     <Screen scroll>
@@ -82,12 +78,26 @@ export function AddressesScreen() {
               <Button
                 variant="danger"
                 title={t('addresses.remove')}
-                onPress={() => confirmRemove(a.id)}
+                onPress={() => setRemoveId(a.id)}
               />
             </View>
           </View>
         </Card>
       ))}
+
+      <Dialog
+        testID="remove-address-dialog"
+        visible={!!removeId}
+        title={t('addresses.removeConfirm')}
+        confirmLabel={t('addresses.remove')}
+        onConfirm={() => {
+          if (removeId) remove.mutate(removeId);
+          setRemoveId(null);
+        }}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setRemoveId(null)}
+        destructive
+      />
     </Screen>
   );
 }

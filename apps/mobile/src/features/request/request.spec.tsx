@@ -2,7 +2,6 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as ExpoAudio from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams } from 'expo-router';
-import { Alert } from 'react-native';
 import i18n from '../../i18n';
 import {
   iso,
@@ -13,6 +12,8 @@ import {
   routerMock,
   signInAs,
 } from '../../test-utils';
+import { ToastHost } from '../../components';
+import { useToastQueue } from '../../store/toast-queue';
 import { NewRequestScreen, scheduledIso } from './NewRequestScreen';
 import { RequestStatusScreen } from './RequestStatusScreen';
 
@@ -144,6 +145,7 @@ beforeEach(async () => {
   grantPicker();
   (useLocalSearchParams as jest.Mock).mockReturnValue({ category: 'electrician' });
   signInAs();
+  useToastQueue.setState({ queue: [] });
 });
 
 describe('scheduledIso', () => {
@@ -526,16 +528,72 @@ describe('RequestStatusScreen', () => {
     const { calls } = mockApi((c) =>
       c.path.endsWith('/cancel') ? { body: makeJob({ status: 'CANCELLED' }) } : { body: makeJob() },
     );
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     await renderWithProviders(<RequestStatusScreen />);
     await fireEvent.press(await screen.findByTestId('cancel-request'));
     expect(calls.some((c) => c.path.endsWith('/cancel'))).toBe(false); // not yet
-    const buttons = alert.mock.calls[0]?.[2] as { text: string; onPress?: () => void }[];
-    await act(async () => buttons.find((b) => b.text === 'Cancel request')?.onPress?.());
+    await fireEvent.press(screen.getByTestId('cancel-dialog-confirm'));
     await waitFor(() => expect(routerMock().replace).toHaveBeenCalledWith('/'));
     expect(calls.some((c) => c.method === 'POST' && c.path === `/v1/requests/${REQ}/cancel`)).toBe(
       true,
     );
+  });
+
+  it('rush: confirms the sandbox charge in a dialog, pays, and shows a success toast', async () => {
+    const { calls } = mockApi((c) => {
+      if (c.path.endsWith('/rush'))
+        return {
+          body: {
+            orderId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            purpose: 'RUSH_FEE',
+            provider: 'sandbox',
+            providerOrderId: 'sandbox-1',
+            amountPaise: 9900,
+            tokens: null,
+            keyId: null,
+          },
+        };
+      if (c.path.endsWith('/sandbox-pay')) return { body: { ok: true } };
+      return { body: makeJob() };
+    });
+    await renderWithProviders(
+      <>
+        <RequestStatusScreen />
+        <ToastHost />
+      </>,
+    );
+    await fireEvent.press(await screen.findByTestId('rush'));
+    // the dialog's summary, before paying
+    expect(
+      await screen.findByText('Pay ₹99 to broadcast at the widest radius right away.'),
+    ).toBeTruthy();
+    expect(calls.some((c) => c.path.endsWith('/sandbox-pay'))).toBe(false);
+    await fireEvent.press(screen.getByTestId('rush-dialog-confirm'));
+    await waitFor(() => expect(calls.some((c) => c.path.endsWith('/sandbox-pay'))).toBe(true));
+    expect(await screen.findByText('Rushed! Broadcasting at the widest radius.')).toBeTruthy();
+  });
+
+  it('rush: cancelling the dialog pays nothing', async () => {
+    const { calls } = mockApi((c) =>
+      c.path.endsWith('/rush')
+        ? {
+            body: {
+              orderId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+              purpose: 'RUSH_FEE',
+              provider: 'sandbox',
+              providerOrderId: 'sandbox-1',
+              amountPaise: 9900,
+              tokens: null,
+              keyId: null,
+            },
+          }
+        : { body: makeJob() },
+    );
+    await renderWithProviders(<RequestStatusScreen />);
+    await fireEvent.press(await screen.findByTestId('rush'));
+    await screen.findByTestId('rush-dialog-cancel');
+    await fireEvent.press(screen.getByTestId('rush-dialog-cancel'));
+    expect(screen.queryByTestId('rush-dialog')).toBeNull();
+    expect(calls.some((c) => c.path.endsWith('/sandbox-pay'))).toBe(false);
   });
 
   it('as soon as a Ranger accepts it opens the job', async () => {

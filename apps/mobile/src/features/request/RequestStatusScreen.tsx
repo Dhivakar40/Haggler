@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import {
   cancelRequest,
   rebroadcastRequest,
@@ -11,11 +11,21 @@ import {
   useRequest,
 } from '../../api/market';
 import { sandboxPay } from '../../api/wallet';
-import { Button, Card, Countdown, ErrorState, LoadingState, Screen, Text } from '../../components';
+import {
+  Button,
+  Card,
+  Countdown,
+  Dialog,
+  ErrorState,
+  LoadingState,
+  Screen,
+  Text,
+} from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { isTimedOut, isWaitingForRanger } from '../../lib/job-status';
 import { formatRupees } from '../../lib/money';
 import { useNow } from '../../lib/useNow';
+import { showToast } from '../../store/toast-queue';
 import { spacing } from '../../theme/tokens';
 
 const WAVE_KM = [2, 5, 10];
@@ -34,6 +44,8 @@ export function RequestStatusScreen() {
   const now = useNow(1000);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [rushOrder, setRushOrder] = useState<{ orderId: string; amountPaise: number } | null>(null);
 
   // A Ranger accepted (or the job moved past broadcasting): hand over to the job screen.
   useEffect(() => {
@@ -70,41 +82,13 @@ export function RequestStatusScreen() {
     }
   }
 
-  const confirmCancel = () =>
-    Alert.alert(t('requestStatus.cancel'), undefined, [
-      { text: t('job.keep'), style: 'cancel' },
-      {
-        text: t('requestStatus.cancel'),
-        style: 'destructive',
-        onPress: () =>
-          void run(async () => {
-            await cancelRequest(id as string);
-            router.replace('/');
-          }),
-      },
-    ]);
-
   async function rush() {
     setBusy(true);
     setError(undefined);
     try {
       const order = await rushRequest(id as string);
       if (order.provider === 'sandbox') {
-        Alert.alert(
-          t('monetization.rushButton'),
-          t('monetization.rushSummary', { amount: formatRupees(order.amountPaise) }),
-          [
-            { text: t('monetization.cancel'), style: 'cancel', onPress: () => setBusy(false) },
-            {
-              text: t('monetization.payNow'),
-              onPress: () =>
-                void run(async () => {
-                  await sandboxPay(order.orderId);
-                  Alert.alert(t('monetization.rushDone'));
-                }),
-            },
-          ],
-        );
+        setRushOrder({ orderId: order.orderId, amountPaise: order.amountPaise });
       } else {
         setError(t('wallet.razorpayPending'));
         setBusy(false);
@@ -208,8 +192,46 @@ export function RequestStatusScreen() {
         testID="cancel-request"
         variant={timedOut ? 'secondary' : 'danger'}
         title={t('requestStatus.cancel')}
-        onPress={confirmCancel}
+        onPress={() => setCancelDialogOpen(true)}
         disabled={busy}
+      />
+
+      <Dialog
+        testID="cancel-dialog"
+        visible={cancelDialogOpen}
+        title={t('requestStatus.cancel')}
+        confirmLabel={t('requestStatus.cancel')}
+        onConfirm={() => {
+          setCancelDialogOpen(false);
+          void run(async () => {
+            await cancelRequest(id as string);
+            router.replace('/');
+          });
+        }}
+        cancelLabel={t('job.keep')}
+        onCancel={() => setCancelDialogOpen(false)}
+        destructive
+      />
+      <Dialog
+        testID="rush-dialog"
+        visible={!!rushOrder}
+        title={t('monetization.rushButton')}
+        message={rushOrder ? t('monetization.rushSummary', { amount: formatRupees(rushOrder.amountPaise) }) : undefined}
+        confirmLabel={t('monetization.payNow')}
+        onConfirm={() => {
+          const o = rushOrder;
+          setRushOrder(null);
+          if (o)
+            void run(async () => {
+              await sandboxPay(o.orderId);
+              showToast(t('monetization.rushDone'), 'success');
+            });
+        }}
+        cancelLabel={t('monetization.cancel')}
+        onCancel={() => {
+          setRushOrder(null);
+          setBusy(false);
+        }}
       />
     </Screen>
   );

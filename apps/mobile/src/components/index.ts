@@ -10,6 +10,7 @@ export { LeagueBadge } from './LeagueBadge';
 export { LeagueUpModal } from './LeagueUpModal';
 export { ListRow } from './ListRow';
 export { PriceTag } from './PriceTag';
+export { Rating } from './Rating';
 export { Screen } from './Screen';
 export { Sheet } from './Sheet';
 export { Skeleton } from './Skeleton';

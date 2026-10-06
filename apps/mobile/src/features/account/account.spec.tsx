@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
-import { Alert, Share } from 'react-native';
+import { Share } from 'react-native';
 import i18n from '../../i18n';
 import { useSession } from '../../auth/session';
 import {
@@ -279,12 +279,10 @@ describe('addresses', () => {
       }
       return { body: list };
     });
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     await renderWithProviders(<AddressesScreen />);
     await fireEvent.press(await screen.findByText('Remove'));
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false); // not yet
-    const buttons = alert.mock.calls[0]?.[2] as { text: string; onPress?: () => void }[];
-    buttons.find((b) => b.text === 'Remove')?.onPress?.();
+    await fireEvent.press(screen.getByTestId('remove-address-dialog-confirm'));
     await waitFor(() =>
       expect(calls.some((c) => c.method === 'DELETE' && c.path.endsWith(addr().id))).toBe(true),
     );
