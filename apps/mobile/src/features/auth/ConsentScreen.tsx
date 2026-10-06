@@ -5,7 +5,7 @@ import { View } from 'react-native';
 import { LEGAL_VERSION } from '@haggler/shared';
 import { grantConsent } from '../../api/endpoints';
 import { useSession } from '../../auth/session';
-import { Button, Card, Chip, Screen, Text } from '../../components';
+import { Button, Card, Checkbox, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { spacing } from '../../theme/tokens';
 import { PlaceholderBanner } from '../legal/LegalScreens';
@@ -43,10 +43,10 @@ export function ConsentScreen() {
       <PlaceholderBanner />
       <Card>
         <View style={{ gap: spacing.md }}>
-          <Chip
+          <Checkbox
             testID="consent-terms"
             label={t('consent.terms')}
-            selected={terms}
+            checked={terms}
             onPress={() => setTerms(!terms)}
           />
           <Button
@@ -54,10 +54,10 @@ export function ConsentScreen() {
             title={t('consent.read')}
             onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'terms' } })}
           />
-          <Chip
+          <Checkbox
             testID="consent-privacy"
             label={t('consent.privacy')}
-            selected={privacy}
+            checked={privacy}
             onPress={() => setPrivacy(!privacy)}
           />
           <Button

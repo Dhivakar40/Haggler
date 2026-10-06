@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { Card, Screen, Text } from '../../components';
+import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
 
 export const LEGAL_DOCS = ['terms', 'privacy', 'refund', 'grievance'] as const;
@@ -10,8 +11,9 @@ export type LegalDoc = (typeof LEGAL_DOCS)[number];
 /** Clearly marked placeholder: the real text must come from counsel (docs/COMPLIANCE.md). */
 export function PlaceholderBanner() {
   const { t } = useTranslation();
+  const { colors } = useTheme();
   return (
-    <Card style={{ borderColor: '#B45309' }}>
+    <Card style={{ borderColor: colors.warning }}>
       <Text variant="label" color="warning" accessibilityRole="alert">
         {t('legal.banner')}
       </Text>
