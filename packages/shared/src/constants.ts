@@ -124,6 +124,16 @@ export const MAX_VOICE_SECONDS = 60;
 export const MAX_NEGOTIATION_ROUNDS = 3;
 export const MIN_ADULT_AGE = 18;
 
+/**
+ * The catch-all category (Sub-phase 4, Part G): no trade to infer scope from, so it needs its own
+ * rules — a longer mandatory description, no suggested price band (seeded with a deliberately wide
+ * DEFAULT band so the existing quote/negotiation machinery never flags a real offer as outside it),
+ * and matching that ignores WorkerCategory entirely (see presence.service.ts's `matchAnyCategory`).
+ * Checked by slug, not a schema flag — a single special case doesn't earn a new column.
+ */
+export const OTHER_CATEGORY_SLUG = 'other';
+export const OTHER_CATEGORY_MIN_DESCRIPTION = 20;
+
 /** Machine-readable error codes returned in the error envelope. */
 export const ERROR_CODES = {
   OTP_INVALID: 'OTP_INVALID',

@@ -47,6 +47,7 @@ describe('locales', () => {
       'painter',
       'pest_control',
       'gas_appliance_repair',
+      'other',
     ];
     for (const lang of SUPPORTED_LANGUAGES) {
       const flat = flatten(resources[lang].translation);

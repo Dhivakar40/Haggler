@@ -1,7 +1,10 @@
 import {
+  createRequestSchema,
   decodeCursor,
   encodeCursor,
   indianPhoneSchema,
+  OTHER_CATEGORY_MIN_DESCRIPTION,
+  OTHER_CATEGORY_SLUG,
   pincodeSchema,
   toPage,
   USER_FACING_ROLE_LABEL,
@@ -18,6 +21,39 @@ describe('schemas', () => {
     expect(pincodeSchema.safeParse('600001').success).toBe(true);
     expect(pincodeSchema.safeParse('060001').success).toBe(false);
     expect(pincodeSchema.safeParse('6000').success).toBe(false);
+  });
+});
+
+describe('createRequestSchema (Part G: "Other" needs a longer description)', () => {
+  const base = {
+    categorySlug: 'electrician',
+    description: 'short',
+    addressId: '11111111-1111-1111-1111-111111111111',
+    urgency: 'IMMEDIATE' as const,
+    genderPreference: 'ANY' as const,
+    mediaIds: [],
+  };
+
+  it('a normal category only needs the 5-char floor', () => {
+    expect(createRequestSchema.safeParse(base).success).toBe(true);
+  });
+
+  it(`"${OTHER_CATEGORY_SLUG}" rejects a description under ${OTHER_CATEGORY_MIN_DESCRIPTION} chars`, () => {
+    const r = createRequestSchema.safeParse({
+      ...base,
+      categorySlug: OTHER_CATEGORY_SLUG,
+      description: 'short',
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it(`"${OTHER_CATEGORY_SLUG}" accepts a description at or above ${OTHER_CATEGORY_MIN_DESCRIPTION} chars`, () => {
+    const r = createRequestSchema.safeParse({
+      ...base,
+      categorySlug: OTHER_CATEGORY_SLUG,
+      description: 'x'.repeat(OTHER_CATEGORY_MIN_DESCRIPTION),
+    });
+    expect(r.success).toBe(true);
   });
 });
 

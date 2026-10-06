@@ -5,6 +5,8 @@ import {
   LEAGUE_TIERS,
   MAX_REQUEST_PHOTOS,
   MAX_VOICE_SECONDS,
+  OTHER_CATEGORY_MIN_DESCRIPTION,
+  OTHER_CATEGORY_SLUG,
   PRICE_BAND_SCOPES,
 } from './constants';
 import { paiseSchema } from './schemas';
@@ -74,7 +76,16 @@ export const createRequestSchema = z
   .refine((r) => r.urgency === 'IMMEDIATE' || !!r.scheduledFor, {
     message: 'scheduledFor is required for a scheduled request',
     path: ['scheduledFor'],
-  });
+  })
+  // Part G: "Other" has no trade to infer scope from, so it needs more than the 5-char floor every
+  // real category accepts.
+  .refine(
+    (r) => r.categorySlug !== OTHER_CATEGORY_SLUG || r.description.length >= OTHER_CATEGORY_MIN_DESCRIPTION,
+    {
+      message: `Describe what you need in at least ${OTHER_CATEGORY_MIN_DESCRIPTION} characters.`,
+      path: ['description'],
+    },
+  );
 export type CreateRequestInput = z.infer<typeof createRequestSchema>;
 
 const bandSchema = z.object({

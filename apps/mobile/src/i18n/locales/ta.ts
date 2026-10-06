@@ -30,6 +30,7 @@ const ta: Translation = {
     painter: 'பெயிண்டர்',
     pest_control: 'பூச்சி கட்டுப்பாடு',
     gas_appliance_repair: 'கேஸ் சாதன பழுது',
+    other: 'மற்றவை',
   },
   settings: {
     title: 'அமைப்புகள்',

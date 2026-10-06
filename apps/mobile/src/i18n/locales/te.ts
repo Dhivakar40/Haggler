@@ -30,6 +30,7 @@ const te: Translation = {
     painter: 'పెయింటర్',
     pest_control: 'పెస్ట్ కంట్రోల్',
     gas_appliance_repair: 'గ్యాస్ ఉపకరణ మరమ్మతు',
+    other: 'ఇతరం',
   },
   settings: {
     title: 'సెట్టింగ్‌లు',

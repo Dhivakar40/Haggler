@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { ERROR_CODES, type IncomingRequest, SOCKET_EVENTS } from '@haggler/shared';
+import { ERROR_CODES, type IncomingRequest, OTHER_CATEGORY_SLUG, SOCKET_EVENTS } from '@haggler/shared';
 import { CodedException, notFound } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -112,7 +112,7 @@ export class MatchingService {
 
     const job = await this.prisma.job.findUniqueOrThrow({
       where: { id: jobId },
-      include: { request: true },
+      include: { request: { include: { category: true } } },
     });
     const cfg = await this.cfg.get();
     const wave = job.currentWave;
@@ -140,6 +140,9 @@ export class MatchingService {
       attempt: job.broadcastAttempt,
       customerId: job.customerId,
       categoryId: job.request.categoryId,
+      // Part G: "Other" has no trade to match a Ranger's WorkerCategory rows against — any
+      // verified, online, in-radius Ranger is a candidate, same eligibility bar as every category.
+      matchAnyCategory: job.request.category.slug === OTHER_CATEGORY_SLUG,
       longitude: p.lng,
       latitude: p.lat,
       radiusM,

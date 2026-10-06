@@ -30,6 +30,7 @@ const kn: Translation = {
     painter: 'ಪೇಂಟರ್',
     pest_control: 'ಕೀಟ ನಿಯಂತ್ರಣ',
     gas_appliance_repair: 'ಗ್ಯಾಸ್ ಉಪಕರಣ ದುರಸ್ತಿ',
+    other: 'ಇತರೆ',
   },
   settings: {
     title: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',

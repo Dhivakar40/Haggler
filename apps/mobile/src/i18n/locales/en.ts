@@ -28,6 +28,7 @@ const en = {
     painter: 'Painter',
     pest_control: 'Pest control',
     gas_appliance_repair: 'Gas appliance repair',
+    other: 'Other',
   },
   settings: {
     title: 'Settings',

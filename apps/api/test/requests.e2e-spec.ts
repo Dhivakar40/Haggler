@@ -284,6 +284,30 @@ describe('who gets invited (eligibility)', () => {
     await m.api.post(c, '/v1/worker/online', { latitude: 13, longitude: 80 }).expect(403);
     await m.api.get(c, '/v1/worker/incoming').expect(403);
   });
+
+  it('D-078 Part G: an "Other" request reaches Rangers regardless of their registered category', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    const plumber = await m.ranger({ at: northOf(300, area), categories: ['plumber'] });
+    const electrician = await m.ranger({ at: northOf(300, area), categories: ['electrician'] });
+    const { jobId } = await m.open(c, {
+      categorySlug: 'other',
+      description: 'Need help moving a wardrobe up two flights of stairs this weekend',
+    });
+    const invited = await m.prisma.requestBroadcast.findMany({ where: { jobId } });
+    expect(invited.map((i) => i.workerId).sort()).toEqual(
+      [plumber.userId, electrician.userId].sort(),
+    );
+  });
+
+  it('a normal-category request still excludes a Ranger with no matching WorkerCategory', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    const plumber = await m.ranger({ at: northOf(300, area), categories: ['plumber'] });
+    const { jobId } = await m.open(c, { categorySlug: 'electrician' });
+    const invited = await m.prisma.requestBroadcast.findMany({ where: { jobId } });
+    expect(invited.some((i) => i.workerId === plumber.userId)).toBe(false);
+  });
 });
 
 describe('waves: nearest first, then widen, then time out', () => {

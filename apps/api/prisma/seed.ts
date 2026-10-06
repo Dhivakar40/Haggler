@@ -24,6 +24,12 @@ const CATEGORIES = [
   { slug: 'painter', icon: 'color-palette', requiresLicense: false, band: [499, 899, 1999] },
   { slug: 'pest_control', icon: 'bug', requiresLicense: false, band: [399, 699, 1499] },
   { slug: 'gas_appliance_repair', icon: 'flame', requiresLicense: true, band: [299, 499, 999] },
+  // Part G (Sub-phase 4): the catch-all category. No real trade to price against, so its DEFAULT
+  // band is deliberately wide (₹0 to ₹10,00,000) rather than a realistic estimate — this is the
+  // existing price-band machinery's own "never trigger an outside-band confirmation" escape valve,
+  // not a second pricing system. The app never shows this band to the customer (see
+  // NewRequestScreen.tsx); Rangers quote a price directly instead.
+  { slug: 'other', icon: 'ellipsis-horizontal-circle', requiresLicense: false, band: [0, 500, 100000] },
 ] as const;
 
 const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [

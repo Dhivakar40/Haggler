@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { JobStatus } from '@prisma/client';
+import { Prisma, type JobStatus } from '@prisma/client';
 import { ACTIVE_JOB_STATES, type LocationUpdate, SOCKET_EVENTS } from '@haggler/shared';
 import { conflict, forbidden, unprocessable } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
@@ -113,8 +113,10 @@ export class PresenceService {
 
   /**
    * Eligible Rangers within `radiusM` of the request, excluding: offline/stale, tier < 2, wrong
-   * category, on an active job, blocked in either direction with the customer, the customer
-   * themself, and anyone already invited in this attempt. Returns raw candidates for ranking.
+   * category (unless `matchAnyCategory`, Part G — "Other" has no trade to match against, so any
+   * verified Ranger is a candidate), on an active job, blocked in either direction with the
+   * customer, the customer themself, and anyone already invited in this attempt. Returns raw
+   * candidates for ranking.
    */
   async findCandidates(input: {
     jobId: string;
@@ -124,9 +126,17 @@ export class PresenceService {
     longitude: number;
     latitude: number;
     radiusM: number;
+    matchAnyCategory?: boolean;
   }): Promise<RawCandidate[]> {
     const cfg = await this.cfg.get();
     const active = ACTIVE_JOB_STATES as readonly string[];
+    // Dropped entirely (not a LEFT JOIN) for matchAnyCategory: joining worker_categories without a
+    // category_id filter would return one row per category a Ranger has registered, duplicating
+    // them in the result. "Other" needs no category relation to a Ranger at all — kyc_tier >= 2 and
+    // online, same bar every category already enforces, is the full eligibility check.
+    const categoryJoin = input.matchAnyCategory
+      ? Prisma.empty
+      : Prisma.sql`JOIN worker_categories wc ON wc.worker_profile_id = wp.id AND wc.category_id = ${input.categoryId}::uuid`;
     const rows = await this.prisma.$queryRaw<
       {
         user_id: string;
@@ -148,7 +158,7 @@ export class PresenceService {
              (SELECT count(*) FROM request_broadcasts rb WHERE rb.worker_id = wp.user_id AND rb.sent_at > now() - interval '30 days' AND rb.response = 'ACCEPTED') AS accepted
       FROM worker_profiles wp
       JOIN users u ON u.id = wp.user_id AND u.status = 'ACTIVE'
-      JOIN worker_categories wc ON wc.worker_profile_id = wp.id AND wc.category_id = ${input.categoryId}::uuid
+      ${categoryJoin}
       LEFT JOIN worker_stats ws ON ws.worker_user_id = wp.user_id
       WHERE wp.is_online
         AND wp.kyc_tier >= 2

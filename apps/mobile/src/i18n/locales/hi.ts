@@ -24,6 +24,7 @@ const hi: Translation = {
     painter: 'पेंटर',
     pest_control: 'कीट नियंत्रण',
     gas_appliance_repair: 'गैस उपकरण मरम्मत',
+    other: 'अन्य',
   },
   settings: {
     title: 'सेटिंग्स',
