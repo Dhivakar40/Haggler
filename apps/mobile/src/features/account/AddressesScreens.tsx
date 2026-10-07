@@ -221,8 +221,12 @@ export function NewAddressScreen() {
         onChangeText={set('pincode')}
         keyboardType="number-pad"
         maxLength={6}
-        error={error}
       />
+      {error ? (
+        <Text color="danger" accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
       <Button
         testID="save-address"
         title={t('addresses.save')}

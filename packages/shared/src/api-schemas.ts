@@ -125,7 +125,7 @@ export type ConsentInput = z.infer<typeof consentInputSchema>;
 
 const addressFields = {
   label: z.string().trim().min(1).max(30),
-  line1: z.string().trim().min(3).max(120),
+  line1: z.string().trim().min(2).max(120),
   line2: z.string().trim().max(120).optional(),
   city: z.string().trim().min(2).max(60),
   state: z.string().trim().min(2).max(60),
