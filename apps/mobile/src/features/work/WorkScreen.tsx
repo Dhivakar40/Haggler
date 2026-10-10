@@ -10,15 +10,26 @@ import {
   declineRequest,
   goOffline,
   goOnline,
+  sendQuote,
   useIncoming,
   useJobs,
   usePresence,
 } from '../../api/market';
 import { useSession } from '../../auth/session';
-import { Button, Card, Chip, Countdown, EmptyState, Screen, Skeleton, Text } from '../../components';
+import {
+  Button,
+  Card,
+  Chip,
+  Countdown,
+  EmptyState,
+  Screen,
+  Skeleton,
+  Text,
+  TextField,
+} from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { isActive } from '../../lib/job-status';
-import { formatRupees } from '../../lib/money';
+import { formatRupees, parseRupeesToPaise } from '../../lib/money';
 import { ensureForegroundPermission } from '../../location/tracker';
 import { spacing } from '../../theme/tokens';
 
@@ -32,14 +43,27 @@ function IncomingCard({
   item,
   onAccept,
   onDecline,
+  onQuote,
   busy,
 }: {
   item: IncomingRequest;
   onAccept: () => void;
   onDecline: () => void;
+  onQuote: (amountPaise: number) => void;
   busy: boolean;
 }) {
   const { t } = useTranslation();
+  const isOther = item.categorySlug === OTHER_CATEGORY_SLUG;
+  const [quoteAmount, setQuoteAmount] = useState('');
+  const [quoteInvalid, setQuoteInvalid] = useState(false);
+
+  function submitQuote() {
+    const paise = parseRupeesToPaise(quoteAmount);
+    if (paise === null || paise < 100) return setQuoteInvalid(true);
+    setQuoteInvalid(false);
+    onQuote(paise);
+  }
+
   return (
     <Card testID={`incoming-${item.requestId}`} elevated>
       <View style={{ gap: spacing.sm }}>
@@ -48,13 +72,14 @@ function IncomingCard({
         <Text color="textMuted">
           {t('work.away', { distance: distanceLabel(item.distanceM) })} · {item.city} {item.pincode}
         </Text>
-        {item.categorySlug === OTHER_CATEGORY_SLUG ? (
+        {isOther ? (
           <Text testID={`band-${item.requestId}`} color="textMuted">
             {t('work.noPriceGuide')}
           </Text>
         ) : (
-          <Text testID={`band-${item.requestId}`} color="textMuted">
-            {formatRupees(item.band.minPaise)} – {formatRupees(item.band.maxPaise)}
+          <Text testID={`band-${item.requestId}`} variant="heading">
+            {formatRupees(item.listedPricePaise ?? 0)}
+            {item.isInspectionCharge ? ` · ${t('work.inspectionCharge')}` : ''}
           </Text>
         )}
         {item.photoCount > 0 || item.hasVoiceNote ? (
@@ -73,21 +98,51 @@ function IncomingCard({
           </Text>
         ) : null}
         <Countdown until={item.deadline} variant="label" testID={`countdown-${item.requestId}`} />
-        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          <Button
-            testID={`accept-${item.requestId}`}
-            title={t('work.accept')}
-            onPress={onAccept}
-            loading={busy}
-          />
-          <Button
-            testID={`decline-${item.requestId}`}
-            variant="secondary"
-            title={t('work.decline')}
-            onPress={onDecline}
-            disabled={busy}
-          />
-        </View>
+        {isOther ? (
+          <View style={{ gap: spacing.sm }}>
+            <TextField
+              testID={`quote-amount-${item.requestId}`}
+              label={t('work.yourQuote')}
+              value={quoteAmount}
+              onChangeText={setQuoteAmount}
+              keyboardType="decimal-pad"
+              maxLength={9}
+              prefix="₹"
+              error={quoteInvalid ? t('job.invalidAmount') : undefined}
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Button
+                testID={`send-quote-${item.requestId}`}
+                title={t('work.sendQuote')}
+                onPress={submitQuote}
+                loading={busy}
+              />
+              <Button
+                testID={`decline-${item.requestId}`}
+                variant="secondary"
+                title={t('work.decline')}
+                onPress={onDecline}
+                disabled={busy}
+              />
+            </View>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <Button
+              testID={`accept-${item.requestId}`}
+              title={t('work.accept')}
+              onPress={onAccept}
+              loading={busy}
+            />
+            <Button
+              testID={`decline-${item.requestId}`}
+              variant="secondary"
+              title={t('work.decline')}
+              onPress={onDecline}
+              disabled={busy}
+            />
+          </View>
+        )}
       </View>
     </Card>
   );
@@ -146,6 +201,19 @@ export function WorkScreen() {
     } catch (err) {
       setError(errorMessage(err, t)); // e.g. "That request was already taken."
       await qc.invalidateQueries({ queryKey: ['incoming'] });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function quote(item: IncomingRequest, amountPaise: number) {
+    setError(undefined);
+    setBusyId(item.requestId);
+    try {
+      await sendQuote(item.jobId, { amountPaise });
+      await qc.invalidateQueries({ queryKey: ['incoming'] });
+    } catch (err) {
+      setError(errorMessage(err, t));
     } finally {
       setBusyId(null);
     }
@@ -268,6 +336,7 @@ export function WorkScreen() {
               busy={busyId === item.requestId}
               onAccept={() => void accept(item)}
               onDecline={() => void decline(item)}
+              onQuote={(amountPaise) => void quote(item, amountPaise)}
             />
           ))}
         </View>

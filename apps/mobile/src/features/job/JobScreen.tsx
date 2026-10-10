@@ -23,7 +23,7 @@ import { isWaitingForRanger, statusKeys } from '../../lib/job-status';
 import { formatRupees } from '../../lib/money';
 import { MIN_TOUCH_TARGET, spacing } from '../../theme/tokens';
 import { CustomerActions } from './CustomerActions';
-import { NegotiationPanel } from './NegotiationPanel';
+import { QuotesPanel } from './QuotesPanel';
 import { RangerActions } from './RangerActions';
 import { ReviewPrompt } from './ReviewPrompt';
 import { useJobAction } from './useJobAction';
@@ -61,7 +61,6 @@ export function JobScreen() {
 
   const isRanger = job.viewerRole === 'WORKER';
   const other = isRanger ? job.customer : job.worker;
-  const negotiating = job.status === 'MATCHED' || job.status === 'NEGOTIATING';
   const showChat = !!job.threadId && !['CANCELLED'].includes(job.status);
 
   async function block() {
@@ -199,7 +198,9 @@ export function JobScreen() {
         </Card>
       ) : null}
 
-      {negotiating ? <NegotiationPanel job={job} action={action} /> : null}
+      {job.listedPricePaise === null && job.status === 'BROADCASTING' ? (
+        <QuotesPanel job={job} action={action} />
+      ) : null}
 
       {isRanger ? (
         <RangerActions job={job} action={action} />

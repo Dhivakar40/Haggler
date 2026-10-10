@@ -1066,5 +1066,50 @@ but `OffersService` itself (and its `sweep()` housekeeping, still wired into the
 in place rather than deleted — it's unreachable dead code for any job created after this migration,
 kept only so a pre-D-080 job still mid-negotiation can still be read and finished out; deleting it
 outright would have meant also deciding what happens to any such job already in flight, which this
-pass didn't need to answer. Mobile (`NegotiationPanel.tsx`, `WalletScreen`'s token model, `A5`'s
-`JobAddOn` propose/approve UI, and the A4 quote UI for both sides) is still to come.
+pass didn't need to answer.
+
+## D-080: Sub-phase A3/A4 mobile — negotiation UI removed, the quote UI built
+
+**`NegotiationPanel.tsx` is deleted outright, not just unwired** — unlike the API side, there's no
+"pre-D-080 job still mid-negotiation" concern on a client: the app always talks to the current
+API, so a component that only ever called removed endpoints had nothing left to keep it for.
+`lib/job-status.ts`'s `pendingOffer`/`isOutsideBand` helpers went with it (dead once their only
+caller was gone).
+
+**One new component, `QuotesPanel.tsx`, used from two different screens** because A4's quote
+review happens in two different places depending on who's looking and when: the customer reviews
+quotes while the job is still BROADCASTING, which is `RequestStatusScreen`'s screen (the customer
+hasn't been handed to `JobScreen` yet — `isWaitingForRanger` is still true); a Ranger who already
+sent a quote can land on `JobScreen` instead (per the `loadForParty` widening, D-080's API entry
+above) to see their own quote's status while waiting. Rather than duplicate the component,
+`QuotesPanel` takes a `{busy, run}` action interface structurally compatible with both
+`useJobAction`'s return shape and a small adapter built from `RequestStatusScreen`'s own
+busy/error state — found this required a genuine new `useState` for `RequestStatusScreen`
+(`quoteBusy`), which needed placing carefully: declared after its `isLoading`/`isError` early
+returns the first time, it violated the rules of hooks (a hook call that runs on some renders and
+not others) and crashed every single `RequestStatusScreen` render in the whole suite — a strict
+"declare all hooks before any early return" lesson re-learned the hard way, caught by the test
+suite rather than inspection.
+
+**`WorkScreen`'s incoming-request card branches on category**, same shape as the price display
+change: a fixed-price category shows the listed price (no more min/max band) with a plain Accept/
+Decline pair; `other` shows an amount field and "Send quote" instead of Accept, calling the new
+`POST /v1/jobs/:id/quotes`. `NewRequestScreen` shows the same fixed price (and an
+"unconfirmed — not surveyed yet" warning when `needsSurvey` is true) instead of the old price-band
+card; `other` still shows no price card, just the "Rangers will send you quotes" note (reworded —
+"and you can negotiate" stopped being true).
+
+**Found by the test run, not by inspection, twice more:** `ServiceCategoryDto` gaining a required
+`inspectionChargePaise` field broke 9 hardcoded category fixtures across 6 unrelated spec files
+(Browse/Post Campus and Contracts screens, RangerScreen, screens.spec.tsx) — each category object
+a test had copy-pasted silently failed Zod parsing, left the categories list empty, and the
+failure surfaced as "can't find this category's filter chip," several steps removed from the real
+cause. And `toHaveTextContent` defaults to an exact match, not substring, so asserting a quote
+amount against a panel that also renders a status label and a worker's name needed `{ exact:
+false }`. Fixed all three class of breakage before considering Sub-phase A done; final state:
+mobile suite 499/499, design-token lint 0 violations, typecheck clean.
+
+Not yet done: A5's `JobAddOn` propose/approve UI (the inspection-charge-category mid-job add-on
+flow) has no mobile screen yet — API only. Sub-phase A's gate (API unit + mobile suite + live
+smoke test, per the master prompt) is satisfied for everything built so far except the live smoke
+test, which needs a deployed backend this sandbox can't reach to exercise end-to-end.

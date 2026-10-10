@@ -1,11 +1,9 @@
 import {
   formatCountdown,
   isActive,
-  isOutsideBand,
   isTerminal,
   isTimedOut,
   isWaitingForRanger,
-  pendingOffer,
   secondsUntil,
   statusKeys,
 } from './job-status';
@@ -39,23 +37,6 @@ describe('job status helpers', () => {
     expect(formatCountdown(0)).toBe('0:00');
     expect(formatCountdown(65)).toBe('1:05');
     expect(formatCountdown(600)).toBe('10:00');
-  });
-
-  it('finds the live pending offer, ignoring stale and answered ones', () => {
-    const o = (status: string, ms: number) => ({ id: status + ms, status, expiresAt: iso(ms) });
-    expect(
-      pendingOffer({ offers: [o('COUNTERED', 1000), o('PENDING', 1000)] } as never, NOW)?.id,
-    ).toBe('PENDING1000');
-    expect(pendingOffer({ offers: [o('PENDING', -1000)] } as never, NOW)).toBeUndefined();
-    expect(pendingOffer({ offers: [] } as never, NOW)).toBeUndefined();
-  });
-
-  it('band check is inclusive', () => {
-    const band = { minPaise: 19900, maxPaise: 69900 };
-    expect(isOutsideBand(19900, band)).toBe(false);
-    expect(isOutsideBand(69900, band)).toBe(false);
-    expect(isOutsideBand(19899, band)).toBe(true);
-    expect(isOutsideBand(69901, band)).toBe(true);
   });
 
   it('status keys prefer the Ranger wording for Rangers, then fall back to the general one', () => {

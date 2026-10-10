@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import i18n from '../../i18n';
 import {
   iso,
+  makeJob,
   mockApi,
   type MockCall,
   renderWithProviders,
@@ -43,6 +44,8 @@ const incoming = (over = {}) => ({
   urgency: 'IMMEDIATE',
   scheduledFor: null,
   band: { scope: 'DEFAULT', minPaise: 19900, medianPaise: 34900, maxPaise: 69900 },
+  listedPricePaise: 34900,
+  isInspectionCharge: false,
   deadline: iso(150_000),
   photoCount: 2,
   hasVoiceNote: true,
@@ -83,6 +86,9 @@ function backend(
       state.incoming = [];
       return { body: { declined: true } };
     }
+    const quoteMatch = /\/v1\/jobs\/([^/]+)\/quotes$/.exec(c.path);
+    if (quoteMatch && c.method === 'POST')
+      return { status: 201, body: makeJob({ id: quoteMatch[1], status: 'BROADCASTING' }) };
   });
   return { ...api, state };
 }
@@ -171,7 +177,7 @@ describe('WorkScreen', () => {
     expect(screen.queryByTestId(`incoming-${REQ1}`)).toBeNull();
   });
 
-  it('shows an incoming request: category, distance, area (no street), price range, media and a countdown', async () => {
+  it('shows an incoming request: category, distance, area (no street), the fixed price, media and a countdown', async () => {
     backend({ online: true, incoming: [incoming()] });
     await renderWithProviders(<WorkScreen />);
     const card = await screen.findByTestId(`incoming-${REQ1}`);
@@ -179,12 +185,12 @@ describe('WorkScreen', () => {
     expect(screen.getByText('Electrician')).toBeTruthy();
     expect(screen.getByText('Ceiling fan sparks when switched on')).toBeTruthy();
     expect(screen.getByText('840 m away · Chennai 600042')).toBeTruthy();
-    expect(screen.getByTestId(`band-${REQ1}`)).toHaveTextContent('₹199 – ₹699');
+    expect(screen.getByTestId(`band-${REQ1}`)).toHaveTextContent('₹349');
     expect(screen.getByText('2 photos · Voice note')).toBeTruthy();
     expect(screen.getByTestId(`countdown-${REQ1}`).props.children).toMatch(/^2:[0-9]{2}$/);
   });
 
-  it('D-078 Part G: an "Other" request shows no price band, and can be filtered to on its own', async () => {
+  it('D-080 (A4): an "Other" request shows no fixed price, has a quote form, and can be filtered to on its own', async () => {
     const REQ2 = '22222222-aaaa-4aaa-8aaa-222222222222';
     backend({
       online: true,
@@ -195,6 +201,7 @@ describe('WorkScreen', () => {
           jobId: 'bbbbbbbb-aaaa-4aaa-8aaa-bbbbbbbbbbbb',
           categorySlug: 'other',
           description: 'Need 2 people to move a sofa up to the 3rd floor',
+          listedPricePaise: null,
         }),
       ],
     });
@@ -204,8 +211,10 @@ describe('WorkScreen', () => {
     expect(screen.getByTestId(`band-${REQ2}`)).toHaveTextContent(
       'No price guide — quote directly',
     );
-    // The electrician request still shows its real band, unaffected.
-    expect(screen.getByTestId(`band-${REQ1}`)).toHaveTextContent('₹199 – ₹699');
+    expect(screen.getByTestId(`quote-amount-${REQ2}`)).toBeTruthy();
+    expect(screen.queryByTestId(`accept-${REQ2}`)).toBeNull(); // no direct accept for "other"
+    // The electrician request still shows its real fixed price, unaffected.
+    expect(screen.getByTestId(`band-${REQ1}`)).toHaveTextContent('₹349');
 
     await fireEvent.press(screen.getByTestId('filter-other'));
     expect(screen.queryByTestId(`incoming-${REQ1}`)).toBeNull();
@@ -214,6 +223,34 @@ describe('WorkScreen', () => {
     await fireEvent.press(screen.getByTestId('filter-all'));
     expect(screen.getByTestId(`incoming-${REQ1}`)).toBeTruthy();
     expect(screen.getByTestId(`incoming-${REQ2}`)).toBeTruthy();
+  });
+
+  it('D-080 (A4): sends a quote for an "other" request instead of accepting directly', async () => {
+    const REQ2 = '22222222-aaaa-4aaa-8aaa-222222222222';
+    const JOB2 = 'bbbbbbbb-aaaa-4aaa-8aaa-bbbbbbbbbbbb';
+    const { calls } = backend({
+      online: true,
+      incoming: [
+        incoming({
+          requestId: REQ2,
+          jobId: JOB2,
+          categorySlug: 'other',
+          description: 'Need 2 people to move a sofa up to the 3rd floor',
+          listedPricePaise: null,
+        }),
+      ],
+    });
+    await renderWithProviders(<WorkScreen />);
+    await fireEvent.changeText(await screen.findByTestId(`quote-amount-${REQ2}`), '500');
+    await fireEvent.press(screen.getByTestId(`send-quote-${REQ2}`));
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.method === 'POST' && c.path === `/v1/jobs/${JOB2}/quotes`),
+      ).toBe(true),
+    );
+    expect(calls.find((c) => c.path === `/v1/jobs/${JOB2}/quotes`)?.body).toEqual({
+      amountPaise: 50000,
+    });
   });
 
   it('formats long distances in km', async () => {

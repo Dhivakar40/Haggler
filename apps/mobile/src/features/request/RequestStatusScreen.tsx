@@ -27,6 +27,7 @@ import { formatRupees } from '../../lib/money';
 import { useNow } from '../../lib/useNow';
 import { showToast } from '../../store/toast-queue';
 import { spacing } from '../../theme/tokens';
+import { QuotesPanel } from '../job/QuotesPanel';
 
 const WAVE_KM = [2, 5, 10];
 
@@ -46,6 +47,9 @@ export function RequestStatusScreen() {
   const [busy, setBusy] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [rushOrder, setRushOrder] = useState<{ orderId: string; amountPaise: number } | null>(null);
+  // D-080 (A4): must be declared before the isLoading/isError early returns below — a useState
+  // call placed after them would run on some renders and not others, violating the rules of hooks.
+  const [quoteBusy, setQuoteBusy] = useState<string | null>(null);
 
   // A Ranger accepted (or the job moved past broadcasting): hand over to the job screen.
   useEffect(() => {
@@ -81,6 +85,21 @@ export function RequestStatusScreen() {
       setBusy(false);
     }
   }
+
+  /** D-080 (A4): QuotesPanel's Action shape, built on the same busy/error state as everything
+   * else on this screen — accepting a quote is mutually exclusive with rush/cancel anyway. */
+  const quoteAction = {
+    busy: quoteBusy,
+    run: async (name: string, fn: () => Promise<unknown>) => {
+      setQuoteBusy(name);
+      try {
+        await run(fn);
+        return true;
+      } finally {
+        setQuoteBusy(null);
+      }
+    },
+  };
 
   async function rush() {
     setBusy(true);
@@ -165,6 +184,8 @@ export function RequestStatusScreen() {
           ) : null}
         </View>
       </Card>
+
+      {job.listedPricePaise === null ? <QuotesPanel job={job} action={quoteAction} /> : null}
 
       {error ? (
         <Text color="danger" accessibilityRole="alert">

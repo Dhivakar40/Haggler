@@ -16,6 +16,7 @@ const cats = ['electrician', 'plumber', 'cleaner', 'carpenter', 'painter', 'ac_r
     nameKey: `categories.${slug}`,
     icon: 'flash',
     requiresLicense: false,
+    inspectionChargePaise: null,
   }),
 );
 const check = (tier: number, status: string, reviewerMessage: string | null = null) => ({

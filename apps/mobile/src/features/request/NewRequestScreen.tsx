@@ -11,7 +11,7 @@ import {
   OTHER_CATEGORY_SLUG,
 } from '@haggler/shared';
 import { listAddresses } from '../../api/endpoints';
-import { createRequest, getPriceBand } from '../../api/market';
+import { createRequest, getPriceListEntry } from '../../api/market';
 import { Button, Card, Chip, ListRow, LoadingState, Screen, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
@@ -63,12 +63,12 @@ export function NewRequestScreen() {
     (a) => a.id === (addressId ?? list.find((x) => x.isDefault)?.id ?? list[0]?.id),
   );
 
-  const band = useQuery({
-    queryKey: ['band', category, selected?.pincode, selected?.city],
-    queryFn: () => getPriceBand(category, selected!.pincode, selected!.city),
-    // "Other" has no trade to price against — its DEFAULT band exists only so request creation
-    // doesn't fail (D-078 Part G), never shown to the customer, so there's no reason to fetch it.
-    enabled: !!selected && !isOther,
+  // D-080: the fixed listed price, replacing the negotiable price band. "Other" has none — it
+  // keeps its own per-Ranger quote flow (A4), never shown a price here.
+  const priceList = useQuery({
+    queryKey: ['price-list', category],
+    queryFn: () => getPriceListEntry(category),
+    enabled: !isOther,
   });
 
   async function addPhoto(source: 'camera' | 'library') {
@@ -290,22 +290,16 @@ export function NewRequestScreen() {
         <Text testID="other-quote-note" variant="caption" color="textMuted">
           {t('request.otherQuoteNote')}
         </Text>
-      ) : band.data ? (
+      ) : priceList.data ? (
         // The one elevated surface on this screen: this is the price the customer is about to
         // commit to. Everything else here is flat by the elevation policy in theme/tokens.ts.
         <Card testID="price-band" elevated>
           <View style={{ gap: spacing.xs }}>
             <Text variant="heading">{t('request.priceTitle')}</Text>
-            <Text testID="price-range">
-              {t('request.priceRange', {
-                min: formatRupees(band.data.minPaise),
-                max: formatRupees(band.data.maxPaise),
-              })}
+            <Text testID="price-range" variant="display">
+              {formatRupees(priceList.data.pricePaise)}
             </Text>
-            <Text color="textMuted">
-              {t('request.priceTypical', { median: formatRupees(band.data.medianPaise) })}
-            </Text>
-            {band.data.isSeededDefault ? (
+            {priceList.data.needsSurvey ? (
               <Text variant="caption" color="warning">
                 {t('request.priceEstimate')}
               </Text>

@@ -9,7 +9,6 @@ import {
   makeJob,
   type MockCall,
   mockApi,
-  offer,
   rangerParty,
   renderWithProviders,
   routerMock,
@@ -43,7 +42,6 @@ jest.mock('../../realtime/RealtimeProvider', () => ({
 
 const picker = ImagePicker as unknown as Record<string, jest.Mock>;
 const JOB_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const OFFER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const THREAD = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 /**
@@ -151,7 +149,7 @@ describe('JobScreen: shared behaviour', () => {
   it('does not offer chat when there is no thread yet', async () => {
     serve(asCustomer({ status: 'MATCHED', threadId: null }));
     await renderWithProviders(<JobScreen />);
-    await screen.findByTestId('negotiation');
+    await screen.findByTestId('status-title');
     expect(screen.queryByTestId('open-chat')).toBeNull();
   });
 
@@ -163,177 +161,41 @@ describe('JobScreen: shared behaviour', () => {
   });
 });
 
-describe('JobScreen: negotiation', () => {
-  it('shows the Ranger, the usual range, the round, and the agreed price once there is one', async () => {
-    serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }));
+describe('JobScreen: D-080 fixed price (no negotiation)', () => {
+  it('shows the agreed price as soon as the job is AGREED, with no negotiation UI at all', async () => {
+    serve(asCustomer({ status: 'AGREED', agreedPricePaise: 34900 }));
     await renderWithProviders(<JobScreen />);
-    expect(await screen.findByTestId('ranger-meta')).toHaveTextContent('Level 2 · 12 jobs done');
-    expect(screen.getByTestId('band')).toHaveTextContent('Usual range: ₹199 to ₹699');
-    expect(screen.getByTestId('round')).toHaveTextContent('Round 1 of 3');
-    expect(screen.getByTestId('their-offer')).toHaveTextContent('₹500 offered to you');
-    expect(screen.queryByTestId('agreed-price')).toBeNull();
+    expect(await screen.findByTestId('agreed-price')).toHaveTextContent('Agreed price: ₹349');
+    expect(screen.queryByTestId('quotes-panel')).toBeNull();
   });
 
-  it('accepting an offer inside the band sends confirmOutsideBand=false and shows the agreed price', async () => {
-    const { calls } = serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }), (c) =>
-      c.path === `/v1/offers/${OFFER_ID}/accept`
-        ? asCustomer({
-            status: 'AGREED',
-            agreedPricePaise: 50000,
-            offers: [offer({ status: 'ACCEPTED' })],
-          })
-        : undefined,
+  it("a Ranger who already quoted on an 'other' job sees their own quote's status while waiting", async () => {
+    // The signed-in test session's own id (test-utils.tsx's makeMe default) — QuotesPanel finds
+    // "my quote" by matching the signed-in user's id, not the job's (still-null) worker field.
+    const myId = '11111111-1111-4111-8111-111111111111';
+    serve(
+      asRanger({
+        status: 'BROADCASTING',
+        categorySlug: 'other',
+        listedPricePaise: null,
+        worker: null,
+        quotes: [
+          {
+            id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            workerId: myId,
+            workerFirstName: 'Ravi',
+            amountPaise: 50000,
+            status: 'PENDING',
+            createdAt: iso(-1000),
+          },
+        ],
+      }),
     );
     await renderWithProviders(<JobScreen />);
-    await fireEvent.press(await screen.findByTestId('accept-offer'));
-    expect(await screen.findByTestId('agreed-price')).toHaveTextContent('Agreed price: ₹500');
-    expect(post(calls, `/v1/offers/${OFFER_ID}/accept`)?.body).toEqual({
-      confirmOutsideBand: false,
+    expect(await screen.findByTestId('quotes-panel')).toHaveTextContent('₹500', { exact: false });
+    expect(screen.getByTestId('quotes-panel')).toHaveTextContent('Waiting for the customer', {
+      exact: false,
     });
-    expect(screen.queryByText('Outside the usual range')).toBeNull();
-    expect(screen.getByTestId('wait-ranger')).toBeTruthy();
-  });
-
-  it('accepting an offer OUTSIDE the band asks first; "Yes, continue" sends it with confirmation, cancel sends nothing', async () => {
-    const pricey = offer({ amountPaise: 120000, outsideBand: true });
-    const { calls } = serve(asCustomer({ status: 'NEGOTIATING', offers: [pricey] }), (c) =>
-      c.path === `/v1/offers/${OFFER_ID}/accept`
-        ? asCustomer({ status: 'AGREED', agreedPricePaise: 120000 })
-        : undefined,
-    );
-    await renderWithProviders(<JobScreen />);
-    await fireEvent.press(await screen.findByTestId('accept-offer'));
-    expect(screen.getByText('Outside the usual range')).toBeTruthy();
-    expect(screen.getByText('₹1,200 is outside ₹199 to ₹699. Continue anyway?')).toBeTruthy();
-    // cancelling the dialog closes it without acting: nothing is sent yet
-    expect(post(calls, `/v1/offers/${OFFER_ID}/accept`)).toBeUndefined();
-    await fireEvent.press(screen.getByTestId('outside-band-dialog-confirm'));
-    await waitFor(() =>
-      expect(post(calls, `/v1/offers/${OFFER_ID}/accept`)?.body).toEqual({
-        confirmOutsideBand: true,
-      }),
-    );
-  });
-
-  it('countering sends the amount in paise and clears the field', async () => {
-    const { calls } = serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }), (c) =>
-      c.path === `/v1/offers/${OFFER_ID}/counter`
-        ? asCustomer({
-            status: 'NEGOTIATING',
-            offers: [
-              offer({ status: 'COUNTERED' }),
-              offer({
-                id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-                round: 2,
-                fromRole: 'CUSTOMER',
-                amountPaise: 45000,
-              }),
-            ],
-          })
-        : undefined,
-    );
-    await renderWithProviders(<JobScreen />);
-    await fireEvent.changeText(await screen.findByTestId('offer-amount'), '450');
-    await fireEvent.press(screen.getByTestId('counter-offer'));
-    await waitFor(() =>
-      expect(post(calls, `/v1/offers/${OFFER_ID}/counter`)?.body).toEqual({
-        amountPaise: 45000,
-        confirmOutsideBand: false,
-      }),
-    );
-    expect(await screen.findByTestId('my-offer')).toHaveTextContent(
-      'You offered ₹450. Waiting for an answer…',
-    );
-    expect(screen.queryByTestId('their-offer')).toBeNull();
-  });
-
-  it('an empty or nonsense amount is refused on the phone without a request', async () => {
-    const { calls } = serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }));
-    await renderWithProviders(<JobScreen />);
-    await fireEvent.press(await screen.findByTestId('counter-offer'));
-    expect(await screen.findByText('Enter a valid amount in rupees.')).toBeTruthy();
-    await fireEvent.changeText(screen.getByTestId('offer-amount'), '0.5');
-    await fireEvent.press(screen.getByTestId('counter-offer'));
-    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
-  });
-
-  it('a counter outside the band asks first', async () => {
-    const { calls } = serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }));
-    await renderWithProviders(<JobScreen />);
-    await fireEvent.changeText(await screen.findByTestId('offer-amount'), '50');
-    await fireEvent.press(screen.getByTestId('counter-offer'));
-    expect(screen.getByText('₹50 is outside ₹199 to ₹699. Continue anyway?')).toBeTruthy();
-    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
-  });
-
-  it("rejecting sends the reject and shows the server's answer", async () => {
-    const { calls } = serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }), (c) =>
-      c.path === `/v1/offers/${OFFER_ID}/reject`
-        ? asCustomer({ status: 'CANCELLED', offers: [offer({ status: 'REJECTED' })] })
-        : undefined,
-    );
-    await renderWithProviders(<JobScreen />);
-    await fireEvent.press(await screen.findByTestId('reject-offer'));
-    expect(screen.getByText('Reject this offer?')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('reject-dialog-confirm'));
-    expect(await screen.findByText('Cancelled')).toBeTruthy();
-    expect(post(calls, `/v1/offers/${OFFER_ID}/reject`)).toBeTruthy();
-  });
-
-  it('after three rounds there is no fourth: no counter field on the last offer', async () => {
-    const offers = [
-      offer({ id: 'a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0', round: 1, status: 'COUNTERED' }),
-      offer({
-        id: 'e1e1e1e1-e1e1-4e1e-8e1e-e1e1e1e1e1e1',
-        round: 2,
-        fromRole: 'CUSTOMER',
-        amountPaise: 40000,
-        status: 'COUNTERED',
-      }),
-      offer({ id: OFFER_ID, round: 3, amountPaise: 45000 }),
-    ];
-    serve(asCustomer({ status: 'NEGOTIATING', offers }));
-    await renderWithProviders(<JobScreen />);
-    expect(await screen.findByTestId('accept-offer')).toBeTruthy();
-    expect(screen.getByTestId('round')).toHaveTextContent('Round 3 of 3');
-    expect(screen.queryByTestId('counter-offer')).toBeNull();
-    expect(screen.queryByTestId('offer-amount')).toBeNull();
-  });
-
-  it('the Ranger makes the first offer', async () => {
-    const { calls } = serve(asRanger({ status: 'MATCHED' }), (c) =>
-      c.path === `/v1/jobs/${JOB_ID}/offers`
-        ? asRanger({ status: 'NEGOTIATING', offers: [offer({ amountPaise: 40000 })] })
-        : undefined,
-    );
-    await renderWithProviders(<JobScreen />);
-    await fireEvent.changeText(await screen.findByTestId('offer-amount'), '400');
-    await fireEvent.press(screen.getByTestId('send-offer'));
-    await waitFor(() =>
-      expect(post(calls, `/v1/jobs/${JOB_ID}/offers`)?.body).toEqual({
-        amountPaise: 40000,
-        confirmOutsideBand: false,
-      }),
-    );
-    expect(await screen.findByTestId('my-offer')).toBeTruthy();
-    expect(screen.queryByTestId('send-offer')).toBeNull(); // one pending offer at a time
-  });
-
-  it('a server refusal is shown and the job is re-read', async () => {
-    const { calls } = serve(asRanger({ status: 'MATCHED' }), (c) =>
-      c.path === `/v1/jobs/${JOB_ID}/offers`
-        ? { status: 409, body: { error: { code: 'CONFLICT', message: 'x' } } }
-        : undefined,
-    );
-    await renderWithProviders(<JobScreen />);
-    await fireEvent.changeText(await screen.findByTestId('offer-amount'), '400');
-    await fireEvent.press(screen.getByTestId('send-offer'));
-    expect(await screen.findByTestId('action-error')).toBeTruthy();
-    await waitFor(() =>
-      expect(
-        calls.filter((c) => c.method === 'GET' && c.path === `/v1/jobs/${JOB_ID}`).length,
-      ).toBeGreaterThan(1),
-    );
   });
 });
 
@@ -388,9 +250,9 @@ describe('JobScreen: customer side of the visit', () => {
   });
 
   it('does not track before the price is agreed', async () => {
-    const { calls } = serve(asCustomer({ status: 'NEGOTIATING', offers: [offer()] }));
+    const { calls } = serve(asCustomer({ status: 'MATCHED' }));
     await renderWithProviders(<JobScreen />);
-    await screen.findByTestId('negotiation');
+    await screen.findByTestId('status-title');
     expect(calls.some((c) => c.path.endsWith('/track'))).toBe(false);
     expect(screen.queryByTestId('map-fallback')).toBeNull();
   });

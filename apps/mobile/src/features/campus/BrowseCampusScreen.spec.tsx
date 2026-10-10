@@ -10,6 +10,7 @@ const cats = [
     nameKey: 'categories.electrician',
     icon: 'flash',
     requiresLicense: false,
+    inspectionChargePaise: null,
   },
   {
     id: '00000000-0000-4000-8000-000000000001',
@@ -17,6 +18,7 @@ const cats = [
     nameKey: 'categories.plumber',
     icon: 'water',
     requiresLicense: false,
+    inspectionChargePaise: null,
   },
 ];
 

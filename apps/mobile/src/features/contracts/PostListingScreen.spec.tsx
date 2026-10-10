@@ -10,6 +10,7 @@ const cats = [
     nameKey: 'categories.electrician',
     icon: 'flash',
     requiresLicense: false,
+    inspectionChargePaise: null,
   },
 ];
 

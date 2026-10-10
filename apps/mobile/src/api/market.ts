@@ -10,10 +10,12 @@ import {
   jobPhotoPresignSchema,
   mediaPresignSchema,
   type MediaPresignRequest,
-  type OfferInput,
   paymentOrderStartSchema,
   presenceSchema,
   priceBandSchema,
+  priceListAddOnSchema,
+  priceListEntrySchema,
+  type QuoteInput,
   shareLinkSchema,
   trackSchema,
 } from '@haggler/shared';
@@ -44,6 +46,17 @@ export const getPriceBand = (category: string, pincode: string, city: string) =>
     `/v1/price-bands?category=${encodeURIComponent(category)}&pincode=${pincode}&city=${encodeURIComponent(city)}`,
     { auth: false, schema: priceBandSchema },
   );
+/** D-080: the fixed listed price for a category. 404s for "other", which has no fixed price. */
+export const getPriceListEntry = (category: string) =>
+  apiRequest(`/v1/price-list?category=${encodeURIComponent(category)}`, {
+    auth: false,
+    schema: priceListEntrySchema,
+  });
+export const getPriceListAddOns = (category: string) =>
+  apiRequest(`/v1/price-list/add-ons?category=${encodeURIComponent(category)}`, {
+    auth: false,
+    schema: z.array(priceListAddOnSchema),
+  });
 
 // ---- Ranger: accept / decline / presence -----------------------------------------------------------
 export const acceptRequest = (requestId: string) =>
@@ -74,18 +87,18 @@ export const getIncoming = () => apiRequest('/v1/worker/incoming', { schema: inc
 export const getJob = (jobId: string) => apiRequest(`/v1/jobs/${jobId}`, { schema: jobDtoSchema });
 export const listJobs = (role?: 'CUSTOMER' | 'WORKER') =>
   apiRequest(`/v1/jobs?limit=30${role ? `&role=${role}` : ''}`, { schema: jobListSchema });
-export const makeOffer = (jobId: string, body: OfferInput) =>
-  apiRequest(`/v1/jobs/${jobId}/offers`, { method: 'POST', body, schema: jobDtoSchema });
-export const counterOffer = (offerId: string, body: OfferInput) =>
-  apiRequest(`/v1/offers/${offerId}/counter`, { method: 'POST', body, schema: jobDtoSchema });
-export const acceptOffer = (offerId: string, confirmOutsideBand: boolean) =>
-  apiRequest(`/v1/offers/${offerId}/accept`, {
+// D-080 (A4): "other"-category quotes, replacing offers/negotiation for every other category.
+export const sendQuote = (jobId: string, body: QuoteInput) =>
+  apiRequest(`/v1/jobs/${jobId}/quotes`, { method: 'POST', body, schema: jobDtoSchema });
+export const withdrawQuote = (jobId: string, quoteId: string) =>
+  apiRequest(`/v1/jobs/${jobId}/quotes/${quoteId}/withdraw`, { method: 'POST', schema: ok });
+export const acceptQuote = (jobId: string, quoteId: string) =>
+  apiRequest(`/v1/jobs/${jobId}/quotes/${quoteId}/accept`, { method: 'POST', schema: jobDtoSchema });
+export const declineQuote = (jobId: string, quoteId: string) =>
+  apiRequest(`/v1/jobs/${jobId}/quotes/${quoteId}/decline`, {
     method: 'POST',
-    body: { confirmOutsideBand },
     schema: jobDtoSchema,
   });
-export const rejectOffer = (offerId: string) =>
-  apiRequest(`/v1/offers/${offerId}/reject`, { method: 'POST', schema: jobDtoSchema });
 
 const act = (jobId: string, path: string, body?: unknown) =>
   apiRequest(`/v1/jobs/${jobId}/${path}`, { method: 'POST', body, schema: jobDtoSchema });

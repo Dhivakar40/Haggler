@@ -81,14 +81,13 @@ const addr = (over = {}) => ({
   longitude: 80.22,
   ...over,
 });
-const band = (over = {}) => ({
+const priceListEntry = (over = {}) => ({
+  id: '66666666-6666-4666-8666-666666666666',
   categorySlug: 'electrician',
-  scope: 'DEFAULT',
-  minPaise: 19900,
-  medianPaise: 34900,
-  maxPaise: 69900,
-  sampleSize: 0,
-  isSeededDefault: true,
+  cityTier: 'DEFAULT',
+  pricePaise: 34900,
+  needsSurvey: true,
+  isActive: true,
   ...over,
 });
 const MEDIA_ID = '99999999-9999-4999-8999-999999999999';
@@ -103,7 +102,7 @@ function backend(
   let n = 0;
   return mockApi((c) => {
     if (c.path === '/v1/me/addresses') return { body: over.addresses ?? [addr()] };
-    if (c.path.startsWith('/v1/price-bands')) return { body: band() };
+    if (c.path.startsWith('/v1/price-list')) return { body: priceListEntry() };
     if (c.path.startsWith('file:')) return { blobSize: 1500 };
     if (c.path === '/v1/requests/media') {
       n += 1;
@@ -169,25 +168,24 @@ describe('scheduledIso', () => {
 });
 
 describe('NewRequestScreen', () => {
-  it('shows the category, the default address, and the real price band (flagged as an estimate when seeded)', async () => {
+  it('shows the category, the default address, and the fixed listed price (flagged unconfirmed when needsSurvey)', async () => {
     backend();
     await renderWithProviders(<NewRequestScreen />);
     expect(await screen.findByText('Electrician')).toBeTruthy();
-    expect(await screen.findByTestId('price-range')).toHaveTextContent('₹199 to ₹699');
-    expect(screen.getByText('Typically ₹349')).toBeTruthy();
-    expect(screen.getByText('Estimate only: not enough local jobs yet.')).toBeTruthy();
+    expect(await screen.findByTestId('price-range')).toHaveTextContent('₹349');
+    expect(screen.getByText('This price has not been confirmed yet.')).toBeTruthy();
     expect(screen.getByTestId('address-Home').props.accessibilityState.selected).toBe(true);
   });
 
-  it('does not call the estimate warning when the band is from real local data', async () => {
+  it('does not show the unconfirmed warning once an admin has surveyed the price', async () => {
     mockApi((c) =>
       c.path === '/v1/me/addresses'
         ? { body: [addr()] }
-        : { body: band({ scope: 'PINCODE_CLUSTER', isSeededDefault: false, sampleSize: 30 }) },
+        : { body: priceListEntry({ needsSurvey: false }) },
     );
     await renderWithProviders(<NewRequestScreen />);
     await screen.findByTestId('price-range');
-    expect(screen.queryByText('Estimate only: not enough local jobs yet.')).toBeNull();
+    expect(screen.queryByText('This price has not been confirmed yet.')).toBeNull();
   });
 
   it('a too-short description is refused before anything is sent', async () => {
@@ -202,16 +200,16 @@ describe('NewRequestScreen', () => {
     expect(calls.some((c) => c.path === '/v1/requests' && c.method === 'POST')).toBe(false);
   });
 
-  it('D-078 Part G: "Other" shows no price band, needs a longer description, and nudges a photo', async () => {
+  it('D-080 (A4): "Other" shows no fixed price, needs a longer description, and nudges a photo', async () => {
     (useLocalSearchParams as jest.Mock).mockReturnValue({ category: 'other' });
     const { calls } = backend();
     await renderWithProviders(<NewRequestScreen />);
     await screen.findByText(
-      'There is no price guide for this category — mention a budget above if you have one, or leave it open. Rangers will quote you directly and you can negotiate.',
+      'There is no price guide for this category — mention a budget above if you have one, or leave it open. Rangers will send you quotes to choose from.',
     );
     expect(screen.queryByTestId('price-band')).toBeNull();
     expect(screen.queryByTestId('price-range')).toBeNull();
-    expect(calls.some((c) => c.path.startsWith('/v1/price-bands'))).toBe(false);
+    expect(calls.some((c) => c.path.startsWith('/v1/price-list'))).toBe(false);
     expect(
       screen.getByText(
         'A photo helps Rangers understand the job and quote accurately.',
@@ -361,7 +359,7 @@ describe('NewRequestScreen', () => {
   it('a failed upload is shown and does not get attached', async () => {
     mockApi((c) => {
       if (c.path === '/v1/me/addresses') return { body: [addr()] };
-      if (c.path.startsWith('/v1/price-bands')) return { body: band() };
+      if (c.path.startsWith('/v1/price-list')) return { body: priceListEntry() };
       if (c.path.startsWith('file:')) return { blobSize: 1500 };
       if (c.path === '/v1/requests/media')
         return {
@@ -647,5 +645,46 @@ describe('RequestStatusScreen', () => {
       .mockRejectedValue(new TypeError('offline'));
     await renderWithProviders(<RequestStatusScreen />);
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
+  it('D-080 (A4): an "other" request shows received quotes; accepting one hands off to the job screen', async () => {
+    const quote = {
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      workerId: '22222222-2222-4222-8222-222222222222',
+      workerFirstName: 'Ravi',
+      amountPaise: 50000,
+      status: 'PENDING' as const,
+      createdAt: iso(-1000),
+    };
+    let accepted = false;
+    const { calls } = mockApi((c) => {
+      if (c.path.endsWith('/accept')) {
+        accepted = true;
+        return { body: makeJob({ status: 'AGREED', agreedPricePaise: 50000 }) };
+      }
+      return {
+        body: makeJob({
+          categorySlug: 'other',
+          listedPricePaise: null,
+          status: accepted ? 'AGREED' : 'BROADCASTING',
+          agreedPricePaise: accepted ? 50000 : null,
+          quotes: accepted ? [{ ...quote, status: 'ACCEPTED' as const }] : [quote],
+        }),
+      };
+    });
+    await renderWithProviders(<RequestStatusScreen />);
+    expect(await screen.findByTestId('quotes-panel')).toHaveTextContent('₹500', { exact: false });
+    await fireEvent.press(screen.getByTestId(`accept-quote-${quote.id}`));
+    expect(
+      calls.some(
+        (c) => c.method === 'POST' && c.path.endsWith(`/quotes/${quote.id}/accept`),
+      ),
+    ).toBe(true);
+    await waitFor(() =>
+      expect(routerMock().replace).toHaveBeenCalledWith({
+        pathname: '/job/[id]',
+        params: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      }),
+    );
   });
 });

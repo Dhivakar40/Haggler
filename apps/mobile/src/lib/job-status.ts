@@ -42,16 +42,6 @@ export function formatCountdown(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** The single pending offer that is still open, if any. */
-export function pendingOffer(job: Pick<JobDto, 'offers'>, now: number) {
-  return job.offers.find((o) => o.status === 'PENDING' && new Date(o.expiresAt).getTime() > now);
-}
-
-export const isOutsideBand = (
-  amountPaise: number,
-  band: { minPaise: number; maxPaise: number },
-): boolean => amountPaise < band.minPaise || amountPaise > band.maxPaise;
-
 /** i18n keys for the status headline, most specific first: a Ranger-specific wording, then the general one. */
 export function statusKeys(job: Pick<JobDto, 'status' | 'viewerRole'>): string[] {
   const general = `job.status.${job.status}`;
