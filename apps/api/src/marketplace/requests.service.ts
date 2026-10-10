@@ -188,6 +188,26 @@ export class RequestsService {
       throw unprocessable('Attach at most one voice note.');
 
     const band = await this.catalog.getPriceBand(input.categorySlug, a.pincode, a.city);
+    // D-080 (A1/A2/A3): the fixed price is resolved and frozen now, at booking time, not at
+    // match time — the price a customer saw when booking must never shift while Rangers are
+    // being broadcast to. "Other" has none (NotFoundException): it keeps its own per-Ranger
+    // quote flow (A4) instead. An inspection-only category (A2) always uses its fixed charge,
+    // never the normal catalogue price.
+    let listedPricePaise: number | null = null;
+    let listedPriceCityTier: 'TIER_1' | 'TIER_2' | 'DEFAULT' | null = null;
+    let isInspectionCharge = false;
+    if (category.inspectionChargePaise != null) {
+      listedPricePaise = category.inspectionChargePaise;
+      isInspectionCharge = true;
+    } else {
+      try {
+        const entry = await this.catalog.getPriceListEntry(input.categorySlug);
+        listedPricePaise = entry.pricePaise;
+        listedPriceCityTier = entry.cityTier;
+      } catch {
+        // "other" (or any category with no price list row yet): leave null.
+      }
+    }
     const addressLine = [a.line1, a.line2, a.city, a.state, a.pincode].filter(Boolean).join(', ');
     const startAt = scheduledFor
       ? new Date(scheduledFor.getTime() - cfg.scheduled_lead_minutes * 60_000)
@@ -202,11 +222,13 @@ export class RequestsService {
       const id = randomUUID();
       await tx.$executeRaw`
         INSERT INTO service_requests (id, customer_id, category_id, description, address_line, city, state, pincode, location,
-                                      urgency, scheduled_for, gender_preference, band_scope, band_min_paise, band_median_paise, band_max_paise, updated_at)
+                                      urgency, scheduled_for, gender_preference, band_scope, band_min_paise, band_median_paise, band_max_paise,
+                                      listed_price_paise, listed_price_city_tier, is_inspection_charge, updated_at)
         VALUES (${id}::uuid, ${customerId}::uuid, ${category.id}::uuid, ${input.description}, ${addressLine}, ${a.city}, ${a.state}, ${a.pincode},
                 ST_SetSRID(ST_MakePoint(${a.lng}, ${a.lat}), 4326)::geography,
                 ${input.urgency}::urgency, ${scheduledFor}, ${input.genderPreference}::gender_preference,
-                ${band.scope}::price_band_scope, ${band.minPaise}, ${band.medianPaise}, ${band.maxPaise}, now())`;
+                ${band.scope}::price_band_scope, ${band.minPaise}, ${band.medianPaise}, ${band.maxPaise},
+                ${listedPricePaise}, ${listedPriceCityTier}::city_tier, ${isInspectionCharge}, now())`;
       const job = await tx.job.create({
         data: { requestId: id, customerId, nextWaveAt: startAt, isRush },
       });

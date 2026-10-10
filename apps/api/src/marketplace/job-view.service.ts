@@ -42,11 +42,17 @@ export class JobViewService {
       include: {
         request: { include: { category: true, media: { where: { status: 'UPLOADED' } } } },
         offers: { orderBy: { round: 'asc' } },
+        quotes: { orderBy: { createdAt: 'asc' } },
         photos: { where: { status: 'UPLOADED' } },
         thread: true,
       },
     });
-    if (!job || (job.customerId !== viewerId && job.workerId !== viewerId))
+    // D-080 (A4): a Ranger who has sent a quote on an "other" job can read it (their own
+    // submission's response, status polling) even before any match exists — `matched` below is
+    // still driven by job.workerId, so address/location stay hidden exactly as before for an
+    // invited-but-unmatched Ranger; this only widens who is allowed to ask at all.
+    const quoted = !!job?.quotes.some((q) => q.workerId === viewerId);
+    if (!job || (job.customerId !== viewerId && job.workerId !== viewerId && !quoted))
       throw notFound('Job not found');
     return {
       job,
@@ -94,7 +100,7 @@ export class JobViewService {
     // or on each other — they went out as up to five sequential round trips before; one hosted-
     // database round trip costs ~65-130ms regardless of how trivial the query is, so collapsing
     // every independent read into one batch is a real, non-cosmetic saving (D-078).
-    const [point, customer, worker, media, sla, stats, myReview] = await Promise.all([
+    const [point, customer, worker, quoteWorkers, media, sla, stats, myReview] = await Promise.all([
       this.requestPoint(req.id),
       this.prisma.user.findUnique({
         where: { id: job.customerId },
@@ -106,6 +112,15 @@ export class JobViewService {
             select: { id: true, fullName: true, workerProfile: { select: { kycTier: true } } },
           })
         : Promise.resolve(null),
+      // D-080 (A4): a plain lookup, not a Prisma relation include — JobQuote has no FK to User
+      // (same reason Offer doesn't: a job only ever has two parties, named via customer/worker
+      // above; quotes are the one place several *other* Rangers' names are needed at once).
+      job.quotes.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: job.quotes.map((q) => q.workerId) } },
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve([]),
       Promise.all(
         req.media.map(async (m) => ({
           id: m.id,
@@ -151,6 +166,8 @@ export class JobViewService {
         medianPaise: req.bandMedianPaise,
         maxPaise: req.bandMaxPaise,
       },
+      listedPricePaise: req.listedPricePaise,
+      isInspectionCharge: req.isInspectionCharge,
       agreedPricePaise: job.agreedPricePaise,
       genderPreference: req.genderPreference,
       genderPreferenceMet: job.genderPreferenceMet,
@@ -190,6 +207,16 @@ export class JobViewService {
         outsideBand: o.outsideBand,
         status: o.status,
         expiresAt: o.expiresAt.toISOString(),
+      })),
+      quotes: job.quotes.map((q) => ({
+        id: q.id,
+        workerId: q.workerId,
+        workerFirstName: firstName(
+          quoteWorkers.find((w) => w.id === q.workerId)?.fullName ?? null,
+        ),
+        amountPaise: q.amountPaise,
+        status: q.status,
+        createdAt: q.createdAt.toISOString(),
       })),
       arrivalCode,
       arrivalVerified: !!job.arrivalVerifiedAt,

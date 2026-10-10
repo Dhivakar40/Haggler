@@ -263,8 +263,27 @@ export class MatchingService {
   // ---- accept / decline -----------------------------------------------------------------------------
 
   async accept(workerId: string, requestId: string) {
-    const job = await this.prisma.job.findUnique({ where: { requestId } });
+    const job = await this.prisma.job.findUnique({
+      where: { requestId },
+      include: {
+        request: {
+          select: {
+            listedPricePaise: true,
+            category: { select: { slug: true } },
+          },
+        },
+      },
+    });
     if (!job) throw notFound('Request not found');
+    // D-080 (A4): "other" has no fixed price to auto-agree to — Rangers quote instead
+    // (POST /v1/jobs/:id/quotes), and the customer picks one, which performs the match.
+    if (job.request.category.slug === OTHER_CATEGORY_SLUG)
+      throw new CodedException(
+        HttpStatus.CONFLICT,
+        ERROR_CODES.CONFLICT,
+        'Send a quote for this request instead of accepting directly.',
+        { code: 'QUOTE_REQUIRED' },
+      );
     const inv = await this.prisma.requestBroadcast.findFirst({
       where: { jobId: job.id, workerId, attempt: job.broadcastAttempt },
     });
@@ -331,6 +350,15 @@ export class MatchingService {
             await tx.requestBroadcast.updateMany({
               where: { jobId: job.id, response: 'PENDING', NOT: { workerId } },
               data: { response: 'TAKEN', respondedAt: new Date() },
+            });
+            // D-080 (A3): no negotiation — the price was already frozen on the request at
+            // booking time, so matching and agreeing the price are the same moment now.
+            await this.transitions.move(tx, {
+              jobId: job.id,
+              from: 'MATCHED',
+              to: 'AGREED',
+              actor: 'SYSTEM',
+              data: { agreedAt: new Date(), agreedPricePaise: job.request.listedPricePaise },
             });
           },
           { maxWait: 10_000, timeout: 15_000 },
@@ -448,6 +476,8 @@ export class MatchingService {
         medianPaise: r.bandMedianPaise,
         maxPaise: r.bandMaxPaise,
       },
+      listedPricePaise: r.listedPricePaise,
+      isInspectionCharge: r.isInspectionCharge,
       deadline: job.broadcastDeadline?.toISOString() ?? null,
       photoCount: r.media.filter((m) => m.kind === 'PHOTO').length,
       hasVoiceNote: r.media.some((m) => m.kind === 'VOICE'),

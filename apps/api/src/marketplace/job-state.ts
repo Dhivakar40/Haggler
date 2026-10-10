@@ -10,9 +10,14 @@ export type Actor = 'CUSTOMER' | 'WORKER' | 'SYSTEM';
  * The job state machine (D3). Every status change goes through `assertTransition`, so a client can
  * never jump a job to a state the rules do not allow, and only the right party can move it.
  *
- *   REQUESTED -> BROADCASTING -> MATCHED -> NEGOTIATING -> AGREED -> EN_ROUTE -> ARRIVED
+ *   REQUESTED -> BROADCASTING -> MATCHED -> AGREED -> EN_ROUTE -> ARRIVED
  *        -> IN_PROGRESS -> COMPLETED_BY_WORKER -> CONFIRMED_BY_CUSTOMER
  *   plus CANCELLED, NO_SHOW_WORKER, NO_SHOW_CUSTOMER, DISPUTED, REFUNDED.
+ *
+ * D-080 (A3): MATCHED -> AGREED is now a same-transaction SYSTEM move straight after a match, at
+ * the request's frozen listed price — negotiation is gone. MATCHED -> NEGOTIATING -> AGREED stays
+ * in the table only so a pre-D-080 job already sitting in NEGOTIATING can still be read/cancelled/
+ * finished; no new job is ever routed through it.
  *
  * Trace: a Ranger tries to start a job that is only AGREED. AGREED allows {EN_ROUTE, CANCELLED};
  * IN_PROGRESS is not among them, so the move is refused with 409 INVALID_TRANSITION.
@@ -24,7 +29,7 @@ const S: Actor = 'SYSTEM';
 export const TRANSITIONS: Record<JobStatus, Partial<Record<JobStatus, Actor[]>>> = {
   REQUESTED: { BROADCASTING: [S], CANCELLED: [C, S] },
   BROADCASTING: { MATCHED: [W], CANCELLED: [C, S] },
-  MATCHED: { NEGOTIATING: [C, W], CANCELLED: [C, W, S] },
+  MATCHED: { AGREED: [S], NEGOTIATING: [C, W], CANCELLED: [C, W, S] },
   NEGOTIATING: { AGREED: [C, W], CANCELLED: [C, W, S] },
   AGREED: { EN_ROUTE: [W], CANCELLED: [C, W, S] },
   EN_ROUTE: { ARRIVED: [W], CANCELLED: [C, W], NO_SHOW_WORKER: [C] },

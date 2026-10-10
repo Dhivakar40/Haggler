@@ -18,8 +18,7 @@ describe('job state machine', () => {
     const path: [JobStatus, JobStatus, 'CUSTOMER' | 'WORKER' | 'SYSTEM'][] = [
       ['REQUESTED', 'BROADCASTING', 'SYSTEM'],
       ['BROADCASTING', 'MATCHED', 'WORKER'],
-      ['MATCHED', 'NEGOTIATING', 'CUSTOMER'],
-      ['NEGOTIATING', 'AGREED', 'WORKER'],
+      ['MATCHED', 'AGREED', 'SYSTEM'], // D-080 (A3): system auto-agrees at the listed price
       ['AGREED', 'EN_ROUTE', 'WORKER'],
       ['EN_ROUTE', 'ARRIVED', 'WORKER'],
       ['ARRIVED', 'IN_PROGRESS', 'WORKER'],
@@ -40,6 +39,13 @@ describe('job state machine', () => {
     expect(canTransition('MATCHED', 'EN_ROUTE', 'WORKER')).toBe(false);
     expect(canTransition('EN_ROUTE', 'IN_PROGRESS', 'WORKER')).toBe(false);
     expect(canTransition('BROADCASTING', 'AGREED', 'WORKER')).toBe(false);
+  });
+
+  it('D-080 (A3): MATCHED -> AGREED is SYSTEM-only (no client can skip straight to AGREED), and NEGOTIATING only still exists to let a pre-D-080 job finish out', () => {
+    expect(canTransition('MATCHED', 'AGREED', 'SYSTEM')).toBe(true);
+    expect(canTransition('MATCHED', 'AGREED', 'CUSTOMER')).toBe(false);
+    expect(canTransition('MATCHED', 'AGREED', 'WORKER')).toBe(false);
+    expect(canTransition('NEGOTIATING', 'AGREED', 'CUSTOMER')).toBe(true);
   });
 
   it('terminal states allow nothing (except refunds) so a finished job cannot be revived', () => {

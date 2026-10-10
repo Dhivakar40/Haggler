@@ -7,8 +7,7 @@ import {
   verifyArrivalSchema,
   completeJobSchema,
   cancelJobSchema,
-  offerInputSchema,
-  offerResponseSchema,
+  quoteInputSchema,
   sendMessageSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
@@ -18,7 +17,7 @@ import { ChatService } from './chat.service';
 import { JobViewService } from './job-view.service';
 import { LifecycleService } from './lifecycle.service';
 import { MatchingService } from './matching.service';
-import { OffersService } from './offers.service';
+import { QuotesService } from './quotes.service';
 import { RequestsService } from './requests.service';
 import { TrackingService } from './tracking.service';
 
@@ -126,7 +125,7 @@ export class JobsController {
   constructor(
     private readonly requests: RequestsService,
     private readonly view: JobViewService,
-    private readonly offers: OffersService,
+    private readonly quotes: QuotesService,
     private readonly life: LifecycleService,
     private readonly tracking: TrackingService,
     private readonly chat: ChatService,
@@ -145,18 +144,57 @@ export class JobsController {
     return this.view.build(jobId, u.id);
   }
 
-  @Post(':id/offers')
+  @Post(':id/quotes')
+  @Roles('WORKER')
   @ApiOperation({
     summary:
-      'Make an offer (or counter). Max 3 rounds; outside the price band both sides must confirm.',
+      '"Other" category only (D-080, A4): send one quote. One per Ranger per request, no counters.',
   })
-  @ApiZodBody(offerInputSchema)
-  offer(
+  @ApiZodBody(quoteInputSchema)
+  sendQuote(
     @CurrentUser() u: AuthUser,
     @Param('id', id) jobId: string,
-    @Body(new ZodPipe(offerInputSchema)) body: z.infer<typeof offerInputSchema>,
+    @Body(new ZodPipe(quoteInputSchema)) body: z.infer<typeof quoteInputSchema>,
   ) {
-    return this.offers.create(u.id, jobId, body);
+    return this.quotes.submit(u.id, jobId, body);
+  }
+
+  @Post(':id/quotes/:quoteId/withdraw')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Ranger: withdraw my own unaccepted quote' })
+  withdrawQuote(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Param('quoteId', id) quoteId: string,
+  ) {
+    return this.quotes.withdraw(u.id, jobId, quoteId);
+  }
+
+  @Post(':id/quotes/:quoteId/accept')
+  @HttpCode(200)
+  @Roles('CUSTOMER')
+  @ApiOperation({
+    summary: 'Customer: accept one quote. Performs the match at that price; declines the rest.',
+  })
+  acceptQuote(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Param('quoteId', id) quoteId: string,
+  ) {
+    return this.quotes.accept(u.id, jobId, quoteId);
+  }
+
+  @Post(':id/quotes/:quoteId/decline')
+  @HttpCode(200)
+  @Roles('CUSTOMER')
+  @ApiOperation({ summary: 'Customer: decline one quote without matching' })
+  declineQuote(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Param('quoteId', id) quoteId: string,
+  ) {
+    return this.quotes.decline(u.id, jobId, quoteId);
   }
 
   @Post(':id/en-route')
@@ -296,43 +334,6 @@ export class JobsController {
   @ApiOperation({ summary: 'The chat thread for this job' })
   thread(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
     return this.chat.threadForJob(jobId, u.id);
-  }
-}
-
-@ApiTags('offers')
-@ApiBearerAuth()
-@Controller({ path: 'offers', version: '1' })
-export class OffersController {
-  constructor(private readonly offers: OffersService) {}
-
-  @Post(':id/accept')
-  @HttpCode(200)
-  @ApiOperation({ summary: "Accept the other party's offer; the job becomes AGREED at that price" })
-  @ApiZodBody(offerResponseSchema)
-  accept(
-    @CurrentUser() u: AuthUser,
-    @Param('id', id) offerId: string,
-    @Body(new ZodPipe(offerResponseSchema)) body: z.infer<typeof offerResponseSchema>,
-  ) {
-    return this.offers.accept(u.id, offerId, body.confirmOutsideBand === true);
-  }
-
-  @Post(':id/counter')
-  @ApiOperation({ summary: 'Counter-offer (next round)' })
-  @ApiZodBody(offerInputSchema)
-  counter(
-    @CurrentUser() u: AuthUser,
-    @Param('id', id) offerId: string,
-    @Body(new ZodPipe(offerInputSchema)) body: z.infer<typeof offerInputSchema>,
-  ) {
-    return this.offers.counter(u.id, offerId, body);
-  }
-
-  @Post(':id/reject')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Reject the offer: ends the negotiation and cancels the job' })
-  reject(@CurrentUser() u: AuthUser, @Param('id', id) offerId: string) {
-    return this.offers.reject(u.id, offerId);
   }
 }
 

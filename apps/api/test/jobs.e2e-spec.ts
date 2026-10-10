@@ -46,7 +46,10 @@ describe('first accept wins', () => {
     expect(loser.body.error.details.code).toBe('REQUEST_TAKEN');
 
     const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
-    expect(job.status).toBe('MATCHED');
+    // D-080 (A3): matching and agreeing the price are the same transaction now — no negotiation
+    // step in between.
+    expect(job.status).toBe('AGREED');
+    expect(job.agreedPricePaise).not.toBeNull();
     const winner = ra.status === 200 ? a : b;
     expect(job.workerId).toBe(winner.userId);
     expect(await m.prisma.jobMatch.count({ where: { jobId } })).toBe(1);
@@ -125,65 +128,23 @@ describe('first accept wins', () => {
   });
 });
 
-describe('negotiation', () => {
-  it('offer -> counter -> accept ends AGREED at the accepted price', async () => {
+describe('D-080 (A3): fixed-price auto-agree, replacing negotiation', () => {
+  it('accepting matches AND agrees in one step, at the seeded listed price', async () => {
     const { c, r, jobId } = await pair();
-    const o1 = await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 50000 }).expect(201);
-    expect(o1.body.status).toBe('NEGOTIATING');
-    expect(o1.body.offers).toHaveLength(1);
-    const first = o1.body.offers[0];
-    expect(first).toMatchObject({
-      round: 1,
-      fromRole: 'WORKER',
-      amountPaise: 50000,
-      status: 'PENDING',
-      outsideBand: false,
-    });
-
-    await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 45000 }).expect(409); // cannot outbid yourself
-    const c1 = await m.api
-      .post(c, `/v1/offers/${first.id}/counter`, { amountPaise: 40000 })
-      .expect(201);
-    expect(
-      c1.body.offers.map((o: { round: number; status: string }) => `${o.round}:${o.status}`),
-    ).toEqual(['1:COUNTERED', '2:PENDING']);
-    const second = c1.body.offers[1];
-    await m.api.post(c, `/v1/offers/${second.id}/accept`, {}).expect(409); // your own offer
-    const done = await m.api.post(r, `/v1/offers/${second.id}/accept`, {}).expect(200);
-    expect(done.body).toMatchObject({ status: 'AGREED', agreedPricePaise: 40000 });
-    expect(done.body.offers.at(-1).status).toBe('ACCEPTED');
-    await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 30000 }).expect(409); // negotiation is over
+    const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    expect(job.status).toBe('AGREED');
+    expect(job.workerId).toBe(r.userId);
+    expect(job.agreedAt).not.toBeNull();
+    // electrician's seeded DEFAULT price-list entry, in paise (see prisma/seed.ts).
+    expect(job.agreedPricePaise).toBe(34900);
+    const dto = (await m.api.get(c, `/v1/jobs/${jobId}`)).body;
+    expect(dto.listedPricePaise).toBe(34900);
+    expect(dto.isInspectionCharge).toBe(false);
+    expect(dto.offers).toEqual([]); // no negotiation ever happened
   });
 
-  it('maximum 3 rounds: the fourth offer is refused, but the last can still be accepted', async () => {
+  it('D-078: relationLoadStrategy join still returns the same shape as one-query-per-relation, now on an auto-agreed job with photos', async () => {
     const { c, r, jobId } = await pair();
-    let o = (await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 60000 }).expect(201))
-      .body.offers[0];
-    o = (await m.api.post(c, `/v1/offers/${o.id}/counter`, { amountPaise: 30000 }).expect(201)).body
-      .offers[1];
-    const r3 = (
-      await m.api.post(r, `/v1/offers/${o.id}/counter`, { amountPaise: 45000 }).expect(201)
-    ).body.offers[2];
-    expect(r3.round).toBe(3);
-    const res = await m.api
-      .post(c, `/v1/offers/${r3.id}/counter`, { amountPaise: 40000 })
-      .expect(409);
-    expect(res.body.error.details.code).toBe('ROUND_LIMIT');
-    await m.api.post(c, `/v1/offers/${r3.id}/accept`, {}).expect(200);
-    expect(await statusOf(jobId)).toBe('AGREED');
-  });
-
-  it('D-078: relationLoadStrategy join returns the same shape as one-query-per-relation, on a job with multiple offers and photos', async () => {
-    const { c, r, jobId } = await pair();
-    const o1 = (await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 50000 }).expect(201))
-      .body.offers[0];
-    const o2 = (
-      await m.api.post(c, `/v1/offers/${o1.id}/counter`, { amountPaise: 40000 }).expect(201)
-    ).body.offers[1];
-    const o3 = (
-      await m.api.post(r, `/v1/offers/${o2.id}/counter`, { amountPaise: 45000 }).expect(201)
-    ).body.offers[2];
-    await m.api.post(c, `/v1/offers/${o3.id}/accept`, {}).expect(200);
     await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
     await m.ping(r, CENTER);
     await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(200);
@@ -195,9 +156,8 @@ describe('negotiation', () => {
 
     const job = await m.prisma.job.findUniqueOrThrow({
       where: { id: jobId },
-      include: { _count: { select: { offers: true, photos: true } } },
+      include: { _count: { select: { photos: true } } },
     });
-    expect(job._count.offers).toBeGreaterThan(1); // real multi-round negotiation, not a stub
     expect(job._count.photos).toBe(2);
 
     // Mirrors job-view.service.ts's loadForParty() include exactly, so this proves the joined
@@ -206,6 +166,7 @@ describe('negotiation', () => {
     const include = {
       request: { include: { category: true, media: { where: { status: 'UPLOADED' as const } } } },
       offers: { orderBy: { round: 'asc' as const } },
+      quotes: { orderBy: { createdAt: 'asc' as const } },
       photos: { where: { status: 'UPLOADED' as const } },
       thread: true,
     };
@@ -235,94 +196,98 @@ describe('negotiation', () => {
     expect(dto.status).toBe('IN_PROGRESS');
   });
 
-  it('prices outside the band need explicit confirmation from BOTH sides', async () => {
-    const { c, r, jobId } = await pair(); // band 199..699 rupees
-    const res = await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 90000 }).expect(422);
-    expect(res.body.error.details.code).toBe('OUTSIDE_BAND_CONFIRMATION_REQUIRED');
-    const offer = (
-      await m.api
-        .post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 90000, confirmOutsideBand: true })
-        .expect(201)
-    ).body.offers[0];
-    expect(offer.outsideBand).toBe(true);
-    await m.api.post(c, `/v1/offers/${offer.id}/accept`, {}).expect(422); // customer must confirm too
-    await m.api.post(c, `/v1/offers/${offer.id}/accept`, { confirmOutsideBand: true }).expect(200);
-    expect((await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } })).agreedPricePaise).toBe(
-      90000,
-    );
-  });
-
-  it('offers expire; after expiry either side may offer again', async () => {
-    const { c, r, jobId } = await pair();
-    const o = (await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 50000 }).expect(201))
-      .body.offers[0];
-    await m.scheduler.tick(new Date(Date.now() + 6 * 60_000)); // 5 min TTL has passed
-    expect((await m.prisma.offer.findUniqueOrThrow({ where: { id: o.id } })).status).toBe(
-      'EXPIRED',
-    );
-    const late = await m.api.post(c, `/v1/offers/${o.id}/accept`, {}).expect(409);
-    expect(late.body.error.details.code).toBeDefined();
-    const fresh = await m.api
-      .post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 48000 })
-      .expect(201); // round 2, allowed
-    expect(fresh.body.offers.map((x: { round: number }) => x.round)).toEqual([1, 2]);
-  });
-
-  it('when rounds run out without agreement, the job is cancelled and the Ranger is freed', async () => {
-    const { r, jobId } = await pair();
-    const now = Date.now();
-    for (let i = 1; i <= 3; i++) {
-      await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 40000 + i }).expect(201);
-      await m.scheduler.tick(new Date(now + i * 6 * 60_000));
-    }
-    const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
-    expect(job).toMatchObject({
-      status: 'CANCELLED',
-      cancelReason: 'NEGOTIATION_TIMEOUT',
-      cancelledBy: 'SYSTEM',
-    });
-    expect(
-      await m.prisma.job.count({
-        where: { workerId: r.userId, status: { in: ['MATCHED', 'NEGOTIATING', 'AGREED'] } },
-      }),
-    ).toBe(0);
-  });
-
-  it('a matched job with no offers for 30 minutes is released', async () => {
-    const { r, jobId } = await pair();
-    await m.scheduler.tick(new Date(Date.now() + 31 * 60_000));
-    expect(await statusOf(jobId)).toBe('CANCELLED');
-    // The Ranger can take new work now.
-    await m.ping(r, CENTER);
-  });
-
-  it('rejecting an offer ends the negotiation', async () => {
-    const { c, r, jobId } = await pair();
-    const o = (await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 60000 }).expect(201))
-      .body.offers[0];
-    await m.api.post(r, `/v1/offers/${o.id}/reject`).expect(403); // not your call on your own offer
-    const done = await m.api.post(c, `/v1/offers/${o.id}/reject`).expect(200);
-    expect(done.body).toMatchObject({
-      status: 'CANCELLED',
-      cancellation: { by: 'CUSTOMER', reason: 'NEGOTIATION_REJECTED', feeApplies: false },
-    });
-  });
-
-  it('strangers cannot see or touch a job or its offers (404)', async () => {
-    const { jobId, r } = await pair();
+  it('strangers cannot see a job (404)', async () => {
+    const { jobId } = await pair();
     const stranger = await m.customer();
     await m.api.get(stranger, `/v1/jobs/${jobId}`).expect(404);
-    await m.api.post(stranger, `/v1/jobs/${jobId}/offers`, { amountPaise: 40000 }).expect(404);
-    const o = (await m.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: 40000 })).body
-      .offers[0];
-    await m.api.post(stranger, `/v1/offers/${o.id}/accept`, {}).expect(404);
   });
+});
 
-  it('offers are only possible while MATCHED/NEGOTIATING', async () => {
+describe('D-080 (A4): "other"-category quotes (no negotiation, one quote per Ranger)', () => {
+  /** A customer's "other" request, broadcast to one Ranger, who has not yet quoted. */
+  async function otherPair() {
     const area = newArea();
     const c = await m.customer({ at: area });
-    const { jobId } = await m.open(c);
-    await m.api.post(c, `/v1/jobs/${jobId}/offers`, { amountPaise: 40000 }).expect(409); // still broadcasting: no Ranger yet
+    const r = await m.ranger({ at: northOf(300, area) });
+    const { requestId, jobId } = await m.open(c, {
+      categorySlug: 'other',
+      description: 'Need something fixed that does not fit any listed category, please help.',
+    });
+    return { area, c, r, requestId, jobId };
+  }
+
+  it('a Ranger cannot accept directly; must send a quote instead', async () => {
+    const { r, requestId } = await otherPair();
+    const res = await m.api.post(r, `/v1/requests/${requestId}/accept`).expect(409);
+    expect(res.body.error.details.code).toBe('QUOTE_REQUIRED');
+  });
+
+  it('a Ranger sends one quote; a second quote from the same Ranger is refused', async () => {
+    const { r, jobId } = await otherPair();
+    const res = await m.api.post(r, `/v1/jobs/${jobId}/quotes`, { amountPaise: 50000 }).expect(201);
+    expect(res.body.quotes).toHaveLength(1);
+    expect(res.body.quotes[0]).toMatchObject({
+      workerId: r.userId,
+      amountPaise: 50000,
+      status: 'PENDING',
+    });
+    const again = await m.api.post(r, `/v1/jobs/${jobId}/quotes`, { amountPaise: 60000 }).expect(409);
+    expect(again.body.error.details.code).toBe('ALREADY_QUOTED');
+  });
+
+  it('the customer accepts one quote: it performs the match, at that quote price, and declines the rest', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    const a = await m.ranger({ at: northOf(200, area), name: 'Asha' });
+    const b = await m.ranger({ at: northOf(400, area), name: 'Bala' });
+    const { jobId } = await m.open(c, {
+      categorySlug: 'other',
+      description: 'Need something fixed that does not fit any listed category, please help.',
+    });
+    const qa = (await m.api.post(a, `/v1/jobs/${jobId}/quotes`, { amountPaise: 50000 }).expect(201))
+      .body.quotes[0];
+    await m.api.post(b, `/v1/jobs/${jobId}/quotes`, { amountPaise: 70000 }).expect(201);
+
+    const done = await m.api.post(c, `/v1/jobs/${jobId}/quotes/${qa.id}/accept`).expect(200);
+    expect(done.body).toMatchObject({ status: 'AGREED', agreedPricePaise: 50000 });
+    const quotes = done.body.quotes as { workerId: string; status: string }[];
+    expect(quotes.find((q) => q.workerId === a.userId)?.status).toBe('ACCEPTED');
+    expect(quotes.find((q) => q.workerId === b.userId)?.status).toBe('DECLINED');
+
+    const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    expect(job.workerId).toBe(a.userId);
+    expect(await m.prisma.jobMatch.count({ where: { jobId } })).toBe(1);
+  });
+
+  it('the customer can decline one quote without matching', async () => {
+    const { c, r, jobId } = await otherPair();
+    const q = (await m.api.post(r, `/v1/jobs/${jobId}/quotes`, { amountPaise: 50000 }).expect(201))
+      .body.quotes[0];
+    const done = await m.api.post(c, `/v1/jobs/${jobId}/quotes/${q.id}/decline`).expect(200);
+    expect(done.body.status).toBe('BROADCASTING'); // still open
+    expect(done.body.quotes[0].status).toBe('DECLINED');
+  });
+
+  it('a Ranger can withdraw their own pending quote, then quote again', async () => {
+    const { r, jobId } = await otherPair();
+    const q = (await m.api.post(r, `/v1/jobs/${jobId}/quotes`, { amountPaise: 50000 }).expect(201))
+      .body.quotes[0];
+    await m.api.post(r, `/v1/jobs/${jobId}/quotes/${q.id}/withdraw`).expect(200);
+    const after = await m.api.post(r, `/v1/jobs/${jobId}/quotes`, { amountPaise: 55000 }).expect(201);
+    expect(after.body.quotes).toHaveLength(1);
+  });
+
+  it('only the invited Ranger can quote; strangers get 403', async () => {
+    const { jobId } = await otherPair();
+    const stranger = await m.ranger({ at: northOf(9000) });
+    await m.api.post(stranger, `/v1/jobs/${jobId}/quotes`, { amountPaise: 50000 }).expect(403);
+  });
+
+  it('quoting a fixed-price category (not "other") is refused', async () => {
+    const { jobId } = await pair(); // electrician, has a fixed price
+    const r2 = await m.ranger({ at: northOf(9000) });
+    const res = await m.api.post(r2, `/v1/jobs/${jobId}/quotes`, { amountPaise: 50000 }).expect(409);
+    expect(res.body.error.details.code).toBe('NOT_QUOTABLE');
   });
 });
 
@@ -426,8 +391,7 @@ describe('the full job lifecycle', () => {
       'REQUESTED',
       'BROADCASTING',
       'MATCHED',
-      'NEGOTIATING',
-      'AGREED',
+      'AGREED', // D-080 (A3): no NEGOTIATING step — matched and agreed in the same transaction
       'EN_ROUTE',
       'ARRIVED',
       'IN_PROGRESS',

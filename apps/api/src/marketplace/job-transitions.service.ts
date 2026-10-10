@@ -10,8 +10,10 @@ import { type Actor, assertTransition } from './job-state';
 
 /**
  * Push copy for statuses where a plain-language nudge is worth an interruption. Statuses not
- * listed here (NEGOTIATING/AGREED go through offers.service's own offerUpdated event; MATCHED is
- * pushed directly by matching.service so the wording can name the Ranger) send no push from here.
+ * listed here send no push from here: MATCHED/AGREED (D-080: now the same moment, same
+ * transaction) are pushed directly by matching.service so the wording can name the Ranger;
+ * legacy NEGOTIATING/AGREED-via-offer still goes through offers.service's own offerUpdated event
+ * for any pre-D-080 job still mid-negotiation.
  * Not yet localised to the recipient's language (i18n keys live client-side only) — see D-050.
  */
 const STATUS_PUSH: Partial<Record<JobStatus, { customer?: PushMessage; worker?: PushMessage }>> = {

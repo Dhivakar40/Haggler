@@ -166,18 +166,22 @@ export class Market {
     return { requestId, jobId };
   }
 
-  /** Agree a price quickly: Ranger offers the band median, customer accepts. */
-  async agree(c: Customer, r: Ranger, jobId: string, amountPaise?: number) {
-    const job = await this.api.get(c, `/v1/jobs/${jobId}`);
-    const amount = amountPaise ?? job.body.band.medianPaise;
-    const offer = await this.api.post(r, `/v1/jobs/${jobId}/offers`, { amountPaise: amount });
-    if (offer.status !== 201)
-      throw new Error(`offer failed ${offer.status} ${JSON.stringify(offer.body)}`);
-    const id = offer.body.offers.at(-1).id;
-    const acc = await this.api.post(c, `/v1/offers/${id}/accept`, {});
-    if (acc.status !== 200)
-      throw new Error(`accept offer failed ${acc.status} ${JSON.stringify(acc.body)}`);
-    return acc.body;
+  /**
+   * D-080: `match()` already agrees the job automatically, at its frozen listed price, in the
+   * same transaction as the accept — there is no separate negotiation step to drive through the
+   * API any more. This helper now exists only so every pre-D-080 caller (which calls it right
+   * after `match()` expecting an AGREED job back) keeps working unchanged; passing `amountPaise`
+   * overwrites the agreed price directly, the same kind of test-only shortcut as `grantTokens`.
+   */
+  async agree(c: Customer, _r: Ranger, jobId: string, amountPaise?: number) {
+    const job = await this.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    if (job.status !== 'AGREED')
+      throw new Error(
+        `agree() called on a job that is ${job.status}, not AGREED (D-080: matching now agrees automatically)`,
+      );
+    if (amountPaise !== undefined && amountPaise !== job.agreedPricePaise)
+      await this.prisma.job.update({ where: { id: jobId }, data: { agreedPricePaise: amountPaise } });
+    return (await this.api.get(c, `/v1/jobs/${jobId}`)).body;
   }
 
   /** Upload a real file through a presigned URL and confirm it. */

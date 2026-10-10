@@ -119,6 +119,13 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - Seeded for every category except `other` (needs a price; `other` keeps its own per-Ranger quote
   flow, A4), `needsSurvey: true` using the old band's median as a placeholder — see the "before
   launch" checklist below.
+- Negotiation is gone for ordinary bookings: `POST /v1/requests/:id/accept` now matches AND agrees
+  the price (the request's frozen `listedPricePaise`) in one step; `GET /v1/jobs/:id`'s `offers`
+  array is always empty for a new job. The old `/v1/offers/*` endpoints are removed.
+- `other` (no fixed price) has its own quote flow instead: `POST /v1/jobs/:id/quotes` (Ranger, one
+  per Ranger per request), `POST .../quotes/:quoteId/{accept,decline}` (customer — accepting
+  performs the match), `POST .../quotes/:quoteId/withdraw` (Ranger). Calling the normal accept
+  endpoint on an `other` job is refused with `QUOTE_REQUIRED`.
 
 ## Push notifications (Phase 5)
 

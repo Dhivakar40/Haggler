@@ -691,6 +691,16 @@ enum JobAddOnStatus {
   @@map("job_add_on_status")
 }
 
+/// D-080 (A4): "other"-category quotes. Each Ranger may send exactly one quote per request (no
+/// counters); the customer picks one, which performs the match.
+enum JobQuoteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+
+  @@map("job_quote_status")
+}
+
 enum OfferStatus {
   PENDING
   ACCEPTED
@@ -780,11 +790,20 @@ model ServiceRequest {
   urgency          Urgency
   scheduledFor     DateTime?                            @map("scheduled_for") @db.Timestamptz(6)
   genderPreference GenderPreference                     @default(ANY) @map("gender_preference")
-  /// Price band shown to both parties, frozen when the request is created.
+  /// Price band shown to both parties, frozen when the request is created. Kept for historical
+  /// reads of pre-D-080 requests; no longer used to decide a new job's price (see listedPricePaise).
   bandScope        PriceBandScope                       @map("band_scope")
   bandMinPaise     Int                                  @map("band_min_paise")
   bandMedianPaise  Int                                  @map("band_median_paise")
   bandMaxPaise     Int                                  @map("band_max_paise")
+  /// D-080 (A3): the fixed price list entry resolved and frozen at request creation, so the price
+  /// a customer saw when booking never shifts under them while Rangers are being broadcast to.
+  /// Null only for the "other" category, which has no fixed price (A4: Rangers quote instead).
+  listedPricePaise    Int?      @map("listed_price_paise")
+  listedPriceCityTier CityTier? @map("listed_price_city_tier")
+  /// True when listedPricePaise is a fixed inspection/visit charge (A2) rather than a full service
+  /// price — the Ranger proposes add-ons from the catalogue once on site.
+  isInspectionCharge  Boolean   @default(false) @map("is_inspection_charge")
   createdAt        DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -839,6 +858,7 @@ model Job {
   broadcasts RequestBroadcast[]
   offers     Offer[]
   addOns     JobAddOn[]
+  quotes     JobQuote[]
   events     JobEvent[]
   photos     JobPhoto[]
   locations  JobLocation[]
@@ -948,6 +968,25 @@ model JobAddOn {
 
   @@index([jobId])
   @@map("job_add_ons")
+}
+
+/// D-080 (A4): a Ranger's one quote for an "other"-category request — no counters, no rounds.
+/// The customer accepts one (performing the match) or declines it; UNIQUE(job_id, worker_id)
+/// enforces "one quote per Ranger per request" at the database level.
+model JobQuote {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String         @map("job_id") @db.Uuid
+  workerId    String         @map("worker_id") @db.Uuid
+  amountPaise Int            @map("amount_paise")
+  status      JobQuoteStatus @default(PENDING)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, workerId])
+  @@index([jobId, status])
+  @@map("job_quotes")
 }
 
 model JobEvent {

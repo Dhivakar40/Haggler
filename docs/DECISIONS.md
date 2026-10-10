@@ -993,3 +993,78 @@ Not yet done (tracked for the next A1/A3 commits): the customer-facing booking f
 these new endpoints yet (still reads the old `offers`/band path); `JobAddOn` has no propose/approve
 endpoints yet (schema only); the negotiation UI/endpoints themselves (`NegotiationPanel`, `Offer`,
 `OffersService`) are untouched — Sub-phase A3's job.
+
+## D-080: Sub-phase A3/A4 — negotiation removed, replaced by an auto-agreed fixed price and "other"'s own quote table
+
+**The price is resolved and frozen at booking time, not match time.** `requests.service.ts`'s
+`create()` now resolves the fixed price the same way the old price band was frozen — via
+`CatalogService.getPriceListEntry()` (A1) — and stores it on the new `ServiceRequest.listedPricePaise`
+/`listedPriceCityTier`/`isInspectionCharge` columns (migration
+`20261010020000_phase14_fixed_price_booking`) before the request ever broadcasts. The reasoning is
+the same D3 decision that froze the price band in the first place: a customer must see the real
+price before committing, and it must not shift while Rangers are being invited. An inspection-only
+category (A2, `ServiceCategory.inspectionChargePaise`) always wins over the normal catalogue price.
+`other` gets neither — `getPriceListEntry` 404s for it by design (A1 excludes it from seeding), so
+`listedPricePaise` stays null and the request falls through to A4's quote flow instead.
+
+**Matching and agreeing the price are now the same transaction.** `MatchingService.accept()`'s
+first-accept-wins transaction (D3, unchanged) now ends with one more step in the same
+`$transaction`: `JobTransitions.move(... MATCHED -> AGREED ..., agreedPricePaise:
+job.request.listedPricePaise)`, actor `SYSTEM`. `job-state.ts`'s `TRANSITIONS` table grew exactly
+one new edge, `MATCHED: { AGREED: [SYSTEM] }`, alongside the existing `MATCHED -> NEGOTIATING`
+edge, which stays only so a job created before this migration and still sitting in
+`NEGOTIATING` can be read, cancelled or finished — no new job is ever routed through it, and no
+schema value was removed. The practical effect: `GET /v1/jobs/:id`'s `status` goes straight from
+`BROADCASTING` to `MATCHED` to `AGREED` with no visible pause, and `offers: []` on every new job.
+
+**"Other" gets its own table, `JobQuote` (A1's schema), not a repurposed `Offer`.** Before D-080,
+"other" rode the exact same Offer/negotiation machinery as every other category (an oversized
+DEFAULT price band that never triggered outside-band confirmation — see the Sub-phase 4/Part G
+entry above). That reuse made sense when both flows were "two parties, one job, back-and-forth
+rounds." A4's actual shape is the opposite: *several* Rangers, *no* match yet, *one* flat amount
+each, decided by the customer picking rather than either side negotiating — overloading `Offer`'s
+`round`/`fromRole` to mean something they don't would have been the second pricing system the
+original Part G entry explicitly said not to build. So: `QuotesService` (new,
+`marketplace/quotes.service.ts`), four endpoints under `/v1/jobs/:id/quotes`
+(submit/withdraw/accept/decline), and `JobQuote` enforces "one quote per Ranger per request" with
+a real unique constraint (`@@unique([jobId, workerId])`) rather than application logic. Accepting a
+quote performs the exact same match + auto-agree sequence `MatchingService.accept()` does
+(`BROADCASTING -> MATCHED -> AGREED` in one transaction, other `PENDING` quotes marked
+`DECLINED`), just triggered by the customer instead of a first-accept race — there was no race to
+resolve, since only one customer ever decides.
+
+**`MatchingService.accept()` now refuses "other" outright** (`QUOTE_REQUIRED`, checked before the
+invited/lock/race logic) rather than letting a Ranger instant-match a catch-all request the old
+way. A Ranger who tries the old accept endpoint on an "other" job is told to quote instead.
+
+**`JobViewService.loadForParty`'s authorization grew one more allowed case.** Previously only the
+request's customer or its matched Ranger could read a job. A4 needed a third: a Ranger who has sent
+a quote but isn't matched yet (so they can read the response from their own `POST .../quotes` call,
+and poll status). Found by writing the A4 e2e tests, not by inspection — the first version of
+`QuotesService.submit()` returned a 404 to the very Ranger who'd just quoted. Fixed by checking
+`job.quotes.some(q => q.workerId === viewerId)` alongside the existing two checks; privacy is
+unaffected because address/location visibility is gated separately, on `!!job.workerId` (actually
+matched), not on who's allowed to ask at all. `QuotesService.withdraw()` sidesteps the same trap a
+different way: it deletes the quote (not soft-cancels, so the unique constraint lets the same
+Ranger quote again afterward) and returns a plain `{ ok: true }` rather than attempting a job view
+the now-quoteless Ranger would immediately fail to pass.
+
+**Test-harness fallout, `apps/api/test/market-helpers.ts`:** `Market.agree()` used to drive the
+real offer→counter→accept endpoints; those endpoints are gone. Rewritten to match D-080's actual
+behavior — `match()` already agrees automatically, so `agree()` now just asserts the job reached
+`AGREED` and, if a specific `amountPaise` was requested, overwrites `agreedPricePaise` directly via
+Prisma (the same kind of test-only shortcut `grantTokens` already uses for wallet balances). Kept
+the exact same call signature on purpose: of the 27 call sites across 7 e2e files, 26 just
+`await m.agree(c, r, jobId)` and needed zero changes; only `jobs.e2e-spec.ts`'s one
+`m.agree(c, r, jobId, 40000)` call relies on the override. `jobs.e2e-spec.ts`'s own `describe('negotiation', ...)`
+block (offer/counter/accept/outside-band/expiry/reject/round-limit) is replaced by two new ones —
+fixed-price auto-agree, and the A4 quote flow — and the full-lifecycle test's job-event audit trail
+assertion dropped the `NEGOTIATING` entry it can no longer produce.
+
+Not yet done: `OffersController`'s HTTP routes and `JobsController`'s `POST :id/offers` are removed,
+but `OffersService` itself (and its `sweep()` housekeeping, still wired into the scheduler) is left
+in place rather than deleted — it's unreachable dead code for any job created after this migration,
+kept only so a pre-D-080 job still mid-negotiation can still be read and finished out; deleting it
+outright would have meant also deciding what happens to any such job already in flight, which this
+pass didn't need to answer. Mobile (`NegotiationPanel.tsx`, `WalletScreen`'s token model, `A5`'s
+`JobAddOn` propose/approve UI, and the A4 quote UI for both sides) is still to come.

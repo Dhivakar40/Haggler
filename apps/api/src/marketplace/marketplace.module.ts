@@ -11,13 +11,9 @@ import { MatchingService } from './matching.service';
 import { OffersService } from './offers.service';
 import { PresenceService } from './presence.service';
 import { PublicTrackController, PublicTrackPageController } from './public-track.controller';
+import { QuotesService } from './quotes.service';
 import { RealtimeGateway } from './realtime.gateway';
-import {
-  ChatController,
-  JobsController,
-  OffersController,
-  RequestsController,
-} from './requests.controller';
+import { ChatController, JobsController, RequestsController } from './requests.controller';
 import { RequestsService } from './requests.service';
 import { SchedulerService } from './scheduler.service';
 import { TrackingService } from './tracking.service';
@@ -29,7 +25,6 @@ import { WorkerPresenceController } from './worker-presence.controller';
   controllers: [
     RequestsController,
     JobsController,
-    OffersController,
     ChatController,
     WorkerPresenceController,
     PublicTrackController,
@@ -44,6 +39,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     MatchingService,
     RequestsService,
     OffersService,
+    QuotesService,
     LifecycleService,
     ChatService,
     TrackingService,
@@ -59,6 +55,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     JobTransitions,
     JobViewService,
     OffersService,
+    QuotesService,
     LifecycleService,
     RequestsService,
     ChatService,

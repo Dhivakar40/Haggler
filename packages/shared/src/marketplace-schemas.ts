@@ -106,6 +106,17 @@ export const offerDtoSchema = z.object({
 });
 export type OfferDto = z.infer<typeof offerDtoSchema>;
 
+/** D-080 (A4): one Ranger's quote on an "other"-category request. */
+export const quoteDtoSchema = z.object({
+  id: uuid,
+  workerId: uuid,
+  workerFirstName: z.string().nullable(),
+  amountPaise: paiseSchema,
+  status: z.enum(['PENDING', 'ACCEPTED', 'DECLINED']),
+  createdAt: z.string(),
+});
+export type QuoteDto = z.infer<typeof quoteDtoSchema>;
+
 const partySchema = z.object({ id: uuid, firstName: z.string().nullable() });
 
 export const jobDtoSchema = z.object({
@@ -124,6 +135,10 @@ export const jobDtoSchema = z.object({
   addressLine: z.string().nullable(),
   location: z.object({ latitude, longitude }).nullable(),
   band: bandSchema,
+  /** D-080 (A3): the frozen fixed-list price for this request, or null only for "other" (A4:
+   * Rangers quote instead — see `quotes`). */
+  listedPricePaise: paiseSchema.nullable(),
+  isInspectionCharge: z.boolean(),
   agreedPricePaise: paiseSchema.nullable(),
   genderPreference: z.enum(['ANY', 'FEMALE', 'MALE']),
   genderPreferenceMet: z.boolean().nullable(),
@@ -150,6 +165,8 @@ export const jobDtoSchema = z.object({
     })
     .nullable(),
   offers: z.array(offerDtoSchema),
+  /** D-080 (A4): populated only for "other"-category jobs still at BROADCASTING/MATCHED. */
+  quotes: z.array(quoteDtoSchema),
   /** Phase 4: whether the viewer can/did leave a review for this job. */
   review: z.object({ canReview: z.boolean(), submitted: z.boolean() }),
   /** The 4-digit code the customer reads out; shown to the CUSTOMER only, while the Ranger is there. */
@@ -248,12 +265,22 @@ export const incomingRequestSchema = z.object({
   urgency: z.enum(['IMMEDIATE', 'SCHEDULED']),
   scheduledFor: z.string().nullable(),
   band: bandSchema,
+  /** D-080 (A3): null only for "other" — accepting quotes instead of a fixed price (A4). */
+  listedPricePaise: paiseSchema.nullable(),
+  isInspectionCharge: z.boolean(),
   deadline: z.string().nullable(),
   photoCount: z.number().int(),
   hasVoiceNote: z.boolean(),
 });
 export type IncomingRequest = z.infer<typeof incomingRequestSchema>;
 export const incomingListSchema = z.array(incomingRequestSchema);
+
+// ---- Quotes (D-080, A4: "other" category) -----------------------------------------------------
+
+export const quoteInputSchema = z.object({
+  amountPaise: z.number().int().min(100).max(10_000_000),
+});
+export type QuoteInput = z.infer<typeof quoteInputSchema>;
 
 // ---- Job actions ------------------------------------------------------------------------------
 
