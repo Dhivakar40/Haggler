@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ERROR_CODES, PRICE_BAND_SCOPES } from './constants';
+import { CITY_TIERS, ERROR_CODES, PRICE_BAND_SCOPES } from './constants';
 
 /** Indian PIN code: 6 digits, first digit 1-9. */
 export const pincodeSchema = z
@@ -64,5 +64,55 @@ export const serviceCategorySchema = z.object({
   nameKey: z.string(),
   icon: z.string(),
   requiresLicense: z.boolean(),
+  /// D-080 (A2): non-null means "uncertain scope" — the customer books this fixed inspection
+  /// charge instead of a catalogue price, and add-ons come later via JobAddOn.
+  inspectionChargePaise: paiseSchema.nullable(),
 });
 export type ServiceCategoryDto = z.infer<typeof serviceCategorySchema>;
+
+// ---- Price list (D-080, Sub-phase A) ---------------------------------------------------
+
+export const priceListEntrySchema = z.object({
+  id: z.string().uuid(),
+  categorySlug: z.string(),
+  cityTier: z.enum(CITY_TIERS),
+  pricePaise: paiseSchema,
+  needsSurvey: z.boolean(),
+  isActive: z.boolean(),
+});
+export type PriceListEntryDto = z.infer<typeof priceListEntrySchema>;
+
+export const priceListAddOnSchema = z.object({
+  id: z.string().uuid(),
+  categorySlug: z.string(),
+  name: z.string(),
+  pricePaise: paiseSchema,
+  isActive: z.boolean(),
+});
+export type PriceListAddOnDto = z.infer<typeof priceListAddOnSchema>;
+
+/** Admin create/update of one (category, city tier) price. `needsSurvey` defaults to false here
+ * — an admin setting a price explicitly is, by definition, no longer using a placeholder. */
+export const adminPriceListEntryUpsertSchema = z.object({
+  categoryId: z.string().uuid(),
+  cityTier: z.enum(CITY_TIERS).default('DEFAULT'),
+  pricePaise: z.number().int().min(1).max(100_000_00),
+  needsSurvey: z.boolean().optional().default(false),
+  isActive: z.boolean().optional().default(true),
+});
+export type AdminPriceListEntryUpsertInput = z.infer<typeof adminPriceListEntryUpsertSchema>;
+
+export const adminPriceListAddOnUpsertSchema = z.object({
+  categoryId: z.string().uuid(),
+  name: z.string().trim().min(2).max(80),
+  pricePaise: z.number().int().min(1).max(100_000_00),
+  isActive: z.boolean().optional().default(true),
+});
+export type AdminPriceListAddOnUpsertInput = z.infer<typeof adminPriceListAddOnUpsertSchema>;
+
+/** Admin set/clear of a category's fixed inspection charge (A2). Null clears it, putting the
+ * category back on the normal fixed-price list. */
+export const adminInspectionChargeSchema = z.object({
+  inspectionChargePaise: z.number().int().min(1).max(100_000_00).nullable(),
+});
+export type AdminInspectionChargeInput = z.infer<typeof adminInspectionChargeSchema>;

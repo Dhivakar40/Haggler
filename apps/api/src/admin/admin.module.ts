@@ -5,6 +5,7 @@ import { AdminController } from './admin.controller';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
 import { AdminListingsService } from './admin-listings.service';
+import { AdminPriceListService } from './admin-price-list.service';
 import { AdminReviewsService } from './admin-reviews.service';
 
 @Module({
@@ -17,6 +18,7 @@ import { AdminReviewsService } from './admin-reviews.service';
     AdminEmployerService,
     AdminReviewsService,
     AdminListingsService,
+    AdminPriceListService,
   ],
 })
 export class AdminModule {}

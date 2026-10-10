@@ -106,6 +106,20 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
 - `PAYMENTS_SANDBOX_SECRET` signs sandbox payments; it has a fixed dev default and is never used
   when `PAYMENTS_MODE=test`, so it does not need to be set for a real deployment.
 
+## Fixed price list (Phase Commerce + Safety, Sub-phase A, D-080)
+
+- `price_list_entries` (one row per category + city tier, `TIER_1`/`TIER_2`/`DEFAULT`) replaces
+  negotiation for ordinary bookings; `price_bands` stays in the schema, untouched and readable, but
+  nothing new is written to it once Sub-phase A3 removes the negotiation endpoints.
+- Public read: `GET /v1/price-list?category=<slug>&cityTier=<tier>` (tier optional, falls back to
+  `DEFAULT`); `GET /v1/price-list/add-ons?category=<slug>` for the add-on catalogue.
+- Admin (FINANCE role): `GET/POST /v1/admin/price-list`, `GET/POST /v1/admin/price-list/add-ons`,
+  `POST /v1/admin/categories/:id/inspection-charge`. No admin UI page yet — REST-only, same gap as
+  the employer-verification queue above.
+- Seeded for every category except `other` (needs a price; `other` keeps its own per-Ranger quote
+  flow, A4), `needsSurvey: true` using the old band's median as a placeholder — see the "before
+  launch" checklist below.
+
 ## Push notifications (Phase 5)
 
 - Default `PUSH_MODE=sandbox`: no push leaves the machine; sent messages are logged (development
@@ -340,6 +354,10 @@ the EAS dashboard (`expo.dev` → your project → Builds).
 ## Before launch (ops checklist)
 
 - [ ] Review the seeded DEFAULT price bands per category (placeholders, `sample_size = 0`).
+- [ ] Review the seeded fixed price list (D-080, `price_list_entries`, placeholders — `needsSurvey:
+      true`) and set real Chennai rates via `POST /v1/admin/price-list` before relying on it for
+      real bookings; same for the "before launch" wallet/token/Plus items below, this one has no
+      admin UI page yet either, REST-only.
 - [ ] Set `tier_bonus_monthly_budget_paise` and `damage_coverage_cap_paise` (both 0 = disabled).
 - [ ] Have native speakers review the hi/ta/kn/te translations.
 - [ ] Fill `minimum_wage_rules` with counsel-confirmed values (intentionally empty).

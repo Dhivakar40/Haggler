@@ -949,3 +949,47 @@ touching `WorkerStats`, for every category.
 
 The category is checked by slug (`OTHER_CATEGORY_SLUG`, `packages/shared/src/constants.ts`), not a
 new schema flag — a single special case didn't earn a migration.
+
+## D-080: Phase Commerce + Safety, Sub-phase A1/A2/A5 — the admin-managed fixed price list
+
+**Negotiation is being replaced with an admin-managed fixed price list** (percentage platform fee
+replacing tokens comes in Sub-phase B). This entry covers the schema and API landed first: three
+new tables (`price_list_entries`, `price_list_add_ons`, `job_add_ons`), two new enums (`city_tier`,
+`job_add_on_status`), and one new nullable column (`service_categories.inspection_charge_paise`).
+Nothing existing is dropped or rewritten — `offers` and `price_bands` stay in place, fully
+readable, simply unused once Sub-phase A3 removes the negotiation UI and endpoints that wrote to
+them. Migration: `prisma/migrations/20261010000000_phase13_price_list`.
+
+**One row per (category, city tier), DEFAULT as the universal fallback.** `PriceListEntry` is keyed
+on `(categoryId, cityTier)` with a unique constraint, so an admin sets a `TIER_1`/`TIER_2` override
+only where the price genuinely differs by city; `CatalogService.getPriceListEntry` resolves the
+requested tier and falls back to `DEFAULT` when no tier-specific row exists — same fallback shape as
+the old `PriceBand` resolver, deliberately, so the client-side calling convention barely changes.
+Seeded for every existing category except `other` (A4 gives it its own per-Ranger quote flow
+instead — a fixed price makes no sense for a catch-all category), using the old band's median as a
+non-zero starting number, `needsSurvey: true`. An admin explicitly setting a price through
+`POST /v1/admin/price-list` always clears `needsSurvey` unless told otherwise — the flag means
+"nobody has confirmed this number is real," not "this number is old."
+
+**A2, uncertain-scope categories:** `inspectionChargePaise` on `ServiceCategory` is nullable and
+off by default for every seeded category — nothing changes for a normal booking until an admin
+opts a category in. When set, the category is "inspection-only": the customer books at that fixed
+charge, and the Ranger proposes `PriceListAddOn` items from that category's own catalogue once on
+site (A5's `JobAddOn`, still to be wired into the booking/job flow — this entry is schema + admin
+CRUD only; see the next entry for the customer-approval flow once it lands).
+
+**A5, mid-job add-ons snapshot their price and name at proposal time** (`JobAddOn.name`/
+`pricePaise`, denormalized rather than joined live from `PriceListAddOn`) so a later catalogue price
+edit can never silently change what a customer already approved mid-job. `PriceListAddOn` deletion
+is blocked (`onDelete: Restrict` on `JobAddOn.addOnId`) for the same reason an add-on that's ever
+been proposed on a real job must stay referenceable.
+
+**Admin endpoints are FINANCE-role, matching every other money-adjacent admin action** in this
+codebase (`AdminRoles('FINANCE')`, same guard pattern as the rest of `admin.controller.ts`). Every
+write goes through `AuditService.record` inside the same transaction as the data change, same
+pattern as listing cancellation and employer verification.
+
+Not yet done (tracked for the next A1/A3 commits): the customer-facing booking flow doesn't call
+these new endpoints yet (still reads the old `offers`/band path); `JobAddOn` has no propose/approve
+endpoints yet (schema only); the negotiation UI/endpoints themselves (`NegotiationPanel`, `Offer`,
+`OffersService`) are untouched — Sub-phase A3's job.

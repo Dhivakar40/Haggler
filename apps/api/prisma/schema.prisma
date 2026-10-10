@@ -44,6 +44,17 @@ enum PriceBandScope {
   @@map("price_band_scope")
 }
 
+/// D-080: coarse city-cost tiers for the admin-managed fixed price list, replacing the
+/// computed-from-history PriceBand for everyday booking. TIER_1 = metro, TIER_2 = other large
+/// cities, DEFAULT = everywhere else (and the fallback when no tier-specific row exists).
+enum CityTier {
+  TIER_1
+  TIER_2
+  DEFAULT
+
+  @@map("city_tier")
+}
+
 enum AdminRoleType {
   KYC_REVIEWER
   DISPUTE_AGENT
@@ -206,16 +217,61 @@ model ServiceCategory {
   requiresLicense Boolean  @default(false) @map("requires_license") // Tier 3 (D2)
   isActive        Boolean  @default(true) @map("is_active")
   sortOrder       Int      @default(0) @map("sort_order")
+  /// D-080 (A2): non-null marks this category "uncertain-scope" (e.g. repairs where the fault
+  /// isn't known until a Ranger looks). The customer books and pays this fixed charge instead of
+  /// a catalogue price; the Ranger then proposes JobAddOn items from the price list on site.
+  inspectionChargePaise Int? @map("inspection_charge_paise")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   priceBands       PriceBand[]
+  priceListEntries PriceListEntry[]
+  priceListAddOns  PriceListAddOn[]
   workerCategories WorkerCategory[]
   requests         ServiceRequest[]
   contractListings ContractListing[]
   campusListings   CampusListing[]
 
   @@map("service_categories")
+}
+
+/// D-080 (A1): the admin-managed fixed price list that replaces negotiation for ordinary
+/// bookings. One row per (category, city tier); DEFAULT is the fallback when no tier-specific
+/// row exists for a customer's city. Seeded with `needsSurvey = true` placeholder prices for
+/// every existing category — an admin replaces each with a real Chennai rate before it's safe to
+/// treat as final (see docs/DECISIONS.md D-080).
+model PriceListEntry {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId  String   @map("category_id") @db.Uuid
+  cityTier    CityTier @default(DEFAULT) @map("city_tier")
+  pricePaise  Int      @map("price_paise")
+  /// True until an admin has confirmed this is a real, surveyed rate rather than a placeholder.
+  needsSurvey Boolean  @default(true) @map("needs_survey")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, cityTier])
+  @@map("price_list_entries")
+}
+
+/// D-080 (A2/A5): catalogue of add-on line items a Ranger may propose mid-job (via JobAddOn),
+/// scoped to a category so the customer only ever sees relevant extras.
+model PriceListAddOn {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  name       String
+  pricePaise Int      @map("price_paise")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  jobAddOns JobAddOn[]
+
+  @@map("price_list_add_ons")
 }
 
 model PriceBand {
@@ -625,6 +681,16 @@ enum MediaStatus {
   @@map("media_status")
 }
 
+/// D-080 (A5): mid-job add-on proposals. A Ranger proposes a catalogue item; the customer must
+/// approve it in the app before it counts toward the final price — no silent upcharging.
+enum JobAddOnStatus {
+  PROPOSED
+  APPROVED
+  DECLINED
+
+  @@map("job_add_on_status")
+}
+
 enum OfferStatus {
   PENDING
   ACCEPTED
@@ -772,6 +838,7 @@ model Job {
   match      JobMatch?
   broadcasts RequestBroadcast[]
   offers     Offer[]
+  addOns     JobAddOn[]
   events     JobEvent[]
   photos     JobPhoto[]
   locations  JobLocation[]
@@ -860,6 +927,27 @@ model Offer {
   @@unique([jobId, round])
   @@index([status, expiresAt])
   @@map("offers")
+}
+
+/// D-080 (A5): a Ranger's mid-job proposal of a catalogue add-on. Name and price are snapshotted
+/// at proposal time so a later price-list edit never silently changes what the customer agreed to.
+model JobAddOn {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String         @map("job_id") @db.Uuid
+  addOnId     String         @map("add_on_id") @db.Uuid
+  name        String
+  pricePaise  Int            @map("price_paise")
+  status      JobAddOnStatus @default(PROPOSED)
+  proposedAt  DateTime       @default(now()) @map("proposed_at") @db.Timestamptz(6)
+  decidedAt   DateTime?      @map("decided_at") @db.Timestamptz(6)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job   Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  addOn PriceListAddOn @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+
+  @@index([jobId])
+  @@map("job_add_ons")
 }
 
 model JobEvent {

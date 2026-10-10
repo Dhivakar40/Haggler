@@ -1,5 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { PriceBandDto, ServiceCategoryDto } from '@haggler/shared';
+import type { CityTier } from '@prisma/client';
+import type {
+  PriceBandDto,
+  PriceListAddOnDto,
+  PriceListEntryDto,
+  ServiceCategoryDto,
+} from '@haggler/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { type PriceBandRow, resolvePriceBand } from './price-band.resolver';
 
@@ -20,6 +26,56 @@ export class CatalogService {
       nameKey: c.nameKey,
       icon: c.icon,
       requiresLicense: c.requiresLicense,
+      inspectionChargePaise: c.inspectionChargePaise,
+    }));
+  }
+
+  /** D-080 (A1): the fixed price for a category, resolved for a city tier with DEFAULT as the
+   * fallback when no tier-specific row has been set. */
+  async getPriceListEntry(categorySlug: string, cityTier?: CityTier): Promise<PriceListEntryDto> {
+    const category = await this.prisma.serviceCategory.findFirst({
+      where: { slug: categorySlug, isActive: true },
+    });
+    if (!category) throw new NotFoundException(`Unknown category "${categorySlug}"`);
+
+    const tier = cityTier ?? 'DEFAULT';
+    const row =
+      tier !== 'DEFAULT'
+        ? await this.prisma.priceListEntry.findFirst({
+            where: { categoryId: category.id, cityTier: tier, isActive: true },
+          })
+        : null;
+    const resolved =
+      row ??
+      (await this.prisma.priceListEntry.findFirst({
+        where: { categoryId: category.id, cityTier: 'DEFAULT', isActive: true },
+      }));
+    if (!resolved) throw new NotFoundException(`No price set for "${categorySlug}"`);
+    return {
+      id: resolved.id,
+      categorySlug: category.slug,
+      cityTier: resolved.cityTier,
+      pricePaise: resolved.pricePaise,
+      needsSurvey: resolved.needsSurvey,
+      isActive: resolved.isActive,
+    };
+  }
+
+  async listAddOns(categorySlug: string): Promise<PriceListAddOnDto[]> {
+    const category = await this.prisma.serviceCategory.findFirst({
+      where: { slug: categorySlug, isActive: true },
+    });
+    if (!category) throw new NotFoundException(`Unknown category "${categorySlug}"`);
+    const rows = await this.prisma.priceListAddOn.findMany({
+      where: { categoryId: category.id, isActive: true },
+      orderBy: { name: 'asc' },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      categorySlug: category.slug,
+      name: a.name,
+      pricePaise: a.pricePaise,
+      isActive: a.isActive,
     }));
   }
 

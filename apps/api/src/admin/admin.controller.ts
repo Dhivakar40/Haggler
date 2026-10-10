@@ -4,8 +4,11 @@ import { Throttle } from '@nestjs/throttler';
 import {
   adminCancelListingSchema,
   adminHideReviewSchema,
+  adminInspectionChargeSchema,
   adminKycDecisionSchema,
   adminLoginSchema,
+  adminPriceListAddOnUpsertSchema,
+  adminPriceListEntryUpsertSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
 import {
@@ -21,6 +24,7 @@ import { AdminAuthGuard, AdminAuthService } from './admin-auth';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
 import { AdminListingsService } from './admin-listings.service';
+import { AdminPriceListService } from './admin-price-list.service';
 import { AdminReviewsService } from './admin-reviews.service';
 
 const queueQuery = z.object({
@@ -47,6 +51,7 @@ export class AdminController {
     private readonly employers: AdminEmployerService,
     private readonly reviews: AdminReviewsService,
     private readonly listings: AdminListingsService,
+    private readonly priceList: AdminPriceListService,
   ) {}
 
   @Post('auth/login')
@@ -228,5 +233,71 @@ export class AdminController {
     @CurrentAdmin() admin: AuthAdmin,
   ) {
     return this.listings.cancelCampus(id, body.reason, admin);
+  }
+
+  @Get('price-list')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('FINANCE')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'The full fixed price list (D-080), every category and city tier' })
+  listPriceList() {
+    return this.priceList.listEntries();
+  }
+
+  @Post('price-list')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('FINANCE')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Set the price for one (category, city tier)' })
+  @ApiZodBody(adminPriceListEntryUpsertSchema)
+  upsertPriceListEntry(
+    @Body(new ZodPipe(adminPriceListEntryUpsertSchema))
+    body: z.infer<typeof adminPriceListEntryUpsertSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.priceList.upsertEntry(body, admin);
+  }
+
+  @Get('price-list/add-ons')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('FINANCE')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'The full add-on catalogue (D-080)' })
+  listPriceListAddOns() {
+    return this.priceList.listAddOns();
+  }
+
+  @Post('price-list/add-ons')
+  @HttpCode(201)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('FINANCE')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add a catalogue add-on to a category' })
+  @ApiZodBody(adminPriceListAddOnUpsertSchema)
+  createPriceListAddOn(
+    @Body(new ZodPipe(adminPriceListAddOnUpsertSchema))
+    body: z.infer<typeof adminPriceListAddOnUpsertSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.priceList.createAddOn(body, admin);
+  }
+
+  @Post('categories/:id/inspection-charge')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('FINANCE')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Set or clear a category\'s fixed inspection charge (A2, uncertain-scope repairs)',
+  })
+  @ApiZodBody(adminInspectionChargeSchema)
+  setInspectionCharge(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminInspectionChargeSchema))
+    body: z.infer<typeof adminInspectionChargeSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.priceList.setInspectionCharge(id, body, admin);
   }
 }

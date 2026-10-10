@@ -89,6 +89,11 @@ export type ClientLeagueTier = (typeof CLIENT_LEAGUE_TIERS)[number];
 export const PRICE_BAND_SCOPES = ['PINCODE_CLUSTER', 'CITY', 'DEFAULT'] as const;
 export type PriceBandScope = (typeof PRICE_BAND_SCOPES)[number];
 
+/** D-080: coarse city-cost tiers for the admin-managed fixed price list. DEFAULT is both a real
+ * tier and the fallback when no tier-specific row exists for a customer's city. */
+export const CITY_TIERS = ['TIER_1', 'TIER_2', 'DEFAULT'] as const;
+export type CityTier = (typeof CITY_TIERS)[number];
+
 export const CONSENT_PURPOSES = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'KYC_PROCESSING'] as const;
 export type ConsentPurposeName = (typeof CONSENT_PURPOSES)[number];
 

@@ -2,7 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { Public } from '../common/decorators';
 import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
-import { pincodeSchema } from '@haggler/shared';
+import { CITY_TIERS, pincodeSchema } from '@haggler/shared';
 import { ZodPipe } from '../common/zod.pipe';
 import { CatalogService } from './catalog.service';
 
@@ -10,6 +10,15 @@ const priceBandQuery = z.object({
   category: z.string().min(1).max(64),
   pincode: pincodeSchema.optional(),
   city: z.string().min(1).max(80).optional(),
+});
+
+const priceListQuery = z.object({
+  category: z.string().min(1).max(64),
+  cityTier: z.enum(CITY_TIERS).optional(),
+});
+
+const addOnsQuery = z.object({
+  category: z.string().min(1).max(64),
 });
 
 @ApiTags('catalog')
@@ -38,5 +47,27 @@ export class CatalogController {
   @ApiOkResponse({ description: 'A PriceBandDto' })
   priceBand(@Query(new ZodPipe(priceBandQuery)) q: z.infer<typeof priceBandQuery>) {
     return this.catalog.getPriceBand(q.category, q.pincode, q.city);
+  }
+
+  @Get('price-list')
+  @ApiOperation({
+    summary: 'The fixed listed price for a category (D-080), resolved for a city tier',
+    description:
+      'Falls back to the DEFAULT tier when no row exists for the requested tier. ' +
+      '`needsSurvey` is true until an admin has confirmed this is a real, surveyed rate.',
+  })
+  @ApiQuery({ name: 'category', required: true, example: 'electrician' })
+  @ApiQuery({ name: 'cityTier', required: false, enum: CITY_TIERS })
+  @ApiOkResponse({ description: 'A PriceListEntryDto' })
+  priceList(@Query(new ZodPipe(priceListQuery)) q: z.infer<typeof priceListQuery>) {
+    return this.catalog.getPriceListEntry(q.category, q.cityTier);
+  }
+
+  @Get('price-list/add-ons')
+  @ApiOperation({ summary: 'Catalogue add-ons available for a category (D-080)' })
+  @ApiQuery({ name: 'category', required: true, example: 'electrician' })
+  @ApiOkResponse({ description: 'Array of PriceListAddOnDto' })
+  addOns(@Query(new ZodPipe(addOnsQuery)) q: z.infer<typeof addOnsQuery>) {
+    return this.catalog.listAddOns(q.category);
   }
 }

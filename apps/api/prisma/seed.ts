@@ -142,6 +142,25 @@ async function main(): Promise<void> {
         data: { categoryId: category.id, scope: 'DEFAULT', sampleSize: 0, ...data },
       });
     }
+
+    // D-080 (A1): the admin-managed fixed price list. "Other" has no fixed price — it keeps its
+    // own per-Ranger quote flow (A4) — so it's deliberately excluded here. Every other category
+    // gets one DEFAULT-tier placeholder, needsSurvey = true, using the old band's median as a
+    // starting point purely so the number isn't zero; it still needs a real Chennai rate before
+    // launch, same caveat as the price bands above.
+    if (c.slug !== 'other') {
+      await prisma.priceListEntry.upsert({
+        where: { categoryId_cityTier: { categoryId: category.id, cityTier: 'DEFAULT' } },
+        // Never overwrite a price an admin has since surveyed and set.
+        update: {},
+        create: {
+          categoryId: category.id,
+          cityTier: 'DEFAULT',
+          pricePaise: rupees(median),
+          needsSurvey: true,
+        },
+      });
+    }
   }
 
   for (const cfg of SYSTEM_CONFIG) {
@@ -197,14 +216,15 @@ async function main(): Promise<void> {
     });
   }
 
-  const [cats, bands, bundles, plans] = await Promise.all([
+  const [cats, bands, priceListEntries, bundles, plans] = await Promise.all([
     prisma.serviceCategory.count(),
     prisma.priceBand.count(),
+    prisma.priceListEntry.count(),
     prisma.tokenBundle.count(),
     prisma.plusPlan.count(),
   ]);
   console.log(
-    `Seed complete: ${cats} categories, ${bands} price bands, ${bundles} token bundles, ${plans} Plus plans`,
+    `Seed complete: ${cats} categories, ${bands} price bands, ${priceListEntries} price list entries, ${bundles} token bundles, ${plans} Plus plans`,
   );
 }
 
