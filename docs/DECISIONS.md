@@ -1247,10 +1247,20 @@ instant in sandbox, with no approval queue. Flagged in code comments on both met
 
 Covered by two new unit suites (`fee.service.spec.ts`, 5 tests; `worker-wallet.service.spec.ts`, 7
 tests, both the mocked-`PrismaService` pattern established in D-080). API unit suite green:
-186/186 (168 + 5 + 7 + 6 from A5's job-addons suite already counted once). `wallet.e2e-spec.ts`'s
-hold/consume/release `describe` block is now entirely dead-path testing (every assertion in it
-exercises a code path nothing calls any more) — flagged for the next pass to either delete or
-retarget at the still-live top-up/Plus/Rush/Boost paths, not yet done in this commit.
+180/180. `wallet.e2e-spec.ts`'s old hold/consume/release `describe` block has been replaced
+outright with three new blocks: "tokens are no longer reserved at all" (asserts the removed call
+sites really are gone — a request/job no longer touches `WalletHold` at all), "Phase Commerce
+B2/B3/B4" (fee freeze, cash mismatch flagging, dues threshold, online capture-then-confirm), and
+"worker wallet: summary, settle dues, withdraw".
+
+One more orphaned-by-this-phase feature, found while checking `monetization.e2e-spec.ts` for
+Commerce-era staleness: the Haggler Plus token-bundle purchase discount (`token_discount_bps` off
+`GET /v1/wallet/bundles` while Plus is active, D-069) still works exactly as before and its test
+still passes, because *buying* a bundle was never touched by B1 — only *spending* tokens on a job
+was. But now that nothing spends tokens on a job, a bundle purchase (discounted or not) buys a
+balance with no use. Not broken, not fixed; the same kind of product decision as the migration
+options above (do token bundles get repurposed, e.g. as the `platform_fee_credit_paise` idea in
+Option C, or retired from the Plus perk list?) — left exactly as-is pending that call.
 
 Not yet done: B7 (refundable deposit for flagged customers), B8 (satisfaction guarantee/redo-or-
 refund), B9 (cancellation fees actually charged — `Job.cancellationFeeApplies` has existed as a
