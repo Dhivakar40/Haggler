@@ -873,6 +873,7 @@ model Job {
   thread     ChatThread?
   shares     TrustedShare[]
   reviews    Review[]
+  sosAlerts  SosAlert[]
 
   @@index([customerId, createdAt(sort: Desc)])
   @@index([workerId, createdAt(sort: Desc)])
@@ -1047,6 +1048,37 @@ model JobLocation {
 
   @@index([jobId, recordedAt(sort: Desc)])
   @@map("job_locations")
+}
+
+enum SosAlertStatus {
+  OPEN
+  RESOLVED
+
+  @@map("sos_alert_status")
+}
+
+/// D-080 (Sub-phase C): either party raises this during an active job. The other party is pushed
+/// immediately; a DISPUTE_AGENT/SUPER_ADMIN sees it in a review queue (admin-sos.service.ts).
+/// Reaching the triggering party's own emergency contacts is a client-side share (same pattern as
+/// TrustedShare's live-trip link), not a server-sent SMS — this codebase has no SMS adapter.
+model SosAlert {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String         @map("job_id") @db.Uuid
+  triggeredBy String         @map("triggered_by") @db.Uuid
+  role        PartyRole
+  latitude    Float?
+  longitude   Float?
+  note        String?
+  status      SosAlertStatus @default(OPEN)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt  DateTime?      @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy  String?        @map("resolved_by") @db.Uuid
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("sos_alerts")
 }
 
 model ChatThread {

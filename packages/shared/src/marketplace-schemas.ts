@@ -129,6 +129,23 @@ export const jobAddOnDtoSchema = z.object({
 });
 export type JobAddOnDto = z.infer<typeof jobAddOnDtoSchema>;
 
+/** D-080 (Sub-phase C): raised by either party during an active job. */
+export const sosAlertDtoSchema = z.object({
+  id: uuid,
+  role: z.enum(['CUSTOMER', 'WORKER']),
+  note: z.string().nullable(),
+  status: z.enum(['OPEN', 'RESOLVED']),
+  createdAt: z.string(),
+});
+export type SosAlertDto = z.infer<typeof sosAlertDtoSchema>;
+
+export const triggerSosSchema = z.object({
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  note: z.string().max(500).optional(),
+});
+export type TriggerSosInput = z.infer<typeof triggerSosSchema>;
+
 const partySchema = z.object({ id: uuid, firstName: z.string().nullable() });
 
 export const jobDtoSchema = z.object({
@@ -194,6 +211,7 @@ export const jobDtoSchema = z.object({
   paymentMethod: z.enum(['CASH', 'UPI']).nullable(),
   /** Phase Commerce B3: exists once complete() has run; null before then. */
   payment: jobPaymentSchema.nullable(),
+  sosAlerts: z.array(sosAlertDtoSchema),
   cancellation: z
     .object({ by: z.string().nullable(), reason: z.string().nullable(), feeApplies: z.boolean() })
     .nullable(),

@@ -18,6 +18,7 @@ import { RealtimeGateway } from './realtime.gateway';
 import { ChatController, JobsController, RequestsController } from './requests.controller';
 import { RequestsService } from './requests.service';
 import { SchedulerService } from './scheduler.service';
+import { SosService } from './sos.service';
 import { TrackingService } from './tracking.service';
 import { WorkerPresenceController } from './worker-presence.controller';
 
@@ -49,6 +50,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     TrackingService,
     SchedulerService,
     RealtimeGateway,
+    SosService,
   ],
   exports: [
     RealtimeService,

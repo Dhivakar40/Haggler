@@ -1,10 +1,13 @@
 import type { KycDocumentTypeName } from '@haggler/shared';
 import { MIN_ADULT_AGE } from '@haggler/shared';
 
-/** Documents a Ranger must upload before a check can be submitted for review. */
-export const REQUIRED_DOCUMENTS: Record<1 | 2, KycDocumentTypeName[]> = {
+/** Documents a Ranger must upload before a check can be submitted for review. Tier 3 (D-080 Sub-
+ * phase C) is category-specific licensing — required only for categories with
+ * `ServiceCategory.requiresLicense`, on top of (not instead of) tier 2. */
+export const REQUIRED_DOCUMENTS: Record<1 | 2 | 3, KycDocumentTypeName[]> = {
   1: ['AADHAAR_FRONT', 'AADHAAR_BACK', 'SELFIE'],
   2: ['ADDRESS_PROOF'],
+  3: ['TRADE_LICENSE'],
 };
 
 export const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
@@ -18,7 +21,7 @@ const MIME_BY_TYPE: Record<KycDocumentTypeName, readonly string[]> = {
 };
 
 export function isTypeAllowedForTier(tier: number, type: KycDocumentTypeName): boolean {
-  return (REQUIRED_DOCUMENTS[tier as 1 | 2] ?? []).includes(type);
+  return (REQUIRED_DOCUMENTS[tier as 1 | 2 | 3] ?? []).includes(type);
 }
 
 export function isMimeAllowed(type: KycDocumentTypeName, contentType: string): boolean {
@@ -39,7 +42,7 @@ export function extensionFor(contentType: string): string {
 }
 
 export function missingDocuments(
-  tier: 1 | 2,
+  tier: 1 | 2 | 3,
   uploaded: KycDocumentTypeName[],
 ): KycDocumentTypeName[] {
   return REQUIRED_DOCUMENTS[tier].filter((t) => !uploaded.includes(t));

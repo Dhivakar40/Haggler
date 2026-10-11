@@ -99,10 +99,11 @@ describe('starting verification', () => {
     expect(row.provider).toBe('manual_admin');
   });
 
-  it('tier 2 needs tier 1 first', async () => {
+  it('tier 2 needs tier 1 first, and tier 3 needs tier 2 first', async () => {
     const s = await newRanger();
     await api.post(s, '/v1/kyc/start', { tier: 2 }).expect(422);
-    await api.post(s, '/v1/kyc/start', { tier: 3 }).expect(400);
+    await api.post(s, '/v1/kyc/start', { tier: 3 }).expect(422);
+    await api.post(s, '/v1/kyc/start', { tier: 4 }).expect(400);
   });
 });
 
@@ -646,6 +647,54 @@ describe('tier 2: address proof + logged reference call', () => {
       categorySlugs: ['electrician', 'plumber'],
       experienceYears: 10,
     });
+  });
+});
+
+/** Carries a Ranger from nothing to tier 2 (same steps as the tier-2 describe above, without the
+ * assertions along the way — tier 3's own tests just need a tier-2 Ranger to start from). */
+async function tier2Approved(): Promise<Session> {
+  const { ranger, checkId } = await tier1Submitted();
+  await api.adminPost(reviewerToken, `/v1/admin/kyc/${checkId}/decision`, goodDecision).expect(200);
+  const t2 = (await api.post(ranger, '/v1/kyc/start', { tier: 2 }).expect(200)).body;
+  await upload(
+    ranger,
+    t2.id,
+    'ADDRESS_PROOF',
+    Buffer.from('%PDF-1.4 test bill ' + 'x'.repeat(500)),
+    'application/pdf',
+  );
+  const ref = { name: 'Suresh Iyer', phone: '+919845012345', relationship: 'Former employer' };
+  await api.patch(ranger, '/v1/worker/profile', { categorySlugs: ['gas_appliance_repair'] });
+  await api.post(ranger, '/v1/kyc/submit', { checkId: t2.id, reference: ref }).expect(200);
+  await api
+    .adminPost(reviewerToken, `/v1/admin/kyc/${t2.id}/decision`, {
+      decision: 'APPROVE',
+      referenceCall: { outcome: 'VERIFIED' },
+    })
+    .expect(200);
+  return ranger;
+}
+
+describe('D-080 (Sub-phase C): tier 3 — category-specific licensing', () => {
+  it('needs tier 2 first, requires a trade license document, and sets kycTier to 3 on approval', async () => {
+    const ranger = await tier2Approved();
+
+    const t3 = (await api.post(ranger, '/v1/kyc/start', { tier: 3 }).expect(200)).body;
+    expect(t3).toMatchObject({ tier: 3, status: 'DRAFT', requiredDocuments: ['TRADE_LICENSE'] });
+    await api.post(ranger, '/v1/kyc/submit', { checkId: t3.id }).expect(422);
+    await upload(
+      ranger,
+      t3.id,
+      'TRADE_LICENSE',
+      Buffer.from('%PDF-1.4 gas trade license ' + 'x'.repeat(500)),
+      'application/pdf',
+    );
+    await api.post(ranger, '/v1/kyc/submit', { checkId: t3.id }).expect(200);
+
+    await api
+      .adminPost(reviewerToken, `/v1/admin/kyc/${t3.id}/decision`, { decision: 'APPROVE' })
+      .expect(200);
+    expect((await api.get(ranger, '/v1/worker/profile')).body.kycTier).toBe(3);
   });
 });
 

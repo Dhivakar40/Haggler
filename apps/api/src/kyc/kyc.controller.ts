@@ -20,7 +20,8 @@ export class KycController {
   @Post('start')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Open a tier 1 (identity) or tier 2 (go-live) verification. Needs KYC consent.',
+    summary:
+      'Open a tier 1 (identity), tier 2 (go-live), or tier 3 (category-specific license) verification. Needs KYC consent.',
   })
   @ApiZodBody(kycStartSchema)
   start(

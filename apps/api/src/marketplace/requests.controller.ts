@@ -11,6 +11,7 @@ import {
   proposeAddOnSchema,
   quoteInputSchema,
   sendMessageSchema,
+  triggerSosSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
 import { ApiZodBody, CurrentUser, Roles, type AuthUser } from '../common/decorators';
@@ -23,6 +24,7 @@ import { LifecycleService } from './lifecycle.service';
 import { MatchingService } from './matching.service';
 import { QuotesService } from './quotes.service';
 import { RequestsService } from './requests.service';
+import { SosService } from './sos.service';
 import { TrackingService } from './tracking.service';
 
 const id = new ZodPipe(z.string().uuid());
@@ -135,6 +137,7 @@ export class JobsController {
     private readonly tracking: TrackingService,
     private readonly chat: ChatService,
     private readonly wallet: WalletService,
+    private readonly sos: SosService,
   ) {}
 
   @Get()
@@ -331,6 +334,20 @@ export class JobsController {
   })
   noShow(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
     return this.life.reportNoShow(u.id, jobId);
+  }
+
+  @Post(':id/sos')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Raise a safety alert on this job. The other party is pushed immediately (Sub-phase C).',
+  })
+  @ApiZodBody(triggerSosSchema)
+  triggerSos(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(triggerSosSchema)) body: z.infer<typeof triggerSosSchema>,
+  ) {
+    return this.sos.trigger(u.id, jobId, body);
   }
 
   @Get(':id/track')

@@ -26,6 +26,7 @@ import { AdminKycService } from './admin-kyc.service';
 import { AdminListingsService } from './admin-listings.service';
 import { AdminPriceListService } from './admin-price-list.service';
 import { AdminReviewsService } from './admin-reviews.service';
+import { AdminSosService } from './admin-sos.service';
 
 const queueQuery = z.object({
   status: z
@@ -52,6 +53,7 @@ export class AdminController {
     private readonly reviews: AdminReviewsService,
     private readonly listings: AdminListingsService,
     private readonly priceList: AdminPriceListService,
+    private readonly sos: AdminSosService,
   ) {}
 
   @Post('auth/login')
@@ -179,6 +181,30 @@ export class AdminController {
     @CurrentAdmin() admin: AuthAdmin,
   ) {
     return this.reviews.hide(id, body.reason, admin);
+  }
+
+  @Get('sos')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Open safety alerts, oldest first (Sub-phase C)' })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  sosQueue(@Query(new ZodPipe(listQuery)) q: z.infer<typeof listQuery>) {
+    return this.sos.queue(q.cursor, q.limit);
+  }
+
+  @Post('sos/:id/resolve')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Mark a safety alert resolved after following up' })
+  resolveSos(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.sos.resolve(id, admin);
   }
 
   @Get('contract-listings')

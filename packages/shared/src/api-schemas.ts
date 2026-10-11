@@ -200,7 +200,7 @@ export type WorkerProfileDto = z.infer<typeof workerProfileSchema>;
 
 // ---- KYC (manual admin review, D-016) --------------------------------------------------
 
-export const kycTierSchema = z.union([z.literal(1), z.literal(2)]);
+export const kycTierSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 export const kycStartSchema = z.object({ tier: kycTierSchema });
 
 export const kycDocumentRequestSchema = z.object({

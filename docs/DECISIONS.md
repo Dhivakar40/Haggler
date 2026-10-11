@@ -1317,6 +1317,77 @@ suites. Root lint clean on every file this round touched (15 pre-existing violat
 elsewhere — `check-design-tokens.js`, `ClientLeagueScreen.tsx`, `JobScreen.tsx`, `LeagueScreen.tsx`,
 `WalletScreen.tsx` — none introduced here, left alone rather than fixed opportunistically).
 
+## D-083: Sub-phase C (Safety) — tier-3 category licensing and SOS alerts, API only this round
+
+**A survey before building:** most of Sub-phase C's safety list already existed from earlier
+phases — the GPS trail (`JobLocation`), before/after photos, the gender preference, block lists,
+and Campus age verification all predate this phase and needed no change. This entry covers the two
+genuinely new pieces built this round; what's deliberately deferred (with reasons) is listed at
+the end, the same "what is only a flag/stub" honesty the master prompt asks for in its final
+report.
+
+**Tier-3 KYC — category-specific licensing, wiring up scaffolding that was already half-built.**
+`TRADE_LICENSE` was already in `KYC_DOCUMENT_TYPES` and `kyc.rules.ts`'s `MIME_BY_TYPE`, and
+`ServiceCategory.requiresLicense` already existed (seeded `true` for `gas_appliance_repair`) — but
+nothing read it, and `KycService.start()`'s tier type was hard-limited to `1 | 2`. This round widens
+that type union to `1 | 2 | 3` everywhere it appears (`kyc.rules.ts`, `kyc.service.ts`,
+`KycProvider`, `kycTierSchema`), adds `REQUIRED_DOCUMENTS[3] = ['TRADE_LICENSE']`, and gates tier 3
+on tier 2 first (same "each tier needs the one below it" rule as tier 2 needing tier 1). Admin
+approval for tier 3 needs nothing beyond the uploaded license (no extra typed fields, unlike tier
+1's DOB/Aadhaar-last-4 or tier 2's reference call) — a licensed category is simply a document check
+today; a real licensing-board API integration would slot in at `KycProvider.submit()` with no
+schema change, same as every other vendor seam in this codebase.
+
+**Enforcement lives in two places, not one, for the same reason B4's dues check does:**
+`presence.service.ts`'s `findCandidates()` gained a `minKycTier` parameter (default 2, the existing
+floor), and `matching.service.ts`'s `advance()` passes `3` for a `requiresLicense` category — so an
+unlicensed Ranger is simply never broadcast the job, the best UX (they never see something they
+can't take). `MatchingService.accept()` checks again directly (`LICENSE_REQUIRED`, 403) because a
+request id is not a secret and the broadcast filter is the *convenience*, not the *guarantee* —
+same reasoning as the dues check being enforced at accept()/submit() rather than trusted to have
+already been filtered upstream.
+
+**SOS alerts — a new `SosAlert` model, one customer/Ranger-facing endpoint, one admin queue.**
+`POST /v1/jobs/:id/sos` (either party, only while the job is in `ACTIVE_JOB_STATES`) records who
+raised it, from which role, with an optional note/location, and pushes the *other* party on the
+job at once via the existing `NotificationsService` — reusing the push pipeline rather than adding
+a new one. Deliberately **not** attempted: paging the triggering party's own `EmergencyContact`s by
+SMS — this codebase has no SMS adapter anywhere (confirmed: `EmergencyContact` only ever gets read
+by `users.controller.ts`'s audit trail and by the client itself), so "notify my emergency contacts"
+has to be a client-side share composed from the phone's own contacts and the job's live location,
+the same pattern `TrustedShare`'s live-trip link already uses — not a server-side send. Admin side:
+`GET /v1/admin/sos` + `POST /v1/admin/sos/:id/resolve`, gated `DISPUTE_AGENT` (the same role that
+already reviews disputed reviews and takes down listings — safety escalation fits that role, not a
+new one). `JobDto` gained `sosAlerts`, visible to both parties on the job.
+
+**Not built this round (flags for the next pass, not inferred into existence):**
+- *Finish OTP.* Arrival already has a verified 4-digit code (`arrivalCodeHash`/`arrivalCodeEnc`);
+  completion today is gated only by the after-photo. Adding an equivalent finish code is clean to
+  build (mirrors `arrive()`/`verifyArrival()` exactly) but touches `completeJobSchema`, every
+  `complete()` call site across 4+ e2e files, and the mobile Ranger/customer screens again — real
+  churn, deferred rather than rushed in the time left this round.
+- *Selfie liveness/face-match at job start.* A selfie is already captured once, at KYC tier 1, and
+  reviewed manually by an admin (D-016) — there is still no automated per-job "does this face match
+  the KYC selfie" check anywhere, and building one needs a vendor (the same seam `KycProvider`
+  already anticipates for eKYC). Flag only.
+- *Mid-job check-in prompts, incident reports, lone-customer rules, accident cover.* None built.
+  Incident reports in particular overlaps enough with Sub-phase D's dispute flow (both want "a
+  record tied to a job, reviewed by DISPUTE_AGENT") that building it before D's design is settled
+  risks two half-shaped systems instead of one — flagged for that phase instead.
+- *Aadhaar-number hash (fraud/duplicate-account detection).* `WorkerProfile.aadhaarLast4Enc` exists
+  for display only; a full-number hash for cross-account duplicate detection is Sub-phase D's
+  multi-account-detection territory more than Sub-phase C's safety territory — flagged there.
+
+Mobile: no UI yet for either tier-3 (a Ranger would need a "trade license" upload step added to
+the existing KYC screens) or SOS (a button during an active job, wired to the endpoint above) —
+API first, mobile next, same split as every sub-phase. API unit suite green: 185/185 across 21
+suites (4 new in `sos.service.spec.ts`, 2 new assertions in `kyc.rules.spec.ts`). e2e test coverage
+written and traced by hand against the real implementation (this sandbox still has no Postgres to
+run them against) in `kyc.e2e-spec.ts` (tier 3 flow) and `jobs.e2e-spec.ts` (license enforcement,
+SOS trigger/push/queue/resolve, SOS refused once a job is no longer active) — one pre-existing
+`kyc.e2e-spec.ts` assertion (`tier 2 needs tier 1 first`) had to be corrected since it asserted the
+*old* 400-on-tier-3 behavior that widening `kycTierSchema` just made obsolete.
+
 Not yet done, same list as D-081's close: B7-B12, plus the Plus token-bundle-discount product
 question. Sub-phase B's mobile gap is now closed; the live smoke test remains the one gate this
 sandbox cannot run (no device/emulator).

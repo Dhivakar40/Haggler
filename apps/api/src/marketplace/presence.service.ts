@@ -127,6 +127,8 @@ export class PresenceService {
     latitude: number;
     radiusM: number;
     matchAnyCategory?: boolean;
+    /** D-080 (Sub-phase C): 3 for a `requiresLicense` category, else the usual go-live floor. */
+    minKycTier?: number;
   }): Promise<RawCandidate[]> {
     const cfg = await this.cfg.get();
     const active = ACTIVE_JOB_STATES as readonly string[];
@@ -161,7 +163,7 @@ export class PresenceService {
       ${categoryJoin}
       LEFT JOIN worker_stats ws ON ws.worker_user_id = wp.user_id
       WHERE wp.is_online
-        AND wp.kyc_tier >= 2
+        AND wp.kyc_tier >= ${input.minKycTier ?? 2}
         AND wp.last_location IS NOT NULL
         AND wp.last_location_at > now() - make_interval(secs => ${cfg.presence_ttl_seconds})
         AND ST_DWithin(wp.last_location, ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326)::geography, ${input.radiusM})

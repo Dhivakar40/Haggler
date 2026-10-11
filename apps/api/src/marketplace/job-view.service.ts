@@ -46,6 +46,7 @@ export class JobViewService {
         addOns: { orderBy: { proposedAt: 'asc' } },
         photos: { where: { status: 'UPLOADED' } },
         payment: true,
+        sosAlerts: { orderBy: { createdAt: 'desc' } },
         thread: true,
       },
     });
@@ -244,6 +245,13 @@ export class JobViewService {
             status: job.payment.status,
           }
         : null,
+      sosAlerts: job.sosAlerts.map((s) => ({
+        id: s.id,
+        role: s.role,
+        note: s.note,
+        status: s.status,
+        createdAt: s.createdAt.toISOString(),
+      })),
       cancellation:
         job.status === 'CANCELLED' || job.status.startsWith('NO_SHOW')
           ? {

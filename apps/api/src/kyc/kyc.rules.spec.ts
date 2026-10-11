@@ -46,10 +46,16 @@ describe('document rules', () => {
   it('tier 2 needs address proof', () => {
     expect(missingDocuments(2, [])).toEqual(['ADDRESS_PROOF']);
   });
+  it('tier 3 (D-080 Sub-phase C: category licensing) needs a trade license', () => {
+    expect(missingDocuments(3, [])).toEqual(['TRADE_LICENSE']);
+    expect(missingDocuments(3, ['TRADE_LICENSE'])).toEqual([]);
+  });
   it('rejects document types that do not belong to the tier', () => {
     expect(isTypeAllowedForTier(1, 'SELFIE')).toBe(true);
     expect(isTypeAllowedForTier(1, 'ADDRESS_PROOF')).toBe(false);
     expect(isTypeAllowedForTier(2, 'SELFIE')).toBe(false);
+    expect(isTypeAllowedForTier(3, 'TRADE_LICENSE')).toBe(true);
+    expect(isTypeAllowedForTier(3, 'SELFIE')).toBe(false);
   });
   it('identity photos must be images; address proof may be a PDF', () => {
     expect(isMimeAllowed('AADHAAR_FRONT', 'image/jpeg')).toBe(true);

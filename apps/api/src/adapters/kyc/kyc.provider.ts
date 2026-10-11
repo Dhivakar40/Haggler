@@ -3,7 +3,7 @@ import { Injectable, Module } from '@nestjs/common';
 export interface KycSubmission {
   checkId: string;
   userId: string;
-  tier: 1 | 2;
+  tier: 1 | 2 | 3;
 }
 
 export interface KycSubmitResult {

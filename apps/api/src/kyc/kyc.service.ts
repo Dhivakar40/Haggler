@@ -37,7 +37,7 @@ export function toCheckDto(c: CheckWithDocs): KycCheckDto {
     reviewerMessage: c.reviewerMessage,
     submittedAt: c.submittedAt?.toISOString() ?? null,
     decidedAt: c.decidedAt?.toISOString() ?? null,
-    requiredDocuments: REQUIRED_DOCUMENTS[c.tier as 1 | 2] ?? [],
+    requiredDocuments: REQUIRED_DOCUMENTS[c.tier as 1 | 2 | 3] ?? [],
     documents: c.documents
       .filter((d) => d.status !== 'DELETED')
       .map((d) => ({ id: d.id, type: d.type, status: d.status })),
@@ -57,7 +57,7 @@ export class KycService {
   ) {}
 
   /** Opens (or returns the already-open) verification check for a tier. Idempotent. */
-  async start(userId: string, tier: 1 | 2): Promise<KycCheckDto> {
+  async start(userId: string, tier: 1 | 2 | 3): Promise<KycCheckDto> {
     const consent = await this.prisma.consent.findFirst({
       where: { userId, purpose: 'KYC_PROCESSING', version: LEGAL_VERSION, revokedAt: null },
     });
@@ -73,6 +73,10 @@ export class KycService {
     if (wp.kycTier >= tier) throw conflict(`You are already verified at tier ${wp.kycTier}.`);
     if (tier === 2 && wp.kycTier < 1)
       throw unprocessable('Complete identity verification (tier 1) first.');
+    // D-080 (Sub-phase C): tier 3 is category-specific licensing, on top of tier 2 — a Ranger
+    // who hasn't finished general verification has nothing for a trade license to add to.
+    if (tier === 3 && wp.kycTier < 2)
+      throw unprocessable('Complete verification level 2 first.');
 
     const find = () =>
       this.prisma.kycCheck.findFirst({
@@ -179,7 +183,7 @@ export class KycService {
 
   async submit(userId: string, input: KycSubmitInput): Promise<KycCheckDto> {
     const check = await this.ownedEditableCheck(userId, input.checkId);
-    const tier = check.tier as 1 | 2;
+    const tier = check.tier as 1 | 2 | 3;
     const docs = await this.prisma.kycDocument.findMany({
       where: { kycCheckId: check.id, status: 'UPLOADED' },
       select: { type: true },

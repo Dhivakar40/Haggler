@@ -7,6 +7,7 @@ import { AdminKycService } from './admin-kyc.service';
 import { AdminListingsService } from './admin-listings.service';
 import { AdminPriceListService } from './admin-price-list.service';
 import { AdminReviewsService } from './admin-reviews.service';
+import { AdminSosService } from './admin-sos.service';
 
 @Module({
   imports: [StorageModule],
@@ -19,6 +20,7 @@ import { AdminReviewsService } from './admin-reviews.service';
     AdminReviewsService,
     AdminListingsService,
     AdminPriceListService,
+    AdminSosService,
   ],
 })
 export class AdminModule {}

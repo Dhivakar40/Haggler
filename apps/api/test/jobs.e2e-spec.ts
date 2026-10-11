@@ -29,6 +29,76 @@ async function pair(over: Record<string, unknown> = {}) {
 const statusOf = async (id: string) =>
   (await m.prisma.job.findUniqueOrThrow({ where: { id } })).status;
 
+describe('D-080 (Sub-phase C): a licensed category needs tier-3 verification to accept', () => {
+  it('blocks a tier-2 Ranger and allows a tier-3 one', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    // Both Rangers must exist before the request is opened — the first broadcast wave fires
+    // synchronously on creation (requests.service.ts), so a Ranger created afterward is never
+    // a candidate for it regardless of tier.
+    const unlicensed = await m.ranger({
+      at: northOf(300, area),
+      categories: ['gas_appliance_repair'],
+      tier: 2,
+    });
+    const licensed = await m.ranger({
+      at: northOf(300, area),
+      categories: ['gas_appliance_repair'],
+      tier: 3,
+    });
+    const { requestId } = await m.open(c, { categorySlug: 'gas_appliance_repair' });
+
+    // The broadcast itself already excludes the unlicensed Ranger (minKycTier filter), but
+    // accept() is re-checked directly too (a request id is not a secret).
+    const blocked = await m.api.post(unlicensed, `/v1/requests/${requestId}/accept`);
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.details.code).toBe('LICENSE_REQUIRED');
+
+    const ok = await m.api.post(licensed, `/v1/requests/${requestId}/accept`);
+    expect(ok.status).toBe(200);
+  });
+});
+
+describe('D-080 (Sub-phase C): SOS alerts', () => {
+  it('either party can raise one; the other is pushed; admin sees and resolves it', async () => {
+    const { c, r, jobId } = await pair();
+    const reviewer = await m.api.createAdmin(['DISPUTE_AGENT']);
+    const reviewerToken = await m.api.adminToken(reviewer);
+
+    const triggered = await m.api
+      .post(c, `/v1/jobs/${jobId}/sos`, { note: 'feeling unsafe' })
+      .expect(200);
+    expect(triggered.body.sosAlerts).toMatchObject([
+      { role: 'CUSTOMER', note: 'feeling unsafe', status: 'OPEN' },
+    ]);
+    // The Ranger sees it too — sosAlerts is visible to both parties.
+    expect((await m.api.get(r, `/v1/jobs/${jobId}`)).body.sosAlerts).toHaveLength(1);
+
+    const queue = (await m.api.adminGet(reviewerToken, '/v1/admin/sos').expect(200)).body;
+    expect(queue.items).toHaveLength(1);
+    expect(queue.items[0]).toMatchObject({ jobId, role: 'CUSTOMER', status: 'OPEN' });
+
+    await m.api
+      .adminPost(reviewerToken, `/v1/admin/sos/${queue.items[0].id}/resolve`, {})
+      .expect(200);
+    const afterResolve = (await m.api.adminGet(reviewerToken, '/v1/admin/sos').expect(200)).body;
+    expect(afterResolve.items).toHaveLength(0);
+    await m.api
+      .adminPost(reviewerToken, `/v1/admin/sos/${queue.items[0].id}/resolve`, {})
+      .expect(409);
+
+    // A stranger to the job cannot raise or see an alert on it.
+    const stranger = await m.customer();
+    await m.api.post(stranger, `/v1/jobs/${jobId}/sos`, {}).expect(404);
+  });
+
+  it('refuses once the job is no longer active', async () => {
+    const { c, r, jobId } = await pair();
+    await m.confirmJob(c, r, jobId);
+    await m.api.post(c, `/v1/jobs/${jobId}/sos`, {}).expect(422);
+  });
+});
+
 describe('first accept wins', () => {
   it('two Rangers accept: one wins, the other gets 409 REQUEST_TAKEN, and both are told', async () => {
     const area = newArea();

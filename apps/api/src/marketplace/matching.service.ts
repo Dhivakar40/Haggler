@@ -147,6 +147,9 @@ export class MatchingService {
       // Part G: "Other" has no trade to match a Ranger's WorkerCategory rows against — any
       // verified, online, in-radius Ranger is a candidate, same eligibility bar as every category.
       matchAnyCategory: job.request.category.slug === OTHER_CATEGORY_SLUG,
+      // D-080 (Sub-phase C): a licensed category (e.g. gas-appliance repair) is only ever
+      // broadcast to tier-3 Rangers — unlicensed Rangers simply never see the job.
+      minKycTier: job.request.category.requiresLicense ? 3 : 2,
       longitude: p.lng,
       latitude: p.lat,
       radiusM,
@@ -273,12 +276,28 @@ export class MatchingService {
         request: {
           select: {
             listedPricePaise: true,
-            category: { select: { slug: true, feeBps: true } },
+            category: { select: { slug: true, feeBps: true, requiresLicense: true } },
           },
         },
       },
     });
     if (!job) throw notFound('Request not found');
+    // D-080 (Sub-phase C): the broadcast itself already excludes unlicensed Rangers (see
+    // advance()'s minKycTier), but accept() checks again — a request id is not a secret, and
+    // this is the one place that actually lets someone take the job.
+    if (job.request.category.requiresLicense) {
+      const wp = await this.prisma.workerProfile.findUnique({
+        where: { userId: workerId },
+        select: { kycTier: true },
+      });
+      if (!wp || wp.kycTier < 3)
+        throw new CodedException(
+          HttpStatus.FORBIDDEN,
+          ERROR_CODES.FORBIDDEN,
+          'This category needs tier 3 (licensed) verification.',
+          { code: 'LICENSE_REQUIRED' },
+        );
+    }
     // D-080 (A4): "other" has no fixed price to auto-agree to — Rangers quote instead
     // (POST /v1/jobs/:id/quotes), and the customer picks one, which performs the match.
     if (job.request.category.slug === OTHER_CATEGORY_SLUG)
