@@ -107,16 +107,65 @@ export const offerDtoSchema = z.object({
 });
 export type OfferDto = z.infer<typeof offerDtoSchema>;
 
-/** D-080 (A4): one Ranger's quote on an "other"-category request. */
+export const QUOTE_ITEM_KINDS = ['LABOUR', 'PART', 'EXTRA'] as const;
+
+/** D-087 (Sub-phase G): one line of a line-itemised quote. */
+export const quoteItemDtoSchema = z.object({
+  id: uuid,
+  kind: z.enum(QUOTE_ITEM_KINDS),
+  name: z.string(),
+  unitPricePaise: paiseSchema,
+  quantity: z.number().int().positive(),
+  totalPaise: paiseSchema,
+  billPhotoId: uuid.nullable(),
+});
+export type QuoteItemDto = z.infer<typeof quoteItemDtoSchema>;
+
+/** D-080 (A4): one Ranger's quote on an "other"-category request (amountPaise, no items) —
+ * D-087 (Sub-phase G): the SAME row and DTO also carry a line-itemised quote built after
+ * arrival/diagnosis (any category), with items[] populated and servicePaise onward set. */
 export const quoteDtoSchema = z.object({
   id: uuid,
   workerId: uuid,
   workerFirstName: z.string().nullable(),
   amountPaise: paiseSchema,
   status: z.enum(['PENDING', 'ACCEPTED', 'DECLINED']),
+  servicePaise: paiseSchema.nullable(),
+  partsPaise: paiseSchema,
+  extraPaise: paiseSchema,
+  extraDescription: z.string().nullable(),
+  feePaise: paiseSchema.nullable(),
+  totalPaise: paiseSchema.nullable(),
+  aboveCeiling: z.boolean(),
+  aboveCeilingReason: z.string().nullable(),
+  flaggedForReview: z.boolean(),
+  items: z.array(quoteItemDtoSchema),
   createdAt: z.string(),
 });
 export type QuoteDto = z.infer<typeof quoteDtoSchema>;
+
+/** D-087 (Sub-phase G): one labour/part/extra line in a new quote. `catalogItemId` is required
+ * for LABOUR (the admin price-list item), ignored otherwise; `billPhotoId` is required for
+ * PART (the purchase bill). The server floors/ceilings/caps every item — nothing here is
+ * trusted at face value. */
+export const quoteLineItemInputSchema = z.object({
+  kind: z.enum(QUOTE_ITEM_KINDS),
+  catalogItemId: z.string().uuid().optional(),
+  name: z.string().trim().min(2).max(120),
+  unitPricePaise: paiseSchema,
+  quantity: z.number().int().min(1).max(20).default(1),
+  billPhotoId: z.string().uuid().optional(),
+});
+export type QuoteLineItemInput = z.infer<typeof quoteLineItemInputSchema>;
+
+export const submitLineItemQuoteSchema = z.object({
+  items: z.array(quoteLineItemInputSchema).min(1).max(30),
+  extraDescription: z.string().trim().max(200).optional(),
+  /** Required only if any LABOUR item in `items` breaches its ceiling. */
+  aboveCeilingPhotoId: z.string().uuid().optional(),
+  aboveCeilingReason: z.string().trim().min(10).max(500).optional(),
+});
+export type SubmitLineItemQuoteInput = z.infer<typeof submitLineItemQuoteSchema>;
 
 /** D-080 (A5): a Ranger's mid-job proposal of a catalogue add-on; name/price are snapshotted at
  * proposal time. */
@@ -232,6 +281,7 @@ export const jobDtoSchema = z.object({
   arrivalVerified: z.boolean(),
   hasBeforePhoto: z.boolean(),
   hasAfterPhoto: z.boolean(),
+  hasSelfie: z.boolean(),
   paymentMethod: z.enum(['CASH', 'UPI']).nullable(),
   /** Phase Commerce B3: exists once complete() has run; null before then. */
   payment: jobPaymentSchema.nullable(),
@@ -347,7 +397,13 @@ export type QuoteInput = z.infer<typeof quoteInputSchema>;
 
 // ---- Mid-job add-ons (D-080, A5) ---------------------------------------------------------------
 
-export const proposeAddOnSchema = z.object({ addOnId: uuid });
+/** D-087 (step 7): `unitPricePaise` lets the Ranger price a newly found problem within the same
+ * floor/ceiling rules a quote line uses — omitted, it defaults to the catalogue floor exactly
+ * as before D-087. */
+export const proposeAddOnSchema = z.object({
+  addOnId: uuid,
+  unitPricePaise: paiseSchema.optional(),
+});
 export type ProposeAddOnInput = z.infer<typeof proposeAddOnSchema>;
 
 // ---- Job actions ------------------------------------------------------------------------------
@@ -356,7 +412,7 @@ export const verifyArrivalSchema = z.object({
   code: z.string().regex(/^[0-9]{4}$/, 'Code is 4 digits'),
 });
 export const jobPhotoPresignRequestSchema = z.object({
-  kind: z.enum(['BEFORE', 'AFTER']),
+  kind: z.enum(['BEFORE', 'AFTER', 'SELFIE']),
   contentType: z.string().min(3).max(60),
   sizeBytes: z
     .number()

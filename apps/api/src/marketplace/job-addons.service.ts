@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { SOCKET_EVENTS } from '@haggler/shared';
-import { conflict, notFound } from '../common/http-errors';
+import { conflict, notFound, unprocessable } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { FeeService } from './fee.service';
 import { JobViewService } from './job-view.service';
 
 /**
@@ -17,14 +18,19 @@ export class JobAddOnsService {
     private readonly prisma: PrismaService,
     private readonly view: JobViewService,
     private readonly realtime: RealtimeService,
+    private readonly fee: FeeService,
   ) {}
 
-  /** Ranger: propose one catalogue add-on. Only while the job is actually under way, and only
-   * from the add-on catalogue of the job's own category (no proposing an unrelated trade's item). */
-  async propose(workerId: string, jobId: string, addOnId: string) {
+  /** Ranger: propose one catalogue add-on for a newly found problem. Only while the job is
+   * actually under way, and only from the add-on catalogue of the job's own category (no
+   * proposing an unrelated trade's item). D-087 (step 7): `unitPricePaise`, if given, must sit
+   * within the same floor/ceiling a quote line uses — omitted, it defaults to the floor exactly
+   * as this worked before D-087. Above-ceiling pricing (which a quote line can do with a photo
+   * and a reason) is not supported here; a problem that big goes through a fresh quote instead. */
+  async propose(workerId: string, jobId: string, addOnId: string, unitPricePaise?: number) {
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
-      include: { request: { select: { categoryId: true } } },
+      include: { request: { select: { categoryId: true, category: { select: { ceilingMultipleBps: true } } } } },
     });
     if (!job || job.workerId !== workerId) throw notFound('Job not found');
     if (job.status !== 'IN_PROGRESS')
@@ -35,8 +41,24 @@ export class JobAddOnsService {
       where: { id: addOnId, categoryId: job.request.categoryId, isActive: true },
     });
     if (!addOn) throw notFound('Add-on not found for this category');
+    const price = unitPricePaise ?? addOn.pricePaise;
+    if (price < addOn.pricePaise)
+      throw unprocessable(`${addOn.name} cannot be quoted below its floor price.`, {
+        code: 'BELOW_FLOOR',
+        floorPaise: addOn.pricePaise,
+      });
+    const ceiling = await this.fee.ceilingPaise(
+      addOn.pricePaise,
+      addOn.ceilingMultipleBps,
+      job.request.category.ceilingMultipleBps,
+    );
+    if (price > ceiling)
+      throw unprocessable(`${addOn.name} is above the typical range for a mid-job add-on.`, {
+        code: 'ABOVE_CEILING',
+        ceilingPaise: ceiling,
+      });
     await this.prisma.jobAddOn.create({
-      data: { jobId, addOnId: addOn.id, name: addOn.name, pricePaise: addOn.pricePaise },
+      data: { jobId, addOnId: addOn.id, name: addOn.name, pricePaise: price },
     });
     this.realtime.emitToUser(job.customerId, SOCKET_EVENTS.jobUpdated, { jobId });
     return this.view.build(jobId, workerId);

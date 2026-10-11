@@ -12,6 +12,7 @@ import {
   quoteInputSchema,
   raiseDisputeSchema,
   sendMessageSchema,
+  submitLineItemQuoteSchema,
   triggerSosSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
@@ -24,6 +25,7 @@ import { JobAddOnsService } from './job-addons.service';
 import { JobViewService } from './job-view.service';
 import { LifecycleService } from './lifecycle.service';
 import { MatchingService } from './matching.service';
+import { QuoteBuilderService } from './quote-builder.service';
 import { QuotesService } from './quotes.service';
 import { RequestsService } from './requests.service';
 import { SosService } from './sos.service';
@@ -141,6 +143,7 @@ export class JobsController {
     private readonly wallet: WalletService,
     private readonly sos: SosService,
     private readonly disputes: DisputeService,
+    private readonly quoteBuilder: QuoteBuilderService,
   ) {}
 
   @Get()
@@ -368,6 +371,39 @@ export class JobsController {
     return this.disputes.raise(u.id, jobId, body);
   }
 
+  @Post(':id/quote')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({
+    summary:
+      'Ranger: build or revise the line-itemised quote after arriving (Sub-phase G) — moves ARRIVED to QUOTING',
+  })
+  @ApiZodBody(submitLineItemQuoteSchema)
+  submitLineItemQuote(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(submitLineItemQuoteSchema)) body: z.infer<typeof submitLineItemQuoteSchema>,
+  ) {
+    return this.quoteBuilder.submit(u.id, jobId, body);
+  }
+
+  @Post(':id/quote/accept')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Customer: accept the line-itemised quote — moves QUOTING to AGREED' })
+  acceptLineItemQuote(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.quoteBuilder.accept(u.id, jobId);
+  }
+
+  @Post(':id/quote/reject')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Customer: reject the line-itemised quote — moves QUOTING to QUOTE_REJECTED and freezes the visit fee owed',
+  })
+  rejectLineItemQuote(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.quoteBuilder.reject(u.id, jobId);
+  }
+
   @Get(':id/track')
   @ApiOperation({ summary: 'Live location and trail of the Ranger while the job is active' })
   track(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
@@ -405,7 +441,7 @@ export class JobsController {
     @Param('id', id) jobId: string,
     @Body(new ZodPipe(proposeAddOnSchema)) body: z.infer<typeof proposeAddOnSchema>,
   ) {
-    return this.addOns.propose(u.id, jobId, body.addOnId);
+    return this.addOns.propose(u.id, jobId, body.addOnId, body.unitPricePaise);
   }
 
   @Post(':id/add-ons/:addOnId/approve')

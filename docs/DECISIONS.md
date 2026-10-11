@@ -1629,3 +1629,85 @@ default change updates two existing expectations and adds coverage for `ceilingP
 corrected, a new describe block added). `npx tsc --noEmit` clean across the whole API. No mobile
 or e2e changes yet — this entry is the shared foundation only; Sub-phase G (the quote engine
 itself, customer/Ranger-facing) is next.
+
+## D-088: Sub-phase G — the quote engine, and the `quote_flow_enabled` rollout decision
+
+**The most consequential call of this phase: `quote_flow_enabled` defaults to `false`, not
+`true`.** The master prompt's flow is fully built and this entry's own e2e suite
+(`quote-flow.e2e-spec.ts`) exercises it end to end with the flag explicitly on — but flipping the
+*default* means every existing job created from now on skips D-080's auto-agree and goes through
+`EN_ROUTE` unpriced instead, and this sandbox has no Postgres to run the ~15 existing e2e files
+that assume the old behaviour (`jobs.e2e-spec.ts`, `wallet.e2e-spec.ts`, `kyc.e2e-spec.ts`'s
+tier-3 test, and others, built across D-080/D-081/D-083/D-084) against that change and confirm
+none of them silently break. The GLOBAL RULES say "switch behaviour with config flags where it
+makes sense" — this is exactly where it makes sense: the flag exists, defaults to the
+behaviour every other test already assumes, and whoever can run the full suite against a real
+database flips one config value (or the seed default in `prisma/seed.ts` and
+`fee.service.ts`'s `DEFAULT_FEE_SETTINGS`) once they've confirmed it's safe. This is a
+deliberate, documented risk call, not an oversight — the alternative was changing a default
+with zero ability to verify the blast radius, which the STOP CONDITIONS' spirit argues against
+even though it isn't literally one of the three listed.
+
+**`matching.service.ts`'s `accept()` branches on the flag, nothing else changes.** When true,
+the `MATCHED → AGREED` auto-agree transition (and the fee computed for it) is skipped entirely
+— the job simply stays `MATCHED`, `workerId` set, ready for the Ranger to head out
+(`MATCHED → EN_ROUTE`, an edge D-087's foundation already added). When false (the default),
+D-080's behaviour is byte-for-byte what it was.
+
+**The new flow, end to end:** `arrive()` is unchanged (same arrival code, same geofence).
+`verifyArrival()` gained one new precondition: a `SELFIE` photo (new `JobPhotoKind` value, D-087)
+must already be `UPLOADED` before the start code is even checked (`SELFIE_REQUIRED`, 422) —
+deliberately *before* the code, not after, since the selfie is partly what's supposed to prove
+who's standing there, which the code alone doesn't. `presignPhoto()`'s `BEFORE` window widened
+from `ARRIVED`-only to also cover `QUOTING`/`AGREED`/`IN_PROGRESS` — the new flow's before photo
+is taken once a quote is *accepted*, not at arrival (nothing to photograph "before" until the
+Ranger has diagnosed what's being fixed). `start()`'s before-photo requirement now also applies
+from `AGREED` (new flow), not only `ARRIVED` (old flow).
+
+**`QuoteBuilderService` (new, not a rename of `QuotesService`)** — deliberately a separate class
+from the existing "other"-category, pre-match, single-number quote flow (A4): different moment
+in the job's life (post-arrival vs pre-match), different shape (line items vs one number), and
+the two coexist rather than one subsuming the other. `submit()` validates every line
+server-side — a `LABOUR` item must reference a `PriceListAddOn` row in the job's own category,
+can never be quoted below its `pricePaise` (now that item's FLOOR, not just "the price" — the
+same semantic shift D-087 documented), and above its ceiling
+(`FeeService.ceilingPaise()`: item override → category override → the global
+`quote_ceiling_multiple_bps`, in that order) only with a photo and a written reason, which also
+sets `flaggedForReview` for G5's admin queue. A `PART` needs a bill photo; there can be at most
+one `EXTRA` line, capped at `quote_extra_cap_bps` percent of the labour subtotal — asking for
+more is refused outright ("use a catalogue add-on instead"), not silently capped. The fee is
+computed on the labour subtotal only (parts and the extra carry none) and frozen onto the quote,
+never entered by either party. `accept()`/`reject()` move `QUOTING` to `AGREED`/`QUOTE_REJECTED`;
+accepting sets `Job.agreedPricePaise` to labour+parts+extra (deliberately *excluding* the fee,
+preserving the existing "total = agreedPricePaise + platformFeePaise" arithmetic every other
+screen already uses, so nothing downstream needs to learn a third number). Rejecting computes
+the visit fee from `travelledMeters()` (moved out of `LifecycleService` into a shared `geo.ts`
+export so `QuoteBuilderService` can use it too, with `LifecycleService`'s own call site updated
+to match — a relocation, not new logic) and freezes it on `Job.visitFeePaise`; *collecting* that
+fee is Sub-phase H's job, not built here (the number is right; nothing charges it yet).
+
+**The existing mid-job add-on flow (A5, step 7's "a newly found problem needs a new line item")
+gained the same floor/ceiling rules**, not a new mechanism — `JobAddOnsService.propose()` now
+accepts an optional `unitPricePaise` (omitted, defaults to the floor exactly as before D-087),
+rejects below-floor, and rejects above-ceiling outright (unlike a quote line, there's no
+photo-and-reason escape hatch here — a mid-job problem that large needs a fresh quote, not a
+one-line add-on). `admin-price-list.service.ts`'s add-on endpoint gained an update path
+(`upsertAddOn`) alongside its existing create-only one, since the new flow needs to edit an
+existing labour item's floor/ceiling, not just add new ones — a real pre-existing gap the
+research surfaced, closed here rather than worked around.
+
+**Deferred from this sub-phase's own list:** G5 (a dedicated admin review-queue endpoint for
+`flaggedForReview` quotes — the field exists and is set correctly, but nothing lists them yet;
+`AdminDisputesService`'s queue pattern is the template when this is built) and G6 (anomaly flags
+for floor-level-quote-plus-complaint patterns — needs real usage data to tune thresholds
+sensibly, not something to guess at from first principles).
+
+API unit suite green: 218/218 across 23 suites (10 new: `quote-builder.service.spec.ts`'s 8 tests
+covering below-floor, above-ceiling-needs-evidence, above-ceiling-with-evidence, missing bill
+photo, the one-extra-line limit, the extra cap, the arrival-not-verified guard, and correct
+total computation; `job-addons.service.spec.ts` gained 2 covering the new floor/ceiling checks.
+`quote_flow_enabled` itself is a pure boolean read, exercised indirectly by both). `npx tsc
+--noEmit` clean. New `quote-flow.e2e-spec.ts` (5 tests, hand-traced against the real
+implementation — not run, same no-Postgres sandbox constraint as every e2e addition this
+project, now doubly true since it also needs `quote_flow_enabled` flipped on to even exercise
+the code path it's testing).

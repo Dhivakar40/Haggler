@@ -42,7 +42,7 @@ export class JobViewService {
       include: {
         request: { include: { category: true, media: { where: { status: 'UPLOADED' } } } },
         offers: { orderBy: { round: 'asc' } },
-        quotes: { orderBy: { createdAt: 'asc' } },
+        quotes: { orderBy: { createdAt: 'asc' }, include: { items: true } },
         addOns: { orderBy: { proposedAt: 'asc' } },
         photos: { where: { status: 'UPLOADED' } },
         payment: true,
@@ -222,6 +222,24 @@ export class JobViewService {
         ),
         amountPaise: q.amountPaise,
         status: q.status,
+        servicePaise: q.servicePaise,
+        partsPaise: q.partsPaise,
+        extraPaise: q.extraPaise,
+        extraDescription: q.extraDescription,
+        feePaise: q.feePaise,
+        totalPaise: q.totalPaise,
+        aboveCeiling: q.aboveCeiling,
+        aboveCeilingReason: q.aboveCeilingReason,
+        flaggedForReview: q.flaggedForReview,
+        items: q.items.map((i) => ({
+          id: i.id,
+          kind: i.kind,
+          name: i.name,
+          unitPricePaise: i.unitPricePaise,
+          quantity: i.quantity,
+          totalPaise: i.totalPaise,
+          billPhotoId: i.billPhotoId,
+        })),
         createdAt: q.createdAt.toISOString(),
       })),
       addOns: job.addOns.map((a) => ({
@@ -235,6 +253,7 @@ export class JobViewService {
       arrivalVerified: !!job.arrivalVerifiedAt,
       hasBeforePhoto: job.photos.some((p) => p.kind === 'BEFORE'),
       hasAfterPhoto: job.photos.some((p) => p.kind === 'AFTER'),
+      hasSelfie: job.photos.some((p) => p.kind === 'SELFIE'),
       paymentMethod: job.paymentMethod,
       payment: job.payment
         ? {

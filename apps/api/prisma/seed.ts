@@ -117,6 +117,12 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
     description: 'D-087 (I4): how many jobs a Ranger may have PAUSED_PARTS at once',
   },
   {
+    key: 'quote_flow_enabled',
+    value: false,
+    description:
+      "D-087: true routes a new match through the quote-first flow instead of D-080's auto-agree-at-the-listed-price. Defaults to false until someone with a real Postgres can run the full e2e suite with it on and confirm nothing regresses — see fee.service.ts's own comment.",
+  },
+  {
     key: 'gst_on_fee_bps',
     value: 0,
     description: 'GST on the platform fee, in basis points. 0 until finance/counsel confirms the rate (B11)',

@@ -43,6 +43,14 @@ export interface FeeSettings {
   max_parts_extensions: number;
   /** D-087 (I4): how many jobs a Ranger may have PAUSED_PARTS at once. */
   max_concurrent_paused_jobs_per_worker: number;
+  /** D-087: true routes a new match through the quote-first flow (travel, diagnose, quote,
+   * accept/reject) instead of D-080's auto-agree-at-the-listed-price. Defaults to false — not
+   * because the new flow isn't finished, but because this sandbox has no Postgres to run the
+   * e2e suite against, so flipping every existing job's default behaviour with no way to
+   * verify the consequence is a risk this round declines to take. The new flow is fully built
+   * and has its own e2e coverage (run with the flag explicitly on); switching the default is a
+   * one-line config change for whoever can actually run the full suite against it. */
+  quote_flow_enabled: boolean;
 }
 
 export const DEFAULT_FEE_SETTINGS: FeeSettings = {
@@ -62,6 +70,7 @@ export const DEFAULT_FEE_SETTINGS: FeeSettings = {
   completion_otp_auto_release_hours: 24,
   max_parts_extensions: 2,
   max_concurrent_paused_jobs_per_worker: 2,
+  quote_flow_enabled: false,
 };
 
 /** Every key FeeService recognizes — the admin config endpoint's allowlist (admin-config.service.ts). */

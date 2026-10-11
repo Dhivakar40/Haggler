@@ -324,10 +324,11 @@ export class MatchingService {
     if (inv.response !== 'PENDING')
       throw new RequestTakenException('You already responded to this request.');
 
-    // Phase Commerce B2: computed once, outside the transaction (a pure read) — the fee is
-    // frozen onto the job at the same instant the price is, same reasoning as the price freeze.
+    // D-087: under the quote-first flow, nothing is agreed yet at match time — the price and
+    // fee are computed when a quote is accepted (quote-builder.service.ts), not here. Under the
+    // rollback flag, the old D-080 auto-agree-at-the-listed-price behaviour is unchanged.
     const feePaise =
-      job.request.listedPricePaise != null
+      !feeCfg.quote_flow_enabled && job.request.listedPricePaise != null
         ? await this.fee.computeFeePaise(job.request.listedPricePaise, job.request.category.feeBps)
         : null;
 
@@ -387,17 +388,21 @@ export class MatchingService {
             });
             // D-080 (A3): no negotiation — the price was already frozen on the request at
             // booking time, so matching and agreeing the price are the same moment now.
-            await this.transitions.move(tx, {
-              jobId: job.id,
-              from: 'MATCHED',
-              to: 'AGREED',
-              actor: 'SYSTEM',
-              data: {
-                agreedAt: new Date(),
-                agreedPricePaise: job.request.listedPricePaise,
-                platformFeePaise: feePaise,
-              },
-            });
+            // D-087: skipped entirely under the quote-first flow — the Ranger travels on spec
+            // and the price is agreed later, once a quote is built and accepted.
+            if (!feeCfg.quote_flow_enabled) {
+              await this.transitions.move(tx, {
+                jobId: job.id,
+                from: 'MATCHED',
+                to: 'AGREED',
+                actor: 'SYSTEM',
+                data: {
+                  agreedAt: new Date(),
+                  agreedPricePaise: job.request.listedPricePaise,
+                  platformFeePaise: feePaise,
+                },
+              });
+            }
           },
           { maxWait: 10_000, timeout: 15_000 },
         );

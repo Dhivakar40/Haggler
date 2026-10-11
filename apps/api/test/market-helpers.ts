@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
+import { FeeService } from '../src/marketplace/fee.service';
 import { MatchingService } from '../src/marketplace/matching.service';
 import { MarketplaceConfig } from '../src/marketplace/marketplace-config.service';
 import { SchedulerService } from '../src/marketplace/scheduler.service';
@@ -38,6 +39,31 @@ export class Market {
   }
   get config() {
     return this.app.get(MarketplaceConfig);
+  }
+  get fee() {
+    return this.app.get(FeeService);
+  }
+
+  /** D-087: flips the quote-first flow on for tests that specifically exercise it — every other
+   * test keeps the D-080 auto-agree-at-the-listed-price default (the flag's own default) so
+   * nothing already written here has to change. Call this in a `beforeAll`/`beforeEach`, not
+   * mid-test — accept() reads the flag at the moment a Ranger accepts. */
+  async enableQuoteFlow(): Promise<void> {
+    await this.prisma.systemConfig.upsert({
+      where: { key: 'quote_flow_enabled' },
+      update: { value: true },
+      create: { key: 'quote_flow_enabled', value: true },
+    });
+    this.fee.refresh();
+  }
+
+  async disableQuoteFlow(): Promise<void> {
+    await this.prisma.systemConfig.upsert({
+      where: { key: 'quote_flow_enabled' },
+      update: { value: false },
+      create: { key: 'quote_flow_enabled', value: false },
+    });
+    this.fee.refresh();
   }
 
   async customer(
@@ -203,7 +229,7 @@ export class Market {
     return p.body.mediaId as string;
   }
 
-  async uploadJobPhoto(r: Ranger, jobId: string, kind: 'BEFORE' | 'AFTER') {
+  async uploadJobPhoto(r: Ranger, jobId: string, kind: 'BEFORE' | 'AFTER' | 'SELFIE') {
     const size = 1500;
     const p = await this.api.post(r, `/v1/jobs/${jobId}/photos`, {
       kind,

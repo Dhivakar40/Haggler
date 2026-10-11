@@ -14,6 +14,7 @@ import { MatchingService } from './matching.service';
 import { OffersService } from './offers.service';
 import { PresenceService } from './presence.service';
 import { PublicTrackController, PublicTrackPageController } from './public-track.controller';
+import { QuoteBuilderService } from './quote-builder.service';
 import { QuotesService } from './quotes.service';
 import { RealtimeGateway } from './realtime.gateway';
 import { ChatController, JobsController, RequestsController } from './requests.controller';
@@ -53,6 +54,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     RealtimeGateway,
     SosService,
     DisputeService,
+    QuoteBuilderService,
   ],
   exports: [
     RealtimeService,

@@ -15,7 +15,7 @@ import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReputationService } from '../reputation/reputation.service';
 import { WorkerWalletService } from '../wallet/worker-wallet.service';
-import { haversineMeters } from './geo';
+import { haversineMeters, travelledMeters } from './geo';
 import { CUSTOMER_CANCELLABLE } from './job-state';
 import { JobTransitions } from './job-transitions.service';
 import { JobViewService } from './job-view.service';
@@ -126,6 +126,15 @@ export class LifecycleService {
     const cfg = await this.cfg.get();
     if (job.status !== 'ARRIVED') throw conflict('Mark arrival first.', { code: 'NOT_ARRIVED' });
     if (job.arrivalVerifiedAt) return this.done(jobId, workerId);
+    // D-087 (J2): the selfie is part of what proves the Ranger is who they say they are —
+    // required before the start code itself can be checked.
+    const selfie = await this.prisma.jobPhoto.count({
+      where: { jobId, kind: 'SELFIE', status: 'UPLOADED' },
+    });
+    if (selfie === 0)
+      throw unprocessable('Take a selfie before entering the start code.', {
+        code: 'SELFIE_REQUIRED',
+      });
     if (job.arrivalCodeTries >= cfg.arrival_code_max_tries) {
       throw new CodedException(
         HttpStatus.TOO_MANY_REQUESTS,
@@ -154,22 +163,33 @@ export class LifecycleService {
   async presignPhoto(
     workerId: string,
     jobId: string,
-    input: { kind: 'BEFORE' | 'AFTER'; contentType: string; sizeBytes: number },
+    input: { kind: 'BEFORE' | 'AFTER' | 'SELFIE'; contentType: string; sizeBytes: number },
   ) {
     const job = await this.workerJob(workerId, jobId);
+    // D-087 (J2): a selfie is taken right at arrival, before the start code is even entered —
+    // see verifyArrival()'s own check. BEFORE now also covers AGREED/QUOTING: the new flow
+    // takes it once a quote is accepted, before start() moves the job to IN_PROGRESS, not at
+    // arrival itself (the Ranger hasn't diagnosed anything yet at that point).
     const okStatus =
-      input.kind === 'BEFORE'
-        ? job.status === 'ARRIVED' || job.status === 'IN_PROGRESS'
-        : job.status === 'IN_PROGRESS';
+      input.kind === 'SELFIE'
+        ? job.status === 'ARRIVED'
+        : input.kind === 'BEFORE'
+          ? ['ARRIVED', 'QUOTING', 'AGREED', 'IN_PROGRESS'].includes(job.status)
+          : job.status === 'IN_PROGRESS';
     if (!okStatus)
       throw conflict(
-        input.kind === 'BEFORE'
-          ? 'Take the before photo once you have arrived.'
-          : 'Take the after photo while the job is in progress.',
+        input.kind === 'SELFIE'
+          ? 'Take the selfie once you have arrived.'
+          : input.kind === 'BEFORE'
+            ? 'Take the before photo once you have arrived.'
+            : 'Take the after photo while the job is in progress.',
         { code: 'WRONG_STATE' },
       );
-    if (input.kind === 'BEFORE' && !job.arrivalVerifiedAt)
-      throw conflict("Enter the customer's arrival code first.", { code: 'ARRIVAL_NOT_VERIFIED' });
+    // The selfie is deliberately taken BEFORE the start code is verified (it's part of what
+    // proves the Ranger is who they say they are, which the code alone does not) — every other
+    // kind at ARRIVED needs verification to have already happened.
+    if (input.kind !== 'SELFIE' && job.status === 'ARRIVED' && !job.arrivalVerifiedAt)
+      throw conflict("Enter the customer's start code first.", { code: 'ARRIVAL_NOT_VERIFIED' });
     if (!IMG.includes(input.contentType.toLowerCase()))
       throw unprocessable('Photos must be JPEG, PNG or WebP.');
     const bucket = this.env.env.S3_BUCKET_MEDIA;
@@ -233,9 +253,14 @@ export class LifecycleService {
     const job = await this.workerJob(workerId, jobId);
     if (job.status === 'ARRIVED') {
       if (!job.arrivalVerifiedAt)
-        throw conflict("Enter the customer's arrival code first.", {
+        throw conflict("Enter the customer's start code first.", {
           code: 'ARRIVAL_NOT_VERIFIED',
         });
+    }
+    // D-087: AGREED now also reaches here once a quote is accepted (the Ranger is already on
+    // site) — the before photo is required at this point too, same rule as the pre-D-087
+    // ARRIVED-only path above.
+    if (job.status === 'ARRIVED' || job.status === 'AGREED') {
       const before = await this.prisma.jobPhoto.count({
         where: { jobId, kind: 'BEFORE', status: 'UPLOADED' },
       });
@@ -427,7 +452,7 @@ export class LifecycleService {
       job.workerId
     ) {
       feeApplies =
-        (await this.travelledMeters(job.id)) >= (await this.cfg.get()).cancel_fee_travel_m;
+        (await travelledMeters(this.prisma, job.id)) >= (await this.cfg.get()).cancel_fee_travel_m;
     }
     await this.prisma.$transaction(async (tx) => {
       await this.transitions.move(tx, {
@@ -473,15 +498,6 @@ export class LifecycleService {
       create: { customerUserId: customerId, bookingsCancelledByCustomer: 1 },
     });
     await this.reputation.recomputeCustomerLeague(tx, customerId);
-  }
-
-  /** Straight-line distance between the first and latest GPS points recorded while en route. */
-  private async travelledMeters(jobId: string): Promise<number> {
-    const rows = await this.prisma.$queryRaw<{ d: number | null }[]>`
-      SELECT ST_Distance(
-               (SELECT location FROM job_locations WHERE job_id = ${jobId}::uuid ORDER BY recorded_at ASC LIMIT 1),
-               (SELECT location FROM job_locations WHERE job_id = ${jobId}::uuid ORDER BY recorded_at DESC LIMIT 1))::float AS d`;
-    return rows[0]?.d ?? 0;
   }
 
   /** No-shows. Customer: Ranger never arrived after the grace period. Ranger: customer absent after arrival. */
