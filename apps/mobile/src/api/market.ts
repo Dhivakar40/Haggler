@@ -124,6 +124,9 @@ export const startOnlinePayment = (jobId: string) =>
 export const cancelJob = (jobId: string, reason?: string) =>
   act(jobId, 'cancel', reason ? { reason } : {});
 export const reportNoShow = (jobId: string) => act(jobId, 'report-no-show');
+/** D-080 (Sub-phase C): raise a safety alert; the other party is pushed immediately. */
+export const triggerSos = (jobId: string, note?: string) =>
+  act(jobId, 'sos', note ? { note } : {});
 export const presignJobPhoto = (
   jobId: string,
   body: { kind: 'BEFORE' | 'AFTER'; contentType: string; sizeBytes: number },

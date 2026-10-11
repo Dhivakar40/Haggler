@@ -1378,15 +1378,25 @@ new one). `JobDto` gained `sosAlerts`, visible to both parties on the job.
   for display only; a full-number hash for cross-account duplicate detection is Sub-phase D's
   multi-account-detection territory more than Sub-phase C's safety territory — flagged there.
 
-Mobile: no UI yet for either tier-3 (a Ranger would need a "trade license" upload step added to
-the existing KYC screens) or SOS (a button during an active job, wired to the endpoint above) —
-API first, mobile next, same split as every sub-phase. API unit suite green: 185/185 across 21
-suites (4 new in `sos.service.spec.ts`, 2 new assertions in `kyc.rules.spec.ts`). e2e test coverage
-written and traced by hand against the real implementation (this sandbox still has no Postgres to
-run them against) in `kyc.e2e-spec.ts` (tier 3 flow) and `jobs.e2e-spec.ts` (license enforcement,
-SOS trigger/push/queue/resolve, SOS refused once a job is no longer active) — one pre-existing
-`kyc.e2e-spec.ts` assertion (`tier 2 needs tier 1 first`) had to be corrected since it asserted the
-*old* 400-on-tier-3 behavior that widening `kycTierSchema` just made obsolete.
+Mobile: no UI yet for tier-3 (a Ranger would need a "trade license" upload step added to the
+existing KYC screens) — API first, mobile next, same split as every sub-phase. API unit suite
+green: 185/185 across 21 suites (4 new in `sos.service.spec.ts`, 2 new assertions in
+`kyc.rules.spec.ts`). e2e test coverage written and traced by hand against the real implementation
+(this sandbox still has no Postgres to run them against) in `kyc.e2e-spec.ts` (tier 3 flow) and
+`jobs.e2e-spec.ts` (license enforcement, SOS trigger/push/queue/resolve, SOS refused once a job is
+no longer active) — one pre-existing `kyc.e2e-spec.ts` assertion (`tier 2 needs tier 1 first`) had
+to be corrected since it asserted the *old* 400-on-tier-3 behavior that widening `kycTierSchema`
+just made obsolete.
+
+**Mobile addendum: the SOS button shipped this round, in the same commit window as the entry
+above.** A single `SosButton.tsx`, shared between `RangerActions.tsx` and `CustomerActions.tsx`
+(both parties get the same button, same confirm dialog), visible only while
+`ACTIVE_JOB_STATES.includes(job.status)` — the same list the API checks server-side, so the button
+never appears somewhere the endpoint would refuse it anyway. Confirming calls
+`POST /v1/jobs/:id/sos` through the existing `action.run()` busy/error plumbing, no new state
+machine needed on the client. Tier-3's mobile upload step is still the one open item from the list
+above. Mobile suite green: 510/510 across 56 suites; root lint clean (same 15 pre-existing,
+unrelated violations as D-082).
 
 Not yet done, same list as D-081's close: B7-B12, plus the Plus token-bundle-discount product
 question. Sub-phase B's mobile gap is now closed; the live smoke test remains the one gate this

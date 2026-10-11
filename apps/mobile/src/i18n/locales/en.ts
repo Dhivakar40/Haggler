@@ -568,6 +568,11 @@ const en = {
     cancelAsk: 'Cancel this job?',
     keep: 'Keep job',
     noShow: 'Report a no-show',
+    sos: 'SOS: I need help',
+    sosAsk: 'Raise a safety alert?',
+    sosExplain:
+      'The other person on this job will be notified at once that you need help. Use this only in a genuine safety situation.',
+    sosConfirm: 'Raise alert',
     trackingTitle: 'Live location',
     trackingNone: "Your Ranger's location will appear once they set off.",
     feeNote: 'A cancellation fee may apply because your Ranger had already travelled a long way.',
