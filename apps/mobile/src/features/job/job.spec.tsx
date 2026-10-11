@@ -847,3 +847,79 @@ describe('JobScreen: reviews and blocking (Phase 4)', () => {
     expect(screen.getByTestId('block-user')).toBeTruthy();
   });
 });
+
+describe('JobScreen: timeline and reporting a problem (Sub-phase F)', () => {
+  it('shows the status history, oldest first, once there is any', async () => {
+    serve(
+      asCustomer({
+        status: 'CONFIRMED_BY_CUSTOMER',
+        agreedPricePaise: 40000,
+        events: [
+          { toStatus: 'REQUESTED', createdAt: '2026-01-01T10:00:00.000Z' },
+          { toStatus: 'BROADCASTING', createdAt: '2026-01-01T10:00:05.000Z' },
+        ],
+      }),
+    );
+    await renderWithProviders(<JobScreen />);
+    expect(await screen.findByTestId('job-timeline')).toBeTruthy();
+    expect(screen.getByText('Request sent')).toBeTruthy();
+    expect(screen.getByText('Looking for a Ranger')).toBeTruthy();
+  });
+
+  it('shows nothing when there is no history yet', async () => {
+    serve(asCustomer({ status: 'AGREED', agreedPricePaise: 40000, events: [] }));
+    await renderWithProviders(<JobScreen />);
+    await screen.findByTestId('status-title');
+    expect(screen.queryByTestId('job-timeline')).toBeNull();
+  });
+
+  it('report a problem only appears once confirmed, and is gone once a dispute is already open', async () => {
+    serve(asCustomer({ status: 'AGREED', agreedPricePaise: 40000 }));
+    await renderWithProviders(<JobScreen />);
+    await screen.findByTestId('status-title');
+    expect(screen.queryByTestId('report-problem')).toBeNull();
+  });
+
+  it('files a dispute with the typed reason, and will not submit a too-short one', async () => {
+    const { calls } = serve(
+      asCustomer({ status: 'CONFIRMED_BY_CUSTOMER', agreedPricePaise: 40000 }),
+      (c) =>
+        c.path === `/v1/jobs/${JOB_ID}/dispute`
+          ? asCustomer({
+              status: 'DISPUTED',
+              agreedPricePaise: 40000,
+              disputes: [
+                {
+                  id: 'dispute-1',
+                  role: 'CUSTOMER',
+                  reason: 'The tap is still leaking.',
+                  status: 'OPEN',
+                  resolution: null,
+                  resolutionNote: null,
+                  createdAt: iso(0),
+                },
+              ],
+            })
+          : undefined,
+    );
+    await renderWithProviders(<JobScreen />);
+    await fireEvent.press(await screen.findByTestId('report-problem'));
+    await fireEvent.changeText(screen.getByTestId('report-problem-reason'), 'too short');
+    await fireEvent.press(screen.getByTestId('report-problem-submit'));
+    expect(
+      await screen.findByText('Please describe the problem in a bit more detail.'),
+    ).toBeTruthy();
+    expect(post(calls, `/v1/jobs/${JOB_ID}/dispute`)).toBeUndefined();
+
+    await fireEvent.changeText(
+      screen.getByTestId('report-problem-reason'),
+      'The tap is still leaking.',
+    );
+    await fireEvent.press(screen.getByTestId('report-problem-submit'));
+    // The job moved to DISPUTED: the report-problem button (shown only once CONFIRMED) is gone.
+    await waitFor(() => expect(screen.queryByTestId('report-problem')).toBeNull());
+    expect(post(calls, `/v1/jobs/${JOB_ID}/dispute`)?.body).toEqual({
+      reason: 'The tap is still leaking.',
+    });
+  });
+});

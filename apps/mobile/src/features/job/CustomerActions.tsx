@@ -18,6 +18,7 @@ import { checkLeagueUp } from '../../lib/league-up-check';
 import { formatRupees, jobTotalPaise, parseRupeesToPaise } from '../../lib/money';
 import { useRealtimeEvent } from '../../realtime/RealtimeProvider';
 import { spacing } from '../../theme/tokens';
+import { ReportProblemButton } from './ReportProblemButton';
 import { SosButton } from './SosButton';
 import type { useJobAction } from './useJobAction';
 
@@ -241,6 +242,7 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
         />
       ) : null}
       <SosButton job={job} action={action} />
+      <ReportProblemButton job={job} action={action} />
 
       <Dialog
         testID="cancel-dialog"

@@ -1507,3 +1507,52 @@ requiring someone to reread every decision entry to reconstruct the list.
 Mobile suite green: 516/516 across 57 suites (6 new in `retryQueue.spec.ts`). Root lint clean (same
 15 pre-existing, unrelated violations as every prior sub-phase this round). No API changes this
 round — Sub-phase E was mobile- and docs-only.
+
+## D-086: Sub-phase F (UI/UX small pass) — job timeline and report-a-problem
+
+**Most of this sub-phase's list was already satisfied before this round started**, confirmed by
+survey rather than assumed: light+dark theme (`ThemeProvider` + WCAG-AA-checked token sets,
+`tokens.spec.ts`), 44px+ touch targets (`MIN_TOUCH_TARGET = 48`, already exceeding the ask), price
+breakdown (`lib/money.ts`'s `jobTotalPaise`/`formatRupees`, the single place the total is computed
+so every screen agrees), the Ranger earnings/dues screen (`WorkerWalletScreen.tsx`, D-082), and
+plain-language safety copy (spot-checked `sosExplain`, `codeHelp`, `cancelAsk` — all already
+non-technical). Cancel was already wired on both `CustomerActions`/`RangerActions`. Two real gaps
+remained: no job-history view, and no mobile surface for the dispute flow D-084 already built
+API-side.
+
+**The job timeline**: `JobDto` gained `events` (`jobEventDtoSchema` — just `toStatus`/`createdAt`,
+not the full audit record with actor/meta; a timeline is "what happened, when," not an admin
+audit view) by including the already-existing `JobEvent` relation in `job-view.service.ts`'s
+query. The new `JobTimeline.tsx` renders it as a plain vertical list, reusing the exact
+`job.status.*` i18n keys the current-status headline already uses — so a step in the timeline and
+the live status elsewhere can never say the same thing two different ways by drifting out of sync.
+Renders nothing when `events` is empty (can't happen for a real job once `REQUESTED` always fires
+one, but the guard costs nothing and reads honestly either way).
+
+**Report a problem**: `ReportProblemButton.tsx`, the mobile face of D-084's `raiseDispute()` —
+shown only once `CONFIRMED_BY_CUSTOMER` and only while no dispute on the job is already `OPEN`
+(the same two rules the API enforces; checking client-side too just avoids a pointless round
+trip). Opens a `Sheet` with a reason field rather than a bare confirm `Dialog`, since raising a
+dispute needs the "what went wrong" text the API's `raiseDisputeSchema` requires
+(`min(10)` chars) — a plain confirm dialog has nowhere to put that. Wired into both
+`CustomerActions.tsx` and `RangerActions.tsx`, same as the SOS button, since either party can
+raise a dispute.
+
+**Honest gap, not closed this round: loading/empty/error-state coverage.** The survey found
+`LoadingState`/`ErrorState`/`EmptyState` used in roughly 25/25/18 of 80 feature files, with real
+gaps named (`ActivityScreen.tsx`, the campus/contracts browse screens, `WalletScreen.tsx`,
+`WorkerWalletScreen.tsx` among others) — but auditing and fixing all of them was not attempted
+this round; some of the flagged files are action-only components that may not need the states at
+all, and distinguishing a real gap from a false positive needs a per-screen look this sub-phase
+didn't have room for. Flagged for a dedicated pass, not silently dropped.
+
+Mobile suite green: 520/520 across 57 suites (4 new in `job.spec.tsx`'s new describe block). API
+unit suite unaffected (no logic change, only a new DTO field read from an existing relation) —
+confirmed green at 189/189 before this round's one new e2e assertion (the dispute test's `events`
+array) was added; not rerun after, same sandbox-has-no-Postgres constraint as every e2e addition
+this project. Root lint clean (same 15 pre-existing violations).
+
+This closes Sub-phase F — all six sub-phases (A-F) of the "PHASE COMMERCE + SAFETY" master prompt
+are now complete, each with its own commit(s) and DECISIONS.md entry (D-080 through D-086). What
+remains per the master prompt: the FINAL STEP (confirm `eas.json`'s `EXPO_PUBLIC_API_URL`, build
+the Android APK) and the FINAL REPORT.

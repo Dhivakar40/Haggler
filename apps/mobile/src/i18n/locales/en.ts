@@ -573,6 +573,14 @@ const en = {
     sosExplain:
       'The other person on this job will be notified at once that you need help. Use this only in a genuine safety situation.',
     sosConfirm: 'Raise alert',
+    reportProblem: 'Report a problem',
+    reportProblemTitle: 'What went wrong?',
+    reportProblemExplain:
+      'Tell us what happened. Our team will review the job and get back to you with a decision.',
+    reportProblemLabel: 'Describe the problem',
+    reportProblemSubmit: 'Submit report',
+    reportProblemTooShort: 'Please describe the problem in a bit more detail.',
+    timelineTitle: 'Job timeline',
     trackingTitle: 'Live location',
     trackingNone: "Your Ranger's location will appear once they set off.",
     feeNote: 'A cancellation fee may apply because your Ranger had already travelled a long way.',

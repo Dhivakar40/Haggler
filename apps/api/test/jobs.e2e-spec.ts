@@ -119,6 +119,11 @@ describe('D-080 (Sub-phase D): disputes', () => {
     expect(raised.body.disputes).toMatchObject([
       { role: 'CUSTOMER', status: 'OPEN', reason: 'The work was not finished properly.' },
     ]);
+    // Sub-phase F: the job's own status history, for the mobile timeline view.
+    expect(raised.body.events.map((e: { toStatus: string }) => e.toStatus)).toEqual([
+      'REQUESTED', 'BROADCASTING', 'MATCHED', 'AGREED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS',
+      'COMPLETED_BY_WORKER', 'CONFIRMED_BY_CUSTOMER', 'DISPUTED',
+    ]);
     // A second dispute cannot be opened while one is already open.
     await m.api.post(r, `/v1/jobs/${jobId}/dispute`, { reason: 'y'.repeat(20) }).expect(409);
 

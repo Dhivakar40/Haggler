@@ -127,6 +127,9 @@ export const reportNoShow = (jobId: string) => act(jobId, 'report-no-show');
 /** D-080 (Sub-phase C): raise a safety alert; the other party is pushed immediately. */
 export const triggerSos = (jobId: string, note?: string) =>
   act(jobId, 'sos', note ? { note } : {});
+/** D-080 (Sub-phase D): raise a dispute on a confirmed job, for admin review. */
+export const raiseDispute = (jobId: string, reason: string) =>
+  act(jobId, 'dispute', { reason });
 export const presignJobPhoto = (
   jobId: string,
   body: { kind: 'BEFORE' | 'AFTER'; contentType: string; sizeBytes: number },

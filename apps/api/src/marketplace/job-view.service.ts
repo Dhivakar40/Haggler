@@ -48,6 +48,7 @@ export class JobViewService {
         payment: true,
         sosAlerts: { orderBy: { createdAt: 'desc' } },
         disputes: { orderBy: { createdAt: 'desc' } },
+        events: { orderBy: { createdAt: 'asc' } },
         thread: true,
       },
     });
@@ -261,6 +262,10 @@ export class JobViewService {
         resolution: d.resolution,
         resolutionNote: d.resolutionNote,
         createdAt: d.createdAt.toISOString(),
+      })),
+      events: job.events.map((e) => ({
+        toStatus: e.toStatus,
+        createdAt: e.createdAt.toISOString(),
       })),
       cancellation:
         job.status === 'CANCELLED' || job.status.startsWith('NO_SHOW')

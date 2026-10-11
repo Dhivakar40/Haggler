@@ -162,6 +162,14 @@ export type DisputeDto = z.infer<typeof disputeDtoSchema>;
 export const raiseDisputeSchema = z.object({ reason: z.string().min(10).max(1000) });
 export type RaiseDisputeInput = z.infer<typeof raiseDisputeSchema>;
 
+/** Sub-phase F: the job's own status history, for a timeline view. Not the full audit record
+ * (no actor/meta) — just enough to draw "what happened, when" on the job screen. */
+export const jobEventDtoSchema = z.object({
+  toStatus: z.enum(JOB_STATES),
+  createdAt: z.string(),
+});
+export type JobEventDto = z.infer<typeof jobEventDtoSchema>;
+
 const partySchema = z.object({ id: uuid, firstName: z.string().nullable() });
 
 export const jobDtoSchema = z.object({
@@ -229,6 +237,7 @@ export const jobDtoSchema = z.object({
   payment: jobPaymentSchema.nullable(),
   sosAlerts: z.array(sosAlertDtoSchema),
   disputes: z.array(disputeDtoSchema),
+  events: z.array(jobEventDtoSchema),
   cancellation: z
     .object({ by: z.string().nullable(), reason: z.string().nullable(), feeApplies: z.boolean() })
     .nullable(),

@@ -23,6 +23,7 @@ import { isWaitingForRanger, statusKeys } from '../../lib/job-status';
 import { formatRupees } from '../../lib/money';
 import { MIN_TOUCH_TARGET, spacing } from '../../theme/tokens';
 import { CustomerActions } from './CustomerActions';
+import { JobTimeline } from './JobTimeline';
 import { QuotesPanel } from './QuotesPanel';
 import { RangerActions } from './RangerActions';
 import { ReviewPrompt } from './ReviewPrompt';
@@ -215,6 +216,8 @@ export function JobScreen() {
       ) : null}
 
       <ReviewPrompt job={job} />
+
+      <JobTimeline job={job} />
 
       {action.error ? (
         <Text color="danger" accessibilityRole="alert" testID="action-error">

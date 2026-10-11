@@ -18,6 +18,7 @@ import { errorMessage } from '../../lib/errors';
 import { formatRupees, jobTotalPaise, parseRupeesToPaise } from '../../lib/money';
 import { spacing } from '../../theme/tokens';
 import { uploadJobPhoto } from '../media/upload';
+import { ReportProblemButton } from './ReportProblemButton';
 import { SosButton } from './SosButton';
 import type { useJobAction } from './useJobAction';
 
@@ -228,6 +229,7 @@ export function RangerActions({ job, action }: { job: JobDto; action: Action }) 
         />
       ) : null}
       <SosButton job={job} action={action} />
+      <ReportProblemButton job={job} action={action} />
 
       <Dialog
         testID="cancel-dialog"
