@@ -37,6 +37,9 @@ export const JOB_STATES = [
   'NO_SHOW_CUSTOMER',
   'DISPUTED',
   'REFUNDED',
+  'QUOTING',
+  'QUOTE_REJECTED',
+  'PAUSED_PARTS',
 ] as const;
 export type JobState = (typeof JOB_STATES)[number];
 
@@ -48,6 +51,8 @@ export const ACTIVE_JOB_STATES: readonly JobState[] = [
   'EN_ROUTE',
   'ARRIVED',
   'IN_PROGRESS',
+  'QUOTING',
+  'PAUSED_PARTS',
 ];
 export const TERMINAL_JOB_STATES: readonly JobState[] = [
   'CONFIRMED_BY_CUSTOMER',
@@ -55,6 +60,7 @@ export const TERMINAL_JOB_STATES: readonly JobState[] = [
   'NO_SHOW_WORKER',
   'NO_SHOW_CUSTOMER',
   'REFUNDED',
+  'QUOTE_REJECTED',
 ];
 
 /** Ascending (D-076, Phase 11; replaces the old 5-tier BADGE_TIERS). */

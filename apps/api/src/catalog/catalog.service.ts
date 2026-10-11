@@ -75,6 +75,7 @@ export class CatalogService {
       categorySlug: category.slug,
       name: a.name,
       pricePaise: a.pricePaise,
+      ceilingMultipleBps: a.ceilingMultipleBps,
       isActive: a.isActive,
     }));
   }

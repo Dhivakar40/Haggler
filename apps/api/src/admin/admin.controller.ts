@@ -10,6 +10,7 @@ import {
   adminPriceListAddOnUpsertSchema,
   adminPriceListEntryUpsertSchema,
   adminResolveDisputeSchema,
+  adminSetConfigSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
 import {
@@ -22,6 +23,7 @@ import {
 } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { AdminAuthGuard, AdminAuthService } from './admin-auth';
+import { AdminConfigService } from './admin-config.service';
 import { AdminDisputesService } from './admin-disputes.service';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
@@ -59,6 +61,7 @@ export class AdminController {
     private readonly sos: AdminSosService,
     private readonly disputes: AdminDisputesService,
     private readonly otherJobs: AdminOtherJobsService,
+    private readonly config: AdminConfigService,
   ) {}
 
   @Post('auth/login')
@@ -327,6 +330,33 @@ export class AdminController {
     return this.listings.cancelCampus(id, body.reason, admin);
   }
 
+  @Get('config')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('FINANCE')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'The Phase Commerce/Flow-Final tunables (platform fee %, visit-fee bands, quote ceiling multiple, cash_enabled, ...) with their current and default values',
+  })
+  listConfig() {
+    return this.config.list();
+  }
+
+  @Post('config/:key')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('FINANCE')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Set one tunable from the list above' })
+  @ApiZodBody(adminSetConfigSchema)
+  setConfig(
+    @Param('key') key: string,
+    @Body(new ZodPipe(adminSetConfigSchema)) body: z.infer<typeof adminSetConfigSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.config.set(key, body.value, admin);
+  }
+
   @Get('price-list')
   @UseGuards(AdminAuthGuard)
   @AdminRoles('FINANCE')
@@ -361,18 +391,21 @@ export class AdminController {
   }
 
   @Post('price-list/add-ons')
-  @HttpCode(201)
+  @HttpCode(200)
   @UseGuards(AdminAuthGuard)
   @AdminRoles('FINANCE')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Add a catalogue add-on to a category' })
+  @ApiOperation({
+    summary:
+      'Create (no id) or update (with id) a catalogue/labour item — pricePaise is the floor, ceilingMultipleBps an optional per-item override (D-087)',
+  })
   @ApiZodBody(adminPriceListAddOnUpsertSchema)
-  createPriceListAddOn(
+  upsertPriceListAddOn(
     @Body(new ZodPipe(adminPriceListAddOnUpsertSchema))
     body: z.infer<typeof adminPriceListAddOnUpsertSchema>,
     @CurrentAdmin() admin: AuthAdmin,
   ) {
-    return this.priceList.createAddOn(body, admin);
+    return this.priceList.upsertAddOn(body, admin);
   }
 
   @Post('categories/:id/inspection-charge')

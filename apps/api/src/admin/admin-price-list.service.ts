@@ -85,29 +85,39 @@ export class AdminPriceListService {
       categorySlug: r.category.slug,
       name: r.name,
       pricePaise: r.pricePaise,
+      ceilingMultipleBps: r.ceilingMultipleBps,
       isActive: r.isActive,
     }));
   }
 
-  async createAddOn(input: AdminPriceListAddOnUpsertInput, admin: AuthAdmin) {
+  /** Create when `input.id` is absent, update when present. D-087: this catalogue is now also
+   * the labour-item list a quote is built from — pricePaise is the floor, ceilingMultipleBps an
+   * optional per-item override. */
+  async upsertAddOn(input: AdminPriceListAddOnUpsertInput, admin: AuthAdmin) {
     const category = await this.prisma.serviceCategory.findUnique({
       where: { id: input.categoryId },
     });
     if (!category) throw notFound('Category not found');
+    if (input.id) {
+      const existing = await this.prisma.priceListAddOn.findUnique({ where: { id: input.id } });
+      if (!existing) throw notFound('Price list item not found');
+    }
     const row = await this.prisma.$transaction(async (tx) => {
-      const r = await tx.priceListAddOn.create({
-        data: {
-          categoryId: input.categoryId,
-          name: input.name,
-          pricePaise: input.pricePaise,
-          isActive: input.isActive,
-        },
-      });
+      const data = {
+        categoryId: input.categoryId,
+        name: input.name,
+        pricePaise: input.pricePaise,
+        ceilingMultipleBps: input.ceilingMultipleBps ?? null,
+        isActive: input.isActive,
+      };
+      const r = input.id
+        ? await tx.priceListAddOn.update({ where: { id: input.id }, data })
+        : await tx.priceListAddOn.create({ data });
       await this.audit.record(
         {
           actorType: 'ADMIN',
           actorId: admin.id,
-          action: 'price_list_add_on.created',
+          action: input.id ? 'price_list_add_on.updated' : 'price_list_add_on.created',
           entityType: 'price_list_add_on',
           entityId: r.id,
           after: input,

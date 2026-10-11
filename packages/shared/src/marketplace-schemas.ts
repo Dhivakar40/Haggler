@@ -153,7 +153,7 @@ export const disputeDtoSchema = z.object({
   role: z.enum(['CUSTOMER', 'WORKER']),
   reason: z.string(),
   status: z.enum(['OPEN', 'RESOLVED']),
-  resolution: z.enum(['REFUND_CUSTOMER', 'PAY_WORKER', 'NO_ACTION']).nullable(),
+  resolution: z.enum(['REFUND_CUSTOMER', 'PAY_WORKER', 'NO_ACTION', 'CUSTOMER_SUSPENDED']).nullable(),
   resolutionNote: z.string().nullable(),
   createdAt: z.string(),
 });

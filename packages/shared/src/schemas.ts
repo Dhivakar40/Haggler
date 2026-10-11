@@ -87,6 +87,9 @@ export const priceListAddOnSchema = z.object({
   categorySlug: z.string(),
   name: z.string(),
   pricePaise: paiseSchema,
+  /** D-087: this item's ceiling-multiple override, if any — null means "use the category's,
+   * or the global default". pricePaise above is this item's FLOOR in the new quote flow. */
+  ceilingMultipleBps: z.number().int().positive().nullable(),
   isActive: z.boolean(),
 });
 export type PriceListAddOnDto = z.infer<typeof priceListAddOnSchema>;
@@ -102,10 +105,15 @@ export const adminPriceListEntryUpsertSchema = z.object({
 });
 export type AdminPriceListEntryUpsertInput = z.infer<typeof adminPriceListEntryUpsertSchema>;
 
+/** Create when `id` is absent, update when present (admin-price-list.service.ts's upsertAddOn).
+ * D-087: pricePaise is this item's FLOOR; ceilingMultipleBps overrides the category/global
+ * default ceiling multiple for this item only (null clears the override). */
 export const adminPriceListAddOnUpsertSchema = z.object({
+  id: z.string().uuid().optional(),
   categoryId: z.string().uuid(),
   name: z.string().trim().min(2).max(80),
   pricePaise: z.number().int().min(1).max(100_000_00),
+  ceilingMultipleBps: z.number().int().positive().nullable().optional(),
   isActive: z.boolean().optional().default(true),
 });
 export type AdminPriceListAddOnUpsertInput = z.infer<typeof adminPriceListAddOnUpsertSchema>;

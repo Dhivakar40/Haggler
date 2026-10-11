@@ -304,10 +304,16 @@ export type AdminHideReviewInput = z.infer<typeof adminHideReviewSchema>;
  * REFUNDED and counts against the Ranger's dispute rate; PAY_WORKER/NO_ACTION return it to
  * CONFIRMED_BY_CUSTOMER with no mark against the Ranger. */
 export const adminResolveDisputeSchema = z.object({
-  resolution: z.enum(['REFUND_CUSTOMER', 'PAY_WORKER', 'NO_ACTION']),
+  resolution: z.enum(['REFUND_CUSTOMER', 'PAY_WORKER', 'NO_ACTION', 'CUSTOMER_SUSPENDED']),
   note: z.string().trim().min(5).max(1000),
 });
 export type AdminResolveDisputeInput = z.infer<typeof adminResolveDisputeSchema>;
+
+/** D-087: set one Phase Commerce/Flow-Final tunable (FeeService's own keys only — see
+ * admin-config.service.ts). The value's shape depends on the key; server-side type-checked
+ * against that key's default. */
+export const adminSetConfigSchema = z.object({ value: z.unknown() });
+export type AdminSetConfigInput = z.infer<typeof adminSetConfigSchema>;
 
 export const adminCancelListingSchema = z.object({
   reason: z.string().trim().min(5).max(500),

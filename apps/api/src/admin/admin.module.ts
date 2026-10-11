@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { StorageModule } from '../adapters/storage/storage.service';
 import { AdminAuthGuard, AdminAuthService } from './admin-auth';
 import { AdminController } from './admin.controller';
+import { AdminConfigService } from './admin-config.service';
 import { AdminDisputesService } from './admin-disputes.service';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminOtherJobsService } from './admin-other-jobs.service';
@@ -25,6 +26,7 @@ import { AdminSosService } from './admin-sos.service';
     AdminSosService,
     AdminDisputesService,
     AdminOtherJobsService,
+    AdminConfigService,
   ],
 })
 export class AdminModule {}

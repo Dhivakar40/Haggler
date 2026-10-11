@@ -1556,3 +1556,76 @@ This closes Sub-phase F — all six sub-phases (A-F) of the "PHASE COMMERCE + SA
 are now complete, each with its own commit(s) and DECISIONS.md entry (D-080 through D-086). What
 remains per the master prompt: the FINAL STEP (confirm `eas.json`'s `EXPO_PUBLIC_API_URL`, build
 the Android APK) and the FINAL REPORT.
+
+## D-087: PHASE FLOW-FINAL — foundation (schema, state machine, fee/config service)
+
+**A new master prompt supersedes D-080/D-081's pay-after, fixed-price flow with a different
+final flow**: the price is no longer agreed at match time — a Ranger travels on spec, diagnoses
+on site, and builds a line-itemised quote (labour from an admin price list with a floor and a
+ceiling, parts at pass-through cost, a small capped "extra"); the platform fee is 8% of labour
+only; payment happens in-app at completion (cash disabled by default); a completion OTP — not
+the customer's bare word — is what actually closes the job; a visit fee applies if the quote is
+rejected; and a `PAUSED_PARTS` state covers a Ranger needing to fetch parts mid-job. Per the
+prompt's own instruction, nothing from D-080/D-081 is deleted — the old auto-agree-at-listed-
+price path, the cash/dues ledger, and the single-number "other"-category quote all stay in the
+code and the state machine, reachable only by a job already mid-flow under the earlier version;
+no new job is routed through them. This entry covers the shared foundation; the sub-phases
+themselves (G-L) follow in their own entries as each is built.
+
+**Schema, additive (migration `20261012000000_phase18_flow_final_foundation`).** The one
+non-pure-additive piece: the `jobs_one_active_per_worker` unique index and the
+`jobs_matched_needs_worker` CHECK constraint are dropped and recreated with `QUOTING`/
+`PAUSED_PARTS`/`QUOTE_REJECTED` added to their status lists — a metadata-level constraint
+change, not a data change (no column, no row, no table is touched), but noted here because
+"additive only" is usually read as "never DROP anything" and this is the one place this
+migration drops something. Everything else is new columns/tables/enum values: three new
+`JobStatus` values, `SELFIE` added to `JobPhotoKind`, `CUSTOMER_SUSPENDED` added to
+`DisputeResolution`, a completion-OTP column set on `Job` mirroring the existing arrival code,
+pause/visit-fee/close-reason bookkeeping on `Job`, `ceilingMultipleBps` on `ServiceCategory` and
+`PriceListAddOn` (this catalogue is now also the labour-item list a quote is built from —
+`pricePaise` becomes that item's FLOOR), the line-items themselves (`JobQuoteItem`, extending
+`JobQuote` with service/parts/extra/fee/total/above-ceiling fields), a new `IncidentReport`
+model (Sub-phase J, built ahead of its own entry since the schema was being laid down anyway),
+`WorkerProfile.identityHash`/`reliabilityScore`, and `CustomerWallet.promoCreditPaise`
+(H7's migration target — nothing writes to it yet).
+
+**The state machine (`job-state.ts`) gets new edges, not a new table.** `MATCHED` can now go
+straight to `EN_ROUTE` (no price agreed); `ARRIVED` can now go to `QUOTING`; `QUOTING` resolves
+to `AGREED` or `QUOTE_REJECTED` (customer-only — a Ranger can't decide their own quote);
+`AGREED` can now go straight to `IN_PROGRESS` (the Ranger is already on site by the time a quote
+is accepted, unlike the old flow's price-before-travel order); `IN_PROGRESS` can go to
+`PAUSED_PARTS` and back; and `COMPLETED_BY_WORKER` → `CONFIRMED_BY_CUSTOMER` now also allows
+actor `WORKER` — the Ranger is the one entering the completion code, not the customer. All the
+old edges stay. `job-state.spec.ts` keeps its old-flow tests (fixing the two whose expected
+answer the new edges genuinely changed — `AGREED`→`IN_PROGRESS` and `COMPLETED_BY_WORKER`→
+`CONFIRMED_BY_CUSTOMER` by `WORKER` are real edges now, not the invalid moves they used to be)
+and gains a new describe block for the D-087 happy path.
+
+**`FeeService` becomes the general tunables service it was already drifting toward.** New keys:
+`cash_enabled` (false by default — H1), `quote_ceiling_multiple_bps` (1.5×), `quote_extra_cap_bps`
+(10% of labour), `visit_fee_bands` (an array, admin-editable, placeholder distances/amounts),
+`visit_fee_worker_commission_bps` (Ranger keeps 90%), `completion_otp_auto_release_hours` (24),
+`max_parts_extensions` (2), `max_concurrent_paused_jobs_per_worker` (2). `platform_fee_bps`'s
+default drops from 1000 to 800 (10%→8%) and its *meaning* changes to "of labour only" — the one
+behavioural change to an existing field in this migration, seeded and documented, not silently
+reinterpreted. The merge logic that reads these from `system_config` was upgraded from "accept
+numbers only" to MarketplaceConfig's own "accept whatever type the default is" pattern, so
+booleans and arrays merge correctly too. Two new methods: `ceilingPaise()` (floor × the
+item/category/global multiple, in that override order) and `visitFeePaise()` (the highest
+distance band reached).
+
+**A new `AdminConfigService` (`GET/POST /v1/admin/config[/:key]`, FINANCE-role) is the first
+admin-editable path for ANY of FeeService's tunables** — `platform_fee_bps` itself had no admin
+endpoint before this (a pre-existing gap, not introduced here), only a direct-database edit.
+Allowlisted to `FeeService`'s own keys via `FEE_SETTINGS_KEYS`, type-checked against each key's
+default shape before writing, audited. `PriceListAddOn`'s admin endpoint gained an update path
+(`upsertAddOn`, create when `id` is absent) — it previously had create-only, a real pre-existing
+gap the research surfaced, now closed since the new flow needs to edit an existing labour item's
+floor/ceiling, not just add new ones.
+
+API unit suite green: 208/208 across 22 suites (new/updated: `fee.service.spec.ts` — the bps
+default change updates two existing expectations and adds coverage for `ceilingPaise`,
+`visitFeePaise`, and boolean/array config merging; `job-state.spec.ts` — two existing assertions
+corrected, a new describe block added). `npx tsc --noEmit` clean across the whole API. No mobile
+or e2e changes yet — this entry is the shared foundation only; Sub-phase G (the quote engine
+itself, customer/Ranger-facing) is next.

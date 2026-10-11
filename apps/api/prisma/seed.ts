@@ -51,8 +51,9 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
   },
   {
     key: 'platform_fee_bps',
-    value: 1000,
-    description: 'Platform fee in basis points (1000 = 10%), charged to the customer on top of the listed price',
+    value: 800,
+    description:
+      'Platform fee in basis points (800 = 8%), on the LABOUR portion of a quote only (D-087) — parts and the capped extra carry no fee',
   },
   {
     key: 'platform_fee_min_paise',
@@ -67,7 +68,53 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
   {
     key: 'worker_dues_threshold_paise',
     value: 50000,
-    description: 'New jobs pause for a Ranger once unpaid cash-job dues reach this amount (B4)',
+    description:
+      'New jobs pause for a Ranger once unpaid cash-job dues reach this amount (B4) — dormant while cash_enabled is false (D-087)',
+  },
+  {
+    key: 'cash_enabled',
+    value: false,
+    description: 'D-087: in-app payment only by default. True brings CASH back as a selectable payment method.',
+  },
+  {
+    key: 'quote_ceiling_multiple_bps',
+    value: 15000,
+    description: "D-087: a labour item's ceiling = its floor × this (15000 = 1.5x), unless the item or category overrides it",
+  },
+  {
+    key: 'quote_extra_cap_bps',
+    value: 1000,
+    description: 'D-087: the capped "extra" line, as a percent of the quote\'s labour total (1000 = 10%)',
+  },
+  {
+    key: 'visit_fee_bands',
+    value: [
+      { minDistanceM: 0, feePaise: 9900 },
+      { minDistanceM: 5000, feePaise: 14900 },
+      { minDistanceM: 15000, feePaise: 19900 },
+    ],
+    description: 'D-087: visit-fee by distance travelled, placeholder bands — review before launch',
+  },
+  {
+    key: 'visit_fee_worker_commission_bps',
+    value: 9000,
+    description: "D-087: the Ranger's share of a charged visit fee (9000 = 90%); the platform keeps the rest",
+  },
+  {
+    key: 'completion_otp_auto_release_hours',
+    value: 24,
+    description:
+      "D-087 (step 11): once payment succeeds, the Ranger's earnings auto-release after this many hours if the customer hasn't shared/entered the completion code, unless a dispute is open",
+  },
+  {
+    key: 'max_parts_extensions',
+    value: 2,
+    description: 'D-087 (I3): how many times a paused job can be extended ("Wait")',
+  },
+  {
+    key: 'max_concurrent_paused_jobs_per_worker',
+    value: 2,
+    description: 'D-087 (I4): how many jobs a Ranger may have PAUSED_PARTS at once',
   },
   {
     key: 'gst_on_fee_bps',

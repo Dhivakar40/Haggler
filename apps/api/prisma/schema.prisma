@@ -209,23 +209,26 @@ model Address {
 }
 
 model ServiceCategory {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug            String   @unique
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                  String   @unique
   /// i18n key, e.g. "categories.electrician". The app translates it.
-  nameKey         String   @map("name_key")
-  icon            String
-  requiresLicense Boolean  @default(false) @map("requires_license") // Tier 3 (D2)
-  isActive        Boolean  @default(true) @map("is_active")
-  sortOrder       Int      @default(0) @map("sort_order")
+  nameKey               String   @map("name_key")
+  icon                  String
+  requiresLicense       Boolean  @default(false) @map("requires_license") // Tier 3 (D2)
+  isActive              Boolean  @default(true) @map("is_active")
+  sortOrder             Int      @default(0) @map("sort_order")
   /// D-080 (A2): non-null marks this category "uncertain-scope" (e.g. repairs where the fault
   /// isn't known until a Ranger looks). The customer books and pays this fixed charge instead of
   /// a catalogue price; the Ranger then proposes JobAddOn items from the price list on site.
-  inspectionChargePaise Int? @map("inspection_charge_paise")
+  inspectionChargePaise Int?     @map("inspection_charge_paise")
   /// Phase Commerce B2: overrides the global `platform_fee_bps` system_config default for this
   /// category. Null means "use the default" — most categories never need one.
-  feeBps          Int?     @map("fee_bps")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  feeBps                Int?     @map("fee_bps")
+  /// D-087: overrides the global `quote_ceiling_multiple_bps` default (floor × this = ceiling)
+  /// for every labour item in this category. Null means "use the default".
+  ceilingMultipleBps    Int?     @map("ceiling_multiple_bps")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   priceBands       PriceBand[]
   priceListEntries PriceListEntry[]
@@ -262,16 +265,25 @@ model PriceListEntry {
 
 /// D-080 (A2/A5): catalogue of add-on line items a Ranger may propose mid-job (via JobAddOn),
 /// scoped to a category so the customer only ever sees relevant extras.
+/// D-087 (Phase Flow-Final): this same catalogue is now also the labour-item list a Ranger
+/// builds a quote from (JobQuoteItem.catalogItemId) — `pricePaise` is that item's FLOOR; a
+/// Ranger can never quote below it (server-rejected), and the ceiling is
+/// floor × (ceilingMultipleBps ?? category's ?? the global quote_ceiling_multiple_bps default).
+/// A pre-D-087 mid-job add-on (A5) ignores ceilingMultipleBps entirely — that flow has no
+/// ceiling concept, it just proposes pricePaise as-is.
 model PriceListAddOn {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  categoryId String   @map("category_id") @db.Uuid
-  name       String
-  pricePaise Int      @map("price_paise")
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId         String   @map("category_id") @db.Uuid
+  name               String
+  pricePaise         Int      @map("price_paise")
+  /// D-087: per-item override of the category/global ceiling multiple. Null means "use the
+  /// category's, or the global default".
+  ceilingMultipleBps Int?     @map("ceiling_multiple_bps")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category  ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   jobAddOns JobAddOn[]
 
   @@map("price_list_add_ons")
@@ -445,24 +457,33 @@ enum ConsentPurpose {
 
 /// The Ranger profile (internal name: worker). Created when a user adds the WORKER role.
 model WorkerProfile {
-  id              String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String                                @unique @map("user_id") @db.Uuid
+  id               String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String                                @unique @map("user_id") @db.Uuid
   /// 0 = unverified, 1 = identity verified, 2 = live-ready, 3 = licensed (category specific).
-  kycTier         Int                                   @default(0) @map("kyc_tier")
-  bio             String?
-  experienceYears Int?                                  @map("experience_years")
+  kycTier          Int                                   @default(0) @map("kyc_tier")
+  bio              String?
+  experienceYears  Int?                                  @map("experience_years")
   /// AES-256-GCM ciphertext (EncryptionService). Never store these in plaintext.
-  aadhaarLast4Enc String?                               @map("aadhaar_last4_enc")
-  dateOfBirthEnc  String?                               @map("date_of_birth_enc")
+  aadhaarLast4Enc  String?                               @map("aadhaar_last4_enc")
+  dateOfBirthEnc   String?                               @map("date_of_birth_enc")
+  /// D-087 (Sub-phase J, multi-account detection): a keyed HMAC of the Ranger's Aadhaar number,
+  /// computed and the plaintext discarded at tier-1 KYC approval (admin-kyc.service.ts) — the
+  /// strongest identifier already collected, never the raw number. A second account approved
+  /// with the same hash is a duplicate-account signal, flagged for admin review, not an
+  /// automatic block (a false match from a typo is a real risk worth a human looking first).
+  identityHash     String?                               @unique @map("identity_hash")
+  /// D-087 (Sub-phase I4): missing a promised parts-return slot lowers this; never raised back
+  /// up automatically. Purely informational today — nothing reads it to gate matching yet.
+  reliabilityScore Float                                 @default(100) @map("reliability_score")
   /// Self-declared. Only used as a soft ranking bonus for customers who ask for a preference.
-  gender          Gender?
+  gender           Gender?
   /// Presence: a Ranger counts as online only while lastLocationAt is fresh (heartbeat).
-  isOnline        Boolean                               @default(false) @map("is_online")
+  isOnline         Boolean                               @default(false) @map("is_online")
   /// geography(Point,4326); raw SQL only.
-  lastLocation    Unsupported("geography(Point,4326)")? @map("last_location")
-  lastLocationAt  DateTime?                             @map("last_location_at") @db.Timestamptz(6)
-  createdAt       DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime                              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastLocation     Unsupported("geography(Point,4326)")? @map("last_location")
+  lastLocationAt   DateTime?                             @map("last_location_at") @db.Timestamptz(6)
+  createdAt        DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   categories WorkerCategory[]
@@ -665,6 +686,16 @@ enum JobStatus {
   NO_SHOW_CUSTOMER
   DISPUTED
   REFUNDED
+  /// D-087 (Phase Flow-Final): the Ranger has arrived, start-OTP/selfie/GPS check-in are done,
+  /// and a line-itemised quote has been sent — waiting on the customer to accept or reject it.
+  QUOTING
+  /// D-087: the customer rejected the quote. Terminal, distinct from CANCELLED so the
+  /// visit-fee-charged settlement is unambiguous in reporting (CANCELLED still means "no
+  /// money moved", exactly as before).
+  QUOTE_REJECTED
+  /// D-087 (Sub-phase I): the Ranger paused mid-job to fetch parts. Resumes to IN_PROGRESS, or
+  /// closes to CANCELLED (reject/parts-unavailable) with Job.closeReason explaining which.
+  PAUSED_PARTS
 
   @@map("job_status")
 }
@@ -724,6 +755,10 @@ enum PartyRole {
 enum JobPhotoKind {
   BEFORE
   AFTER
+  /// D-087: captured at arrival, alongside the start OTP and GPS check-in. Matched against the
+  /// Ranger's KYC selfie by an admin side-by-side review today (J2) — no automated face-match
+  /// provider exists yet; see kyc selfie-match.provider.ts's stub.
+  SELFIE
 
   @@map("job_photo_kind")
 }
@@ -781,34 +816,34 @@ enum ClientLeagueTierName {
 
 /// What the customer asked for. Address fields are a SNAPSHOT so later edits never change history.
 model ServiceRequest {
-  id               String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  customerId       String                               @map("customer_id") @db.Uuid
-  categoryId       String                               @map("category_id") @db.Uuid
-  description      String
-  addressLine      String                               @map("address_line")
-  city             String
-  state            String
-  pincode          String
-  location         Unsupported("geography(Point,4326)")
-  urgency          Urgency
-  scheduledFor     DateTime?                            @map("scheduled_for") @db.Timestamptz(6)
-  genderPreference GenderPreference                     @default(ANY) @map("gender_preference")
+  id                  String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId          String                               @map("customer_id") @db.Uuid
+  categoryId          String                               @map("category_id") @db.Uuid
+  description         String
+  addressLine         String                               @map("address_line")
+  city                String
+  state               String
+  pincode             String
+  location            Unsupported("geography(Point,4326)")
+  urgency             Urgency
+  scheduledFor        DateTime?                            @map("scheduled_for") @db.Timestamptz(6)
+  genderPreference    GenderPreference                     @default(ANY) @map("gender_preference")
   /// Price band shown to both parties, frozen when the request is created. Kept for historical
   /// reads of pre-D-080 requests; no longer used to decide a new job's price (see listedPricePaise).
-  bandScope        PriceBandScope                       @map("band_scope")
-  bandMinPaise     Int                                  @map("band_min_paise")
-  bandMedianPaise  Int                                  @map("band_median_paise")
-  bandMaxPaise     Int                                  @map("band_max_paise")
+  bandScope           PriceBandScope                       @map("band_scope")
+  bandMinPaise        Int                                  @map("band_min_paise")
+  bandMedianPaise     Int                                  @map("band_median_paise")
+  bandMaxPaise        Int                                  @map("band_max_paise")
   /// D-080 (A3): the fixed price list entry resolved and frozen at request creation, so the price
   /// a customer saw when booking never shifts under them while Rangers are being broadcast to.
   /// Null only for the "other" category, which has no fixed price (A4: Rangers quote instead).
-  listedPricePaise    Int?      @map("listed_price_paise")
-  listedPriceCityTier CityTier? @map("listed_price_city_tier")
+  listedPricePaise    Int?                                 @map("listed_price_paise")
+  listedPriceCityTier CityTier?                            @map("listed_price_city_tier")
   /// True when listedPricePaise is a fixed inspection/visit charge (A2) rather than a full service
   /// price — the Ranger proposes add-ons from the catalogue once on site.
-  isInspectionCharge  Boolean   @default(false) @map("is_inspection_charge")
-  createdAt        DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  isInspectionCharge  Boolean                              @default(false) @map("is_inspection_charge")
+  createdAt           DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   category ServiceCategory @relation(fields: [categoryId], references: [id])
   job      Job?
@@ -844,6 +879,37 @@ model Job {
   arrivalCodeEnc         String?        @map("arrival_code_enc")
   arrivalCodeTries       Int            @default(0) @map("arrival_code_tries")
   arrivalVerifiedAt      DateTime?      @map("arrival_verified_at") @db.Timestamptz(6)
+  /// D-087 (Phase Flow-Final): the completion OTP, same hash/encrypt pattern as the arrival
+  /// code above, generated once in-app payment succeeds — entering it is what actually closes
+  /// the job, so the customer confirms they got what they paid for before the Ranger leaves.
+  completionCodeHash     String?        @map("completion_code_hash")
+  completionCodeEnc      String?        @map("completion_code_enc")
+  completionCodeTries    Int            @default(0) @map("completion_code_tries")
+  completionVerifiedAt   DateTime?      @map("completion_verified_at") @db.Timestamptz(6)
+  /// Set once payment succeeds but the customer has not yet shared/entered the completion code —
+  /// read by a scheduled job that auto-releases the Ranger's earnings after a configurable
+  /// window (default 24h) unless a dispute is open.
+  paidPendingCodeAt      DateTime?      @map("paid_pending_code_at") @db.Timestamptz(6)
+  /// D-087: labour-only quote total once a JobQuote is accepted (parts/extra tracked on the
+  /// quote itself, not duplicated here) — distinct from the legacy agreedPricePaise, which a
+  /// pre-D-087 job still uses for its single listed price.
+  acceptedQuoteId        String?        @map("accepted_quote_id") @db.Uuid
+  /// D-087: PAUSED_PARTS bookkeeping (Sub-phase I). Extension count is capped
+  /// (max_parts_extensions); pausedReturnBy is the Ranger's promised return time, read by the
+  /// missed-slot reliability check.
+  pausedAt               DateTime?      @map("paused_at") @db.Timestamptz(6)
+  pausedReason           String?        @map("paused_reason")
+  pausedExtensionCount   Int            @default(0) @map("paused_extension_count")
+  pausedReturnBy         DateTime?      @map("paused_return_by") @db.Timestamptz(6)
+  /// D-087: the frozen visit-fee amount once charged (quote rejection, or a paused-job closure
+  /// that owes one) — null until charged. Distinct from platformFeePaise, which is the
+  /// commission on a completed job's labour.
+  visitFeePaise          Int?           @map("visit_fee_paise")
+  visitFeeChargedAt      DateTime?      @map("visit_fee_charged_at") @db.Timestamptz(6)
+  /// D-087: free-form tag read only for reporting/settlement branching when status is
+  /// QUOTE_REJECTED or CANCELLED — e.g. 'QUOTE_REJECTED', 'EXTENSION_REJECTED',
+  /// 'PARTS_UNAVAILABLE'. Never drives the state machine itself (job-state.ts does that).
+  closeReason            String?        @map("close_reason")
   matchedAt              DateTime?      @map("matched_at") @db.Timestamptz(6)
   agreedAt               DateTime?      @map("agreed_at") @db.Timestamptz(6)
   enRouteAt              DateTime?      @map("en_route_at") @db.Timestamptz(6)
@@ -860,21 +926,22 @@ model Job {
   createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  request    ServiceRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  match      JobMatch?
-  broadcasts RequestBroadcast[]
-  offers     Offer[]
-  addOns     JobAddOn[]
-  quotes     JobQuote[]
-  payment    JobPayment?
-  events     JobEvent[]
-  photos     JobPhoto[]
-  locations  JobLocation[]
-  thread     ChatThread?
-  shares     TrustedShare[]
-  reviews    Review[]
-  sosAlerts  SosAlert[]
-  disputes   Dispute[]
+  request         ServiceRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  match           JobMatch?
+  broadcasts      RequestBroadcast[]
+  offers          Offer[]
+  addOns          JobAddOn[]
+  quotes          JobQuote[]
+  payment         JobPayment?
+  events          JobEvent[]
+  photos          JobPhoto[]
+  locations       JobLocation[]
+  thread          ChatThread?
+  shares          TrustedShare[]
+  reviews         Review[]
+  sosAlerts       SosAlert[]
+  disputes        Dispute[]
+  incidentReports IncidentReport[]
 
   @@index([customerId, createdAt(sort: Desc)])
   @@index([workerId, createdAt(sort: Desc)])
@@ -962,16 +1029,16 @@ model Offer {
 /// D-080 (A5): a Ranger's mid-job proposal of a catalogue add-on. Name and price are snapshotted
 /// at proposal time so a later price-list edit never silently changes what the customer agreed to.
 model JobAddOn {
-  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  jobId       String         @map("job_id") @db.Uuid
-  addOnId     String         @map("add_on_id") @db.Uuid
-  name        String
-  pricePaise  Int            @map("price_paise")
-  status      JobAddOnStatus @default(PROPOSED)
-  proposedAt  DateTime       @default(now()) @map("proposed_at") @db.Timestamptz(6)
-  decidedAt   DateTime?      @map("decided_at") @db.Timestamptz(6)
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId      String         @map("job_id") @db.Uuid
+  addOnId    String         @map("add_on_id") @db.Uuid
+  name       String
+  pricePaise Int            @map("price_paise")
+  status     JobAddOnStatus @default(PROPOSED)
+  proposedAt DateTime       @default(now()) @map("proposed_at") @db.Timestamptz(6)
+  decidedAt  DateTime?      @map("decided_at") @db.Timestamptz(6)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   job   Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
   addOn PriceListAddOn @relation(fields: [addOnId], references: [id], onDelete: Restrict)
@@ -983,20 +1050,73 @@ model JobAddOn {
 /// D-080 (A4): a Ranger's one quote for an "other"-category request — no counters, no rounds.
 /// The customer accepts one (performing the match) or declines it; UNIQUE(job_id, worker_id)
 /// enforces "one quote per Ranger per request" at the database level.
+/// D-087 (Phase Flow-Final): amountPaise/the single-shot "other"-category quote predates this —
+/// kept as the still-used legacy shape for "other" (A4). A line-itemised quote (any category,
+/// built after arrival/diagnosis) additionally populates servicePaise onward and gets child
+/// JobQuoteItem rows; amountPaise alone (items empty) still means the old one-number quote.
 model JobQuote {
-  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  jobId       String         @map("job_id") @db.Uuid
-  workerId    String         @map("worker_id") @db.Uuid
-  amountPaise Int            @map("amount_paise")
-  status      JobQuoteStatus @default(PENDING)
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId               String         @map("job_id") @db.Uuid
+  workerId            String         @map("worker_id") @db.Uuid
+  amountPaise         Int            @map("amount_paise")
+  status              JobQuoteStatus @default(PENDING)
+  /// Labour line-items total (floor/ceiling-checked against the price list).
+  servicePaise        Int?           @map("service_paise")
+  /// Parts pass-through total, billed at actual cost (no platform fee on this).
+  partsPaise          Int            @default(0) @map("parts_paise")
+  /// The small capped "extra" line (percent-of-labour capped, system_config
+  /// quote_extra_cap_bps) plus its one-line description.
+  extraPaise          Int            @default(0) @map("extra_paise")
+  extraDescription    String?        @map("extra_description")
+  /// Computed server-side, on servicePaise only — never entered by the Ranger or customer.
+  feePaise            Int?           @map("fee_paise")
+  /// servicePaise + partsPaise + extraPaise + feePaise, the number shown to the customer.
+  totalPaise          Int?           @map("total_paise")
+  /// True when any labour item in this quote exceeds its ceiling — allowed only with a photo +
+  /// written reason (aboveCeilingPhotoId/aboveCeilingReason), still sent to the customer marked
+  /// "above typical range", and queues the Ranger for admin review (flaggedForReview).
+  aboveCeiling        Boolean        @default(false) @map("above_ceiling")
+  aboveCeilingPhotoId String?        @map("above_ceiling_photo_id") @db.Uuid
+  aboveCeilingReason  String?        @map("above_ceiling_reason")
+  flaggedForReview    Boolean        @default(false) @map("flagged_for_review")
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job   Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  items JobQuoteItem[]
 
   @@unique([jobId, workerId])
   @@index([jobId, status])
   @@map("job_quotes")
+}
+
+enum QuoteItemKind {
+  LABOUR
+  PART
+  EXTRA
+
+  @@map("quote_item_kind")
+}
+
+/// D-087: one line of a line-itemised JobQuote. `catalogItemId` is set for LABOUR (the admin
+/// price-list item it came from, floor/ceiling-checked at that moment) and null for PART/EXTRA.
+model JobQuoteItem {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quoteId        String        @map("quote_id") @db.Uuid
+  kind           QuoteItemKind
+  catalogItemId  String?       @map("catalog_item_id") @db.Uuid
+  name           String
+  unitPricePaise Int           @map("unit_price_paise")
+  quantity       Int           @default(1)
+  totalPaise     Int           @map("total_paise")
+  /// PART only: a photo of the purchase bill, required at submission.
+  billPhotoId    String?       @map("bill_photo_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  quote JobQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("job_quote_items")
 }
 
 model JobEvent {
@@ -1093,6 +1213,9 @@ enum DisputeResolution {
   REFUND_CUSTOMER
   PAY_WORKER
   NO_ACTION
+  /// D-087 (step 12): raised by the Ranger when a customer won't pay for finished work — the
+  /// account is suspended (User.status) and the job carries no warranty.
+  CUSTOMER_SUSPENDED
 
   @@map("dispute_resolution")
 }
@@ -1121,6 +1244,50 @@ model Dispute {
   @@index([jobId])
   @@index([status, createdAt])
   @@map("disputes")
+}
+
+enum IncidentReportReason {
+  THEFT
+  DAMAGE
+  HARASSMENT
+  DISCRIMINATION
+  ACCIDENT
+  OTHER
+
+  @@map("incident_report_reason")
+}
+
+enum IncidentReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+
+  @@map("incident_report_status")
+}
+
+/// D-087 (Sub-phase J): a safety incident on a job, distinct from Dispute (money/quality) and
+/// SosAlert (in-the-moment emergency) — this is a formal report reviewed with the job's own
+/// trail as evidence (JobEvent, photos, GPS, chat). A credible report suspends the reported
+/// person's account at once (User.status = SUSPENDED, already enforced on every request by
+/// auth.guards.ts — nothing else needs to change for the suspension itself to take effect).
+model IncidentReport {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId           String               @map("job_id") @db.Uuid
+  reporterId      String               @map("reporter_id") @db.Uuid
+  reporterRole    PartyRole            @map("reporter_role")
+  reason          IncidentReportReason
+  description     String
+  status          IncidentReportStatus @default(OPEN)
+  suspendedUserId String?              @map("suspended_user_id") @db.Uuid
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt      DateTime?            @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy      String?              @map("resolved_by") @db.Uuid
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([status, createdAt])
+  @@map("incident_reports")
 }
 
 model ChatThread {
@@ -1185,29 +1352,29 @@ model Block {
 }
 
 model WorkerStats {
-  workerUserId  String         @id @map("worker_user_id") @db.Uuid
-  jobsCompleted Int            @default(0) @map("jobs_completed")
-  league        LeagueTierName @default(WOOD) @map("league")
+  workerUserId          String         @id @map("worker_user_id") @db.Uuid
+  jobsCompleted         Int            @default(0) @map("jobs_completed")
+  league                LeagueTierName @default(WOOD) @map("league")
   /// The highest league ever reached, distinct from `league` (today's, which can also drop). A
   /// league-up bonus pays only when `league` newly exceeds `highestLeague` — crossing the same
   /// boundary twice, or dropping and re-climbing back to a league already recorded here, never
   /// pays again (D-077 anti-farming/idempotency; retrofitted onto Part D's original logic, which
   /// had this exact gap).
-  highestLeague LeagueTierName @default(WOOD) @map("highest_league")
+  highestLeague         LeagueTierName @default(WOOD) @map("highest_league")
   /// Sum and count, not a stored average: integer math avoids float drift (same reasoning as
   /// money), and the average is trivial to compute at read time (ratingSum / ratingCount).
-  ratingSum     Int            @default(0) @map("rating_sum")
-  ratingCount   Int            @default(0) @map("rating_count")
+  ratingSum             Int            @default(0) @map("rating_sum")
+  ratingCount           Int            @default(0) @map("rating_count")
   /// Jobs cancelled or no-showed by this worker (lifecycle.service.ts increments both at the
   /// same transition points that already end a job that way), feeding the league's cancellation
   /// rate factor.
-  jobsCancelledByWorker Int    @default(0) @map("jobs_cancelled_by_worker")
+  jobsCancelledByWorker Int            @default(0) @map("jobs_cancelled_by_worker")
   /// Reserved for a future dispute-raising feature (JobStatus.DISPUTED exists but nothing sets it
   /// yet, D-076): always 0 today. Wired into the league formula now so that feature needs zero
   /// scoring-side changes to plug in later — not a claim that dispute tracking is live.
-  jobsDisputed  Int            @default(0) @map("jobs_disputed")
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  jobsDisputed          Int            @default(0) @map("jobs_disputed")
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("worker_stats")
 }
@@ -1217,21 +1384,21 @@ model WorkerStats {
 /// judgement and, later, could gate a customer's ability to keep booking. No badge tier: badges are
 /// a Ranger-facing trust signal only.
 model CustomerStats {
-  customerUserId String               @id @map("customer_user_id") @db.Uuid
-  ratingSum      Int                  @default(0) @map("rating_sum")
-  ratingCount    Int                  @default(0) @map("rating_count")
+  customerUserId              String               @id @map("customer_user_id") @db.Uuid
+  ratingSum                   Int                  @default(0) @map("rating_sum")
+  ratingCount                 Int                  @default(0) @map("rating_count")
   /// Phase 12 (D-077): the client league system. A booking counts only once a job reaches
   /// CONFIRMED_BY_CUSTOMER with a Ranger who was genuinely KYC-verified (kyc_tier >= 2) at that
   /// moment — the same anti-self-dealing guard documented on `lifecycle.service.ts`'s confirm().
   bookingsCompleted           Int                  @default(0) @map("bookings_completed")
   /// Bookings cancelled or no-showed BY this customer (mirrors WorkerStats.jobsCancelledByWorker).
   bookingsCancelledByCustomer Int                  @default(0) @map("bookings_cancelled_by_customer")
-  league         ClientLeagueTierName @default(NEWCOMER) @map("league")
+  league                      ClientLeagueTierName @default(NEWCOMER) @map("league")
   /// See WorkerStats.highestLeague: the high-water mark a league-up bonus is paid against, so a
   /// drop-and-reclimb or any other re-crossing of an already-reached league never pays twice.
-  highestLeague  ClientLeagueTierName @default(NEWCOMER) @map("highest_league")
-  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  highestLeague               ClientLeagueTierName @default(NEWCOMER) @map("highest_league")
+  createdAt                   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("customer_stats")
 }
@@ -1312,12 +1479,18 @@ enum PaymentOrderStatus {
 /// One row per customer. Created on first use (top-up or first request). balance_tokens is what
 /// can still be spent; held_tokens is reserved against open jobs (see WalletHold).
 model CustomerWallet {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId        String   @unique @map("user_id") @db.Uuid
-  balanceTokens Int      @default(0) @map("balance_tokens")
-  heldTokens    Int      @default(0) @map("held_tokens")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String   @unique @map("user_id") @db.Uuid
+  balanceTokens    Int      @default(0) @map("balance_tokens")
+  heldTokens       Int      @default(0) @map("held_tokens")
+  /// D-087 (H7): a one-way conversion target for a customer's remaining token balance once
+  /// tokens stop being chargeable for anything (Phase Commerce, D-081) — non-withdrawable,
+  /// usable only against this customer's future platform fee, drawn down automatically.
+  /// Nothing converts into this yet (see admin-token-migration.service.ts); the field exists so
+  /// the draw-down code has somewhere to read from once a conversion is run.
+  promoCreditPaise Int      @default(0) @map("promo_credit_paise")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   ledger WalletLedgerEntry[]
   holds  WalletHold[]
@@ -1472,14 +1645,14 @@ enum WorkerWalletLedgerType {
 /// Append-only, same pattern as WalletLedgerEntry (customer side): the DB trigger blocking UPDATE
 /// lives in the migration that creates this table.
 model WorkerWalletLedgerEntry {
-  id          String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  walletId    String                  @map("wallet_id") @db.Uuid
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  walletId    String                 @map("wallet_id") @db.Uuid
   type        WorkerWalletLedgerType
-  amountPaise Int                     @map("amount_paise")
-  jobId       String?                 @map("job_id") @db.Uuid
+  amountPaise Int                    @map("amount_paise")
+  jobId       String?                @map("job_id") @db.Uuid
   note        String?
-  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   wallet WorkerWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
@@ -1508,18 +1681,18 @@ enum JobPaymentStatus {
 /// PaymentOrder (purpose JOB_PAYMENT) drives it instead; status becomes CONFIRMED once that order
 /// is PAID and the customer has confirmed completion.
 model JobPayment {
-  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  jobId              String            @unique @map("job_id") @db.Uuid
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId              String           @unique @map("job_id") @db.Uuid
   mode               JobPaymentMode
-  servicePricePaise  Int               @map("service_price_paise")
-  feePaise           Int               @map("fee_paise")
-  totalPaise         Int               @map("total_paise")
-  cashRecordedPaise  Int?              @map("cash_recorded_paise")
-  cashConfirmedPaise Int?              @map("cash_confirmed_paise")
-  status             JobPaymentStatus  @default(PENDING)
-  paymentOrderId     String?           @map("payment_order_id") @db.Uuid
-  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  servicePricePaise  Int              @map("service_price_paise")
+  feePaise           Int              @map("fee_paise")
+  totalPaise         Int              @map("total_paise")
+  cashRecordedPaise  Int?             @map("cash_recorded_paise")
+  cashConfirmedPaise Int?             @map("cash_confirmed_paise")
+  status             JobPaymentStatus @default(PENDING)
+  paymentOrderId     String?          @map("payment_order_id") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 

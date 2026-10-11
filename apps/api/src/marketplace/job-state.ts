@@ -7,20 +7,31 @@ import { ERROR_CODES } from '@haggler/shared';
 export type Actor = 'CUSTOMER' | 'WORKER' | 'SYSTEM';
 
 /**
- * The job state machine (D3). Every status change goes through `assertTransition`, so a client can
- * never jump a job to a state the rules do not allow, and only the right party can move it.
+ * The job state machine (D3, revised D-087 "Phase Flow-Final"). Every status change goes
+ * through `assertTransition`, so a client can never jump a job to a state the rules do not
+ * allow, and only the right party can move it.
  *
- *   REQUESTED -> BROADCASTING -> MATCHED -> AGREED -> EN_ROUTE -> ARRIVED
- *        -> IN_PROGRESS -> COMPLETED_BY_WORKER -> CONFIRMED_BY_CUSTOMER
- *   plus CANCELLED, NO_SHOW_WORKER, NO_SHOW_CUSTOMER, DISPUTED, REFUNDED.
+ * Current flow (D-087):
+ *   REQUESTED -> BROADCASTING -> MATCHED -> EN_ROUTE -> ARRIVED -> QUOTING
+ *        -> AGREED -> IN_PROGRESS -> COMPLETED_BY_WORKER -> CONFIRMED_BY_CUSTOMER
+ *   plus QUOTE_REJECTED, PAUSED_PARTS, CANCELLED, NO_SHOW_WORKER, NO_SHOW_CUSTOMER, DISPUTED,
+ *   REFUNDED.
  *
- * D-080 (A3): MATCHED -> AGREED is now a same-transaction SYSTEM move straight after a match, at
- * the request's frozen listed price — negotiation is gone. MATCHED -> NEGOTIATING -> AGREED stays
- * in the table only so a pre-D-080 job already sitting in NEGOTIATING can still be read/cancelled/
- * finished; no new job is ever routed through it.
+ * The price is no longer agreed at match time — the Ranger travels on spec, diagnoses on site
+ * (QUOTING), and only AGREED once the customer accepts that quote; by then the Ranger is already
+ * there, so AGREED goes straight to IN_PROGRESS, not EN_ROUTE. A rejected quote is
+ * QUOTE_REJECTED, not CANCELLED, so the visit-fee settlement it triggers stays unambiguous in
+ * reporting. COMPLETED_BY_WORKER -> CONFIRMED_BY_CUSTOMER now also allows actor WORKER: payment
+ * happens first, then the Ranger enters the completion code the customer shares — the Ranger is
+ * the one making that final move, not the customer.
  *
- * Trace: a Ranger tries to start a job that is only AGREED. AGREED allows {EN_ROUTE, CANCELLED};
- * IN_PROGRESS is not among them, so the move is refused with 409 INVALID_TRANSITION.
+ * Earlier edges (D-080 A3's auto-agree, D3's negotiation, the old price-before-travel order)
+ * stay in the table below so a job already mid-flow under an earlier version keeps working;
+ * no new job is routed through them. See job-state.spec.ts's "earlier-flow" describe block.
+ *
+ * Trace: a Ranger tries to start a job that is only AGREED under the new flow. AGREED allows
+ * {EN_ROUTE, IN_PROGRESS, CANCELLED}; IN_PROGRESS is among them now (the Ranger is already on
+ * site), so the move succeeds — contrast the pre-D-087 trace, where only EN_ROUTE was allowed.
  */
 const C: Actor = 'CUSTOMER';
 const W: Actor = 'WORKER';
@@ -29,19 +40,29 @@ const S: Actor = 'SYSTEM';
 export const TRANSITIONS: Record<JobStatus, Partial<Record<JobStatus, Actor[]>>> = {
   REQUESTED: { BROADCASTING: [S], CANCELLED: [C, S] },
   BROADCASTING: { MATCHED: [W], CANCELLED: [C, S] },
-  MATCHED: { AGREED: [S], NEGOTIATING: [C, W], CANCELLED: [C, W, S] },
+  // AGREED:[S] is the D-080 auto-agree edge, kept for a pre-D-087 job only; a new job matches
+  // and heads straight to EN_ROUTE, with no price agreed yet.
+  MATCHED: { AGREED: [S], NEGOTIATING: [C, W], EN_ROUTE: [W], CANCELLED: [C, W, S] },
   NEGOTIATING: { AGREED: [C, W], CANCELLED: [C, W, S] },
-  AGREED: { EN_ROUTE: [W], CANCELLED: [C, W, S] },
+  // EN_ROUTE:[W] here is the pre-D-087 "price agreed, now travelling" edge; IN_PROGRESS:[W] is
+  // new — once the Ranger is already on site (D-087), an accepted quote starts work at once.
+  AGREED: { EN_ROUTE: [W], IN_PROGRESS: [W], CANCELLED: [C, W, S] },
   EN_ROUTE: { ARRIVED: [W], CANCELLED: [C, W], NO_SHOW_WORKER: [C] },
-  ARRIVED: { IN_PROGRESS: [W], CANCELLED: [C, W], NO_SHOW_CUSTOMER: [W] },
-  IN_PROGRESS: { COMPLETED_BY_WORKER: [W], DISPUTED: [C, W] },
-  COMPLETED_BY_WORKER: { CONFIRMED_BY_CUSTOMER: [C, S], DISPUTED: [C, W] },
+  // IN_PROGRESS:[W] here is the pre-D-087 edge (no quote step); QUOTING:[W] is the new one.
+  ARRIVED: { IN_PROGRESS: [W], QUOTING: [W], CANCELLED: [C, W], NO_SHOW_CUSTOMER: [W] },
+  QUOTING: { AGREED: [C], QUOTE_REJECTED: [C], CANCELLED: [C, W] },
+  IN_PROGRESS: { COMPLETED_BY_WORKER: [W], DISPUTED: [C, W], PAUSED_PARTS: [W] },
+  PAUSED_PARTS: { IN_PROGRESS: [W, S], CANCELLED: [C, W, S] },
+  // CONFIRMED_BY_CUSTOMER:[C,S] is the pre-D-087 edge; [W] is new — the Ranger enters the
+  // completion code the customer shares, after paying, which is what actually closes the job.
+  COMPLETED_BY_WORKER: { CONFIRMED_BY_CUSTOMER: [C, S, W], DISPUTED: [C, W] },
   CONFIRMED_BY_CUSTOMER: { DISPUTED: [C, W], REFUNDED: [S] },
   CANCELLED: {},
   NO_SHOW_WORKER: { REFUNDED: [S] },
   NO_SHOW_CUSTOMER: {},
   DISPUTED: { REFUNDED: [S], CONFIRMED_BY_CUSTOMER: [S] },
   REFUNDED: {},
+  QUOTE_REJECTED: {},
 };
 
 export function canTransition(from: JobStatus, to: JobStatus, actor: Actor): boolean {
@@ -77,4 +98,6 @@ export const CUSTOMER_CANCELLABLE: JobStatus[] = [
   'AGREED',
   'EN_ROUTE',
   'ARRIVED',
+  'QUOTING',
+  'PAUSED_PARTS',
 ];
