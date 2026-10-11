@@ -1,4 +1,4 @@
-import { formatRupees, parseRupeesToPaise } from './money';
+import { formatRupees, jobTotalPaise, parseRupeesToPaise } from './money';
 
 describe('formatRupees', () => {
   it.each([
@@ -28,4 +28,30 @@ describe('parseRupeesToPaise', () => {
   it.each(['', 'abc', '12.345', '-5', '1e5', '12345678', '.5'])('rejects %s', (input) =>
     expect(parseRupeesToPaise(input)).toBeNull(),
   );
+});
+
+describe('jobTotalPaise', () => {
+  it('adds the agreed price and the platform fee', () => {
+    expect(jobTotalPaise({ agreedPricePaise: 40000, platformFeePaise: 4000, addOns: [] })).toBe(
+      44000,
+    );
+  });
+
+  it('includes only APPROVED add-ons', () => {
+    expect(
+      jobTotalPaise({
+        agreedPricePaise: 40000,
+        platformFeePaise: 4000,
+        addOns: [
+          { pricePaise: 1000, status: 'APPROVED' },
+          { pricePaise: 2000, status: 'PROPOSED' },
+          { pricePaise: 3000, status: 'DECLINED' },
+        ],
+      }),
+    ).toBe(45000);
+  });
+
+  it('treats a null price or fee as zero (e.g. "other" before a quote is accepted)', () => {
+    expect(jobTotalPaise({ agreedPricePaise: null, platformFeePaise: null, addOns: [] })).toBe(0);
+  });
 });

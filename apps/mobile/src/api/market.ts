@@ -107,9 +107,20 @@ export const arrive = (jobId: string) => act(jobId, 'arrive');
 export const verifyArrival = (jobId: string, code: string) =>
   act(jobId, 'verify-arrival', { code });
 export const startJob = (jobId: string) => act(jobId, 'start');
-export const completeJob = (jobId: string, paymentMethod: 'CASH' | 'UPI') =>
-  act(jobId, 'complete', { paymentMethod });
-export const confirmJob = (jobId: string) => act(jobId, 'confirm');
+export const completeJob = (
+  jobId: string,
+  paymentMethod: 'CASH' | 'UPI',
+  cashCollectedPaise?: number,
+) => act(jobId, 'complete', { paymentMethod, ...(cashCollectedPaise !== undefined ? { cashCollectedPaise } : {}) });
+export const confirmJob = (jobId: string, cashConfirmedPaise?: number) =>
+  act(jobId, 'confirm', cashConfirmedPaise !== undefined ? { cashConfirmedPaise } : {});
+/** Phase Commerce B3: starts the Razorpay-sandbox order for a completed ONLINE job; complete it
+ * via wallet's verify/sandbox-pay, same pipeline as a token top-up. */
+export const startOnlinePayment = (jobId: string) =>
+  apiRequest(`/v1/jobs/${jobId}/payment/online`, {
+    method: 'POST',
+    schema: paymentOrderStartSchema,
+  });
 export const cancelJob = (jobId: string, reason?: string) =>
   act(jobId, 'cancel', reason ? { reason } : {});
 export const reportNoShow = (jobId: string) => act(jobId, 'report-no-show');

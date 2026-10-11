@@ -278,25 +278,63 @@ describe('JobScreen: customer side of the visit', () => {
     expect(screen.queryByTestId('arrival-code-card')).toBeNull();
   });
 
-  it('confirming: tells the customer what to pay and how, then confirms', async () => {
+  it('confirming an ONLINE job: pays through the sandbox order pipeline, then confirms', async () => {
     const { calls } = serve(
       asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'UPI' }),
-      (c) =>
-        c.path === `/v1/jobs/${JOB_ID}/confirm`
-          ? asCustomer({
-              status: 'CONFIRMED_BY_CUSTOMER',
-              agreedPricePaise: 40000,
-              paymentMethod: 'UPI',
-            })
-          : undefined,
+      (c) => {
+        if (c.path === `/v1/jobs/${JOB_ID}/payment/online`)
+          return {
+            body: {
+              orderId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              purpose: 'JOB_PAYMENT',
+              provider: 'sandbox',
+              providerOrderId: 'order_1',
+              amountPaise: 40000,
+              tokens: null,
+              keyId: null,
+            },
+          };
+        if (c.path === '/v1/wallet/orders/cccccccc-cccc-4ccc-8ccc-cccccccccccc/sandbox-pay')
+          return { body: { ok: true } };
+        if (c.path === `/v1/jobs/${JOB_ID}/confirm`)
+          return asCustomer({
+            status: 'CONFIRMED_BY_CUSTOMER',
+            agreedPricePaise: 40000,
+            paymentMethod: 'UPI',
+          });
+        return undefined;
+      },
     );
     await renderWithProviders(<JobScreen />);
     expect(await screen.findByTestId('pay-note')).toHaveTextContent(
       'Pay ₹400 to your Ranger by UPI.',
     );
+    await fireEvent.press(screen.getByTestId('pay-and-confirm'));
+    expect(await screen.findByText('Completed')).toBeTruthy();
+    expect(post(calls, `/v1/jobs/${JOB_ID}/payment/online`)).toBeTruthy();
+    expect(post(calls, `/v1/jobs/${JOB_ID}/confirm`)).toBeTruthy();
+    expect(screen.queryByTestId('pay-and-confirm')).toBeNull();
+  });
+
+  it('confirming a CASH job: prefills the total and sends what the customer confirms', async () => {
+    const { calls } = serve(
+      asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'CASH' }),
+      (c) =>
+        c.path === `/v1/jobs/${JOB_ID}/confirm`
+          ? asCustomer({
+              status: 'CONFIRMED_BY_CUSTOMER',
+              agreedPricePaise: 40000,
+              paymentMethod: 'CASH',
+            })
+          : undefined,
+    );
+    await renderWithProviders(<JobScreen />);
+    expect(await screen.findByTestId('pay-note')).toHaveTextContent(
+      'Pay ₹400 to your Ranger by Cash.',
+    );
     await fireEvent.press(screen.getByTestId('confirm-done'));
     expect(await screen.findByText('Completed')).toBeTruthy();
-    expect(post(calls, `/v1/jobs/${JOB_ID}/confirm`)).toBeTruthy();
+    expect(post(calls, `/v1/jobs/${JOB_ID}/confirm`)?.body).toEqual({ cashConfirmedPaise: 40000 });
     expect(screen.queryByTestId('confirm-done')).toBeNull();
   });
 
@@ -304,7 +342,7 @@ describe('JobScreen: customer side of the visit', () => {
     jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
     try {
       serve(
-        asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'UPI' }),
+        asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'CASH' }),
         (c) =>
           c.path === `/v1/jobs/${JOB_ID}/confirm`
             ? asCustomer({ status: 'CONFIRMED_BY_CUSTOMER', agreedPricePaise: 40000 })
@@ -329,7 +367,7 @@ describe('JobScreen: customer side of the visit', () => {
     jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
     try {
       serve(
-        asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'UPI' }),
+        asCustomer({ status: 'COMPLETED_BY_WORKER', agreedPricePaise: 40000, paymentMethod: 'CASH' }),
         (c) =>
           c.path === `/v1/jobs/${JOB_ID}/confirm` ? { status: 409, body: {} } : undefined,
       );
@@ -619,9 +657,14 @@ describe('JobScreen: Ranger side of the visit', () => {
           : undefined,
     );
     await renderWithProviders(<JobScreen />);
+    // Phase Commerce B3: CASH defaults the amount field to the job's total (agreed price + fee),
+    // so pressing finish straight away sends that default as cashCollectedPaise.
     await fireEvent.press(await screen.findByTestId('finish-job'));
     await waitFor(() =>
-      expect(post(calls, `/v1/jobs/${JOB_ID}/complete`)?.body).toEqual({ paymentMethod: 'CASH' }),
+      expect(post(calls, `/v1/jobs/${JOB_ID}/complete`)?.body).toEqual({
+        paymentMethod: 'CASH',
+        cashCollectedPaise: 40000,
+      }),
     );
   });
 

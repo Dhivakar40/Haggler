@@ -1272,3 +1272,51 @@ are seeded at 0bps, read by nothing — pure placeholders per the master prompt'
 rates"), B12 (Contract employer payment tracking). Mobile: no UI anywhere yet for the fee
 breakdown, cash recording/confirmation, online job payment, or the Ranger earnings/dues screen —
 API only this round, same "API first, mobile next" split as every sub-phase in this project.
+
+## D-082: Sub-phase B mobile — cash/online payment UI, the Ranger earnings screen
+
+**The mobile half of D-081, closing the "API only this round" gap above.** `JobDto` gained a
+`payment` field (nullable `JobPaymentDto`, exposed once `complete()` has run) so the app can show
+what a Ranger actually recorded and whether an ONLINE job still needs paying — this had to be added
+to both `marketplace-schemas.ts` and `job-view.service.ts` first; the schema package needed a
+rebuild (`npm run build` in `packages/shared`) before the API's own `tsc --noEmit` would pick it up,
+the same "rebuild shared before trusting a shared-type error" step as every prior phase.
+
+**`RangerActions.tsx`'s finish-job card** now asks for the cash amount collected (`TextField`,
+prefilled with the job's total — `jobTotalPaise()`, a new `lib/money.ts` helper: agreed price +
+platform fee + any APPROVED add-ons, the one place this sum is computed so it can't drift between
+screens) only when CASH is selected; UPI is unchanged. **`CustomerActions.tsx`'s confirm card**
+branches the same way: CASH shows a prefilled "what did you actually pay" field and sends
+`cashConfirmedPaise`; ONLINE shows a single "Pay & confirm" button that chains
+`POST .../payment/online` → `sandboxPay()` → `POST .../confirm`, reusing the exact sandbox-checkout
+pattern already used for Rush/Boost/Plus rather than inventing a second one.
+
+**A new `WorkerWalletScreen.tsx`** (balance, dues with a settle-dues form, a withdraw form, recent
+ledger) — same checkout-card pattern as the customer `WalletScreen.tsx`. Linked from
+`AccountScreen.tsx` only for Rangers, as **"My earnings"** at `/earnings`. The testID was first
+`open-worker-wallet` / route `/worker-wallet`; both got renamed to `open-earnings` / `/earnings`
+after `account.spec.tsx`'s "never calls a Ranger a worker" check failed on it — that test scans the
+*entire* rendered tree (testIDs and accessibility labels included, not just visible text), so the
+word "worker" has to stay out of identifiers too, not only prose.
+
+**Two test bugs found and fixed while writing `WorkerWalletScreen.spec.tsx`,** worth recording
+since neither was obvious from the failure message: (1) a `fireEvent.changeText` call without
+`await` let the submit button fire before the state update flushed, silently submitting the
+*previous* (valid, prefilled) amount instead of the typed invalid one — this codebase's convention
+is to always `await fireEvent.changeText(...)`, confirmed by grepping every other spec file, and
+the one line that skipped it was the only one that broke. (2) the mock's fabricated ledger-entry
+ids were plain strings (`'ledger-1'`), which fail `workerWalletLedgerEntrySchema`'s `uuid` check on
+the refetch after a mutation, surfacing as `wallet.isError` and a generic "Could not load this"
+screen with no obvious connection to the real cause — fixed by using the same `uuidN()` fixture
+helper `WalletScreen.spec.tsx` already uses for this reason.
+
+`jobs.e2e-spec.ts`, `wallet.e2e-spec.ts`, and `test-utils.tsx`'s `makeJob()`/`runToCompletion()`/
+`confirmJob()` needed no further changes beyond what D-081 already did — this round only touched
+the mobile layer and the one shared-schema addition above. Mobile suite green: 510/510 across 56
+suites. Root lint clean on every file this round touched (15 pre-existing violations remain
+elsewhere — `check-design-tokens.js`, `ClientLeagueScreen.tsx`, `JobScreen.tsx`, `LeagueScreen.tsx`,
+`WalletScreen.tsx` — none introduced here, left alone rather than fixed opportunistically).
+
+Not yet done, same list as D-081's close: B7-B12, plus the Plus token-bundle-discount product
+question. Sub-phase B's mobile gap is now closed; the live smoke test remains the one gate this
+sandbox cannot run (no device/emulator).

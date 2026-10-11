@@ -225,6 +225,14 @@ export function AccountScreen() {
             title={t('account.wallet')}
             onPress={go('/wallet')}
           />
+          {isRanger ? (
+            <ListRow
+              testID="open-earnings"
+              icon="cash-outline"
+              title={t('account.earnings')}
+              onPress={go('/earnings')}
+            />
+          ) : null}
         </Card>
       </View>
 

@@ -10,6 +10,7 @@ import {
   PRICE_BAND_SCOPES,
 } from './constants';
 import { paiseSchema } from './schemas';
+import { jobPaymentSchema } from './wallet-schemas';
 
 /** Contracts for the on-demand marketplace (Phase 2), shared by API and mobile. */
 
@@ -191,6 +192,8 @@ export const jobDtoSchema = z.object({
   hasBeforePhoto: z.boolean(),
   hasAfterPhoto: z.boolean(),
   paymentMethod: z.enum(['CASH', 'UPI']).nullable(),
+  /** Phase Commerce B3: exists once complete() has run; null before then. */
+  payment: jobPaymentSchema.nullable(),
   cancellation: z
     .object({ by: z.string().nullable(), reason: z.string().nullable(), feeApplies: z.boolean() })
     .nullable(),

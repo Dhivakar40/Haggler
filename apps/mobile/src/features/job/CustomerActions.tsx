@@ -3,11 +3,19 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Share, View } from 'react-native';
 import { type JobDto, SOCKET_EVENTS, type TrackDto } from '@haggler/shared';
-import { cancelJob, confirmJob, createShareLink, getTrack, reportNoShow } from '../../api/market';
-import { Button, Card, Dialog, Text, TrackingMap } from '../../components';
+import {
+  cancelJob,
+  confirmJob,
+  createShareLink,
+  getTrack,
+  reportNoShow,
+  startOnlinePayment,
+} from '../../api/market';
+import { sandboxPay } from '../../api/wallet';
+import { Button, Card, Dialog, Text, TextField, TrackingMap } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { checkLeagueUp } from '../../lib/league-up-check';
-import { formatRupees } from '../../lib/money';
+import { formatRupees, jobTotalPaise, parseRupeesToPaise } from '../../lib/money';
 import { useRealtimeEvent } from '../../realtime/RealtimeProvider';
 import { spacing } from '../../theme/tokens';
 import type { useJobAction } from './useJobAction';
@@ -21,8 +29,35 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
   const qc = useQueryClient();
   const [shareError, setShareError] = useState<string>();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const totalPaise = jobTotalPaise(job);
+  const [cashInput, setCashInput] = useState(() => String(totalPaise / 100));
+  const [payError, setPayError] = useState<string>();
   const s = job.status;
   const tracked = TRACKED.includes(s);
+
+  function afterConfirm(ok: unknown) {
+    // D-078/D-079: the league recompute runs deferred, not inside confirm() itself — one refetch
+    // ~2s later, not a polling loop, is enough to catch a promotion the moment it's landed.
+    if (ok) setTimeout(() => void checkLeagueUp(), 2000);
+  }
+
+  function confirmCash() {
+    const paise = parseRupeesToPaise(cashInput);
+    if (paise === null || paise < 0) return setPayError(t('job.cashCollectedInvalid'));
+    setPayError(undefined);
+    void action.run('confirm', () => confirmJob(job.id, paise)).then(afterConfirm);
+  }
+
+  function payAndConfirm() {
+    setPayError(undefined);
+    void action
+      .run('confirm', async () => {
+        const order = await startOnlinePayment(job.id);
+        await sandboxPay(order.orderId);
+        return confirmJob(job.id);
+      })
+      .then(afterConfirm);
+  }
 
   const track = useQuery({
     queryKey: ['track', job.id],
@@ -116,24 +151,54 @@ export function CustomerActions({ job, action }: { job: JobDto; action: Action }
             {job.agreedPricePaise && job.paymentMethod ? (
               <Text testID="pay-note" variant="heading">
                 {t('job.payNote', {
-                  amount: formatRupees(job.agreedPricePaise),
+                  amount: formatRupees(totalPaise),
                   method: job.paymentMethod === 'CASH' ? t('job.cash') : t('job.upi'),
                 })}
               </Text>
             ) : null}
-            <Button
-              testID="confirm-done"
-              title={t('job.confirmDone')}
-              loading={action.busy === 'confirm'}
-              onPress={() =>
-                void action.run('confirm', () => confirmJob(job.id)).then((ok) => {
-                  // D-078/D-079: the league recompute runs deferred, not inside confirm() itself —
-                  // one refetch ~2s later, not a polling loop, is enough to catch a promotion the
-                  // moment it's actually landed (Sub-phase 4, Part F).
-                  if (ok) setTimeout(() => void checkLeagueUp(), 2000);
-                })
-              }
-            />
+            {job.paymentMethod === 'CASH' ? (
+              <View style={{ gap: spacing.xs }}>
+                <TextField
+                  testID="cash-confirmed"
+                  label={t('job.cashConfirmedLabel')}
+                  value={cashInput}
+                  onChangeText={setCashInput}
+                  keyboardType="decimal-pad"
+                />
+                {job.payment?.cashRecordedPaise !== null &&
+                job.payment?.cashRecordedPaise !== undefined ? (
+                  <Text color="textMuted">
+                    {t('job.cashConfirmedHelp', {
+                      amount: formatRupees(job.payment.cashRecordedPaise),
+                    })}
+                  </Text>
+                ) : null}
+                <Button
+                  testID="confirm-done"
+                  title={t('job.confirmDone')}
+                  loading={action.busy === 'confirm'}
+                  onPress={confirmCash}
+                />
+              </View>
+            ) : (
+              <View style={{ gap: spacing.xs }}>
+                <Text color="textMuted">
+                  {t('job.payOnlineHelp', { amount: formatRupees(totalPaise) })}
+                </Text>
+                <Text color="textMuted">{t('job.payOnlineDiscount')}</Text>
+                <Button
+                  testID="pay-and-confirm"
+                  title={t('job.payAndConfirm')}
+                  loading={action.busy === 'confirm'}
+                  onPress={payAndConfirm}
+                />
+              </View>
+            )}
+            {payError ? (
+              <Text color="danger" accessibilityRole="alert">
+                {payError}
+              </Text>
+            ) : null}
           </View>
         </Card>
       ) : null}

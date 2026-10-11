@@ -15,6 +15,7 @@ import {
 } from '../../api/market';
 import { Button, Card, Chip, Dialog, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
+import { formatRupees, jobTotalPaise, parseRupeesToPaise } from '../../lib/money';
 import { spacing } from '../../theme/tokens';
 import { uploadJobPhoto } from '../media/upload';
 import type { useJobAction } from './useJobAction';
@@ -26,10 +27,21 @@ export function RangerActions({ job, action }: { job: JobDto; action: Action }) 
   const { t } = useTranslation();
   const [code, setCode] = useState('');
   const [payment, setPayment] = useState<'CASH' | 'UPI'>('CASH');
+  const totalPaise = jobTotalPaise(job);
+  const [cashInput, setCashInput] = useState(() => String(totalPaise / 100));
+  const [cashError, setCashError] = useState<string>();
   const [photoError, setPhotoError] = useState<string>();
   const [photoBusy, setPhotoBusy] = useState<'BEFORE' | 'AFTER' | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const s = job.status;
+
+  function finish() {
+    if (payment === 'UPI') return void action.run('complete', () => completeJob(job.id, 'UPI'));
+    const paise = parseRupeesToPaise(cashInput);
+    if (paise === null || paise <= 0) return setCashError(t('job.cashCollectedInvalid'));
+    setCashError(undefined);
+    void action.run('complete', () => completeJob(job.id, 'CASH', paise));
+  }
 
   /** The job photo must be taken with the camera at the site, never picked from the gallery. */
   async function takePhoto(kind: 'BEFORE' | 'AFTER') {
@@ -155,12 +167,31 @@ export function RangerActions({ job, action }: { job: JobDto; action: Action }) 
                 onPress={() => setPayment('UPI')}
               />
             </View>
+            {payment === 'CASH' ? (
+              <View style={{ gap: spacing.xs }}>
+                <TextField
+                  testID="cash-collected"
+                  label={t('job.cashCollectedLabel')}
+                  value={cashInput}
+                  onChangeText={setCashInput}
+                  keyboardType="decimal-pad"
+                />
+                <Text color="textMuted">
+                  {t('job.cashCollectedHelp', { amount: formatRupees(totalPaise) })}
+                </Text>
+                {cashError ? (
+                  <Text color="danger" accessibilityRole="alert">
+                    {cashError}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             <Button
               testID="finish-job"
               title={t('job.finish')}
               disabled={!job.hasAfterPhoto}
               loading={action.busy === 'complete'}
-              onPress={() => void action.run('complete', () => completeJob(job.id, payment))}
+              onPress={finish}
             />
           </View>
         </Card>

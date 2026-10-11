@@ -10,6 +10,7 @@ import {
   tokenBundleSchema,
   type VerifyPaymentOrderInput,
   walletSchema,
+  workerWalletSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
 import { apiRequest } from './client';
@@ -42,6 +43,22 @@ export const sandboxPay = (orderId: string) =>
     schema: z.object({ ok: z.literal(true) }),
   });
 
+// ---- worker wallet (Phase Commerce B3/B4/B6) -------------------------------------------------
+export const getWorkerWallet = () =>
+  apiRequest('/v1/worker/wallet', { schema: workerWalletSchema });
+export const settleDues = (amountPaise: number) =>
+  apiRequest('/v1/worker/wallet/dues/settle', {
+    method: 'POST',
+    body: { amountPaise },
+    schema: z.object({ settledPaise: z.number().int() }),
+  });
+export const withdraw = (amountPaise: number) =>
+  apiRequest('/v1/worker/wallet/withdraw', {
+    method: 'POST',
+    body: { amountPaise },
+    schema: z.object({ withdrawnPaise: z.number().int() }),
+  });
+
 export const getPlusPlans = (audience: PlusAudience) =>
   apiRequest(`/v1/plus/plans?audience=${audience}`, { schema: z.array(plusPlanSchema) });
 export const getPlusMembership = () =>
@@ -66,4 +83,9 @@ export function usePlusPlans(audience: PlusAudience) {
 }
 export function usePlusMembership() {
   return useQuery({ queryKey: ['plus', 'membership'], queryFn: getPlusMembership });
+}
+
+export const workerWalletKey = ['worker-wallet'] as const;
+export function useWorkerWallet() {
+  return useQuery({ queryKey: workerWalletKey, queryFn: getWorkerWallet });
 }

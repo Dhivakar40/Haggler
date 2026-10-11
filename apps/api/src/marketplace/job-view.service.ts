@@ -45,6 +45,7 @@ export class JobViewService {
         quotes: { orderBy: { createdAt: 'asc' } },
         addOns: { orderBy: { proposedAt: 'asc' } },
         photos: { where: { status: 'UPLOADED' } },
+        payment: true,
         thread: true,
       },
     });
@@ -232,6 +233,17 @@ export class JobViewService {
       hasBeforePhoto: job.photos.some((p) => p.kind === 'BEFORE'),
       hasAfterPhoto: job.photos.some((p) => p.kind === 'AFTER'),
       paymentMethod: job.paymentMethod,
+      payment: job.payment
+        ? {
+            mode: job.payment.mode,
+            servicePricePaise: job.payment.servicePricePaise,
+            feePaise: job.payment.feePaise,
+            totalPaise: job.payment.totalPaise,
+            cashRecordedPaise: job.payment.cashRecordedPaise,
+            cashConfirmedPaise: job.payment.cashConfirmedPaise,
+            status: job.payment.status,
+          }
+        : null,
       cancellation:
         job.status === 'CANCELLED' || job.status.startsWith('NO_SHOW')
           ? {

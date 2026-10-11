@@ -21,3 +21,16 @@ export function parseRupeesToPaise(input: string): number | null {
   const [r, p = ''] = t.split('.');
   return Number(r) * 100 + Number(p.padEnd(2, '0'));
 }
+
+/** Phase Commerce B2: service price + platform fee + any APPROVED add-ons, paise. The same total
+ * every screen (customer, Ranger, payment) must show — computed once here so it can't drift. */
+export function jobTotalPaise(job: {
+  agreedPricePaise: number | null;
+  platformFeePaise: number | null;
+  addOns: { pricePaise: number; status: string }[];
+}): number {
+  const addOns = job.addOns
+    .filter((a) => a.status === 'APPROVED')
+    .reduce((sum, a) => sum + a.pricePaise, 0);
+  return (job.agreedPricePaise ?? 0) + (job.platformFeePaise ?? 0) + addOns;
+}
