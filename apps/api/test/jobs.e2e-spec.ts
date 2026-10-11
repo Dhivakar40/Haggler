@@ -300,7 +300,9 @@ describe('the full job lifecycle', () => {
     // The state machine refuses shortcuts.
     await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(409);
     await m.api.post(r, `/v1/jobs/${jobId}/start`).expect(409);
-    await m.api.post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH' }).expect(409);
+    await m.api
+      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH', cashCollectedPaise: 40000 })
+      .expect(409);
     await m.api.post(c, `/v1/jobs/${jobId}/confirm`).expect(409);
     await m.api.post(c, `/v1/jobs/${jobId}/en-route`).expect(403); // customers are not Rangers
 
@@ -355,7 +357,7 @@ describe('the full job lifecycle', () => {
     expect(await statusOf(jobId)).toBe('IN_PROGRESS');
 
     const noAfter = await m.api
-      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH' })
+      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH', cashCollectedPaise: 40000 })
       .expect(422);
     expect(noAfter.body.error.details.code).toBe('AFTER_PHOTO_REQUIRED');
     await m.api.post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'BITCOIN' }).expect(400);
@@ -374,6 +376,13 @@ describe('the full job lifecycle', () => {
       .post(r, `/v1/jobs/${jobId}/confirm`)
       .expect(403 as number)
       .catch(() => undefined);
+
+    // Phase Commerce B3: an ONLINE job must be paid before it can be confirmed.
+    const early = await m.api.post(c, `/v1/jobs/${jobId}/confirm`).expect(409);
+    expect(early.body.error.details.code).toBe('PAYMENT_NOT_CAPTURED');
+    const order = await m.api.post(c, `/v1/jobs/${jobId}/payment/online`).expect(201);
+    await m.api.post(c, `/v1/wallet/orders/${order.body.orderId}/sandbox-pay`).expect(200);
+
     const confirmed = await m.api.post(c, `/v1/jobs/${jobId}/confirm`).expect(200);
     expect(confirmed.body.status).toBe('CONFIRMED_BY_CUSTOMER');
     expect(

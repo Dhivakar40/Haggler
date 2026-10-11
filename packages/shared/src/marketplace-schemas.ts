@@ -151,6 +151,9 @@ export const jobDtoSchema = z.object({
   listedPricePaise: paiseSchema.nullable(),
   isInspectionCharge: z.boolean(),
   agreedPricePaise: paiseSchema.nullable(),
+  /** Phase Commerce B2: frozen at the same moment as agreedPricePaise. Total = agreedPricePaise +
+   * platformFeePaise (+ any APPROVED add-ons, see `addOns`). */
+  platformFeePaise: paiseSchema.nullable(),
   genderPreference: z.enum(['ANY', 'FEMALE', 'MALE']),
   genderPreferenceMet: z.boolean().nullable(),
   /** Rush (Phase 9, D-069): a paid Rush fee or an active Haggler Plus membership at request time.
@@ -314,7 +317,17 @@ export const jobPhotoPresignRequestSchema = z.object({
     .min(1)
     .max(10 * 1024 * 1024),
 });
-export const completeJobSchema = z.object({ paymentMethod: z.enum(['CASH', 'UPI']) });
+/** Phase Commerce B3: cashCollectedPaise is required when paymentMethod is CASH — what the
+ * Ranger actually collected, recorded before the customer confirms it. */
+export const completeJobSchema = z
+  .object({
+    paymentMethod: z.enum(['CASH', 'UPI']),
+    cashCollectedPaise: paiseSchema.optional(),
+  })
+  .refine((v) => v.paymentMethod !== 'CASH' || v.cashCollectedPaise !== undefined, {
+    message: 'cashCollectedPaise is required for a cash job',
+    path: ['cashCollectedPaise'],
+  });
 export const cancelJobSchema = z.object({ reason: z.string().trim().min(3).max(300).optional() });
 export const jobPhotoPresignSchema = z.object({
   photoId: uuid,

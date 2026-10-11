@@ -46,7 +46,44 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
   {
     key: 'commission_bps',
     value: 600,
-    description: 'Platform commission in basis points (600 = 6%)',
+    description:
+      'Unused placeholder, never wired to any pricing logic — superseded by platform_fee_bps (Phase Commerce B2). Left as-is rather than deleted.',
+  },
+  {
+    key: 'platform_fee_bps',
+    value: 1000,
+    description: 'Platform fee in basis points (1000 = 10%), charged to the customer on top of the listed price',
+  },
+  {
+    key: 'platform_fee_min_paise',
+    value: 2000,
+    description: 'Floor on the platform fee so a very cheap job still carries a meaningful fee',
+  },
+  {
+    key: 'online_payment_discount_bps',
+    value: 200,
+    description: 'Small discount off the total for paying online instead of cash (B5)',
+  },
+  {
+    key: 'worker_dues_threshold_paise',
+    value: 50000,
+    description: 'New jobs pause for a Ranger once unpaid cash-job dues reach this amount (B4)',
+  },
+  {
+    key: 'gst_on_fee_bps',
+    value: 0,
+    description: 'GST on the platform fee, in basis points. 0 until finance/counsel confirms the rate (B11)',
+  },
+  {
+    key: 'payout_tax_bps',
+    value: 0,
+    description: 'Tax withheld on Ranger payouts, in basis points. 0 until finance/counsel confirms (B11)',
+  },
+  {
+    key: 'aggregator_welfare_fee_bps',
+    value: 0,
+    description:
+      'Accounting-only: the gig-worker aggregator welfare fee (turnover-based), not yet charged anywhere. 0 until counsel confirms applicability (B11)',
   },
   {
     key: 'broadcast_radii_m',

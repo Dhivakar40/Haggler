@@ -170,6 +170,7 @@ export class JobViewService {
       listedPricePaise: req.listedPricePaise,
       isInspectionCharge: req.isInspectionCharge,
       agreedPricePaise: job.agreedPricePaise,
+      platformFeePaise: job.platformFeePaise,
       genderPreference: req.genderPreference,
       genderPreferenceMet: job.genderPreferenceMet,
       isRush: job.isRush,

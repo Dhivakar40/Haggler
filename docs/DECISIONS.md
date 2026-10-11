@@ -1140,3 +1140,125 @@ smoke test, per the master prompt) is now fully green for everything built: API 
 499/499, design-token lint 0 violations, both typechecks clean. The live smoke test itself needs a
 deployed backend this sandbox can't reach to exercise end-to-end — the one gate item left
 unverified for the whole of Sub-phase A.
+
+# Phase Commerce + Safety
+
+## D-081: Sub-phase B1-B4/B6 — the platform fee and pay-after payments, replacing tokens
+
+**The token system stops being called, but nothing about it is deleted.** Same pattern as D-080's
+negotiation removal: `WalletService.hold/consume/release`, `CustomerWallet`, `WalletHold`,
+`WalletLedgerEntry`, `TokenBundle` all stay in the schema and in the code, fully functional,
+simply unreferenced by any new code path. The two call sites that used to drive them —
+`requests.service.ts`'s `wallet.hold()` at request creation, and `JobTransitions.move()`'s
+`consume()`/`release()` keyed off job-status transitions — are removed outright (not commented
+out, not feature-flagged); `job-transitions.service.ts` no longer even imports `WalletService`.
+Anyone with an existing token balance keeps it, visible in `GET /v1/wallet` exactly as before —
+the endpoint and the whole top-up pipeline (`TOKEN_TOPUP` purpose, `createTopupOrder`,
+`creditTokenTopup`) are untouched and still work, they're just no longer anything a new job needs.
+
+**Migration plan for existing token balances (report, per the master prompt — no code decision
+made here):**
+- *Option A — leave as a dead balance.* Simplest; a customer with leftover tokens just has a
+  number on a screen that no longer does anything. Honest in the sense that nothing is implied,
+  but a customer who paid real money for tokens and now can't spend them has a legitimate
+  complaint if this is the final answer.
+- *Option B — one-time refund to a payment method.* Convert `balanceTokens` (not `heldTokens` —
+  that's mid-job, see below) back to paise using the price the customer bought bundles at
+  (`WalletLedgerEntry` type `PURCHASE` rows already record this, joined via `paymentOrderId` to
+  `PaymentOrder.amountPaise`), and refund via Razorpay's refund API (not yet integrated anywhere
+  in this codebase — a new adapter surface) or as platform-fee credit (see Option C). Correct, but
+  real engineering work and a real payment-gateway integration gap.
+- *Option C — convert to a flat discount off upcoming platform fees.* Walk each customer's
+  `balanceTokens`, multiply by the average price-per-token they actually paid (from their own
+  `PURCHASE` ledger history, so a bundle-discount customer isn't overpaid), store the resulting
+  paise amount as a `platform_fee_credit_paise` balance (new field, not built), and have
+  `confirm()`'s fee calculation draw it down automatically on future ONLINE/CASH jobs until
+  exhausted. Keeps the money inside the platform (no refund-gateway integration needed) while
+  still honoring what was paid for. This is the option that reuses the most of what Sub-phase B
+  already built (the fee-calculation code path just gains one more deduction).
+- *`heldTokens` needs a different answer regardless of which option is chosen for `balanceTokens`*
+  — a held token is already committed to an in-flight job. The honest move is to leave
+  `WalletHold`s alone entirely: any job that was already `REQUESTED`/`BROADCASTING`/matched before
+  this migration ran will simply never call `consume()`/`release()` again (those call sites are
+  gone), so the hold just sits there, HELD, forever, attached to a job that will finish through
+  the normal state machine regardless. It's inert, not wrong — the same "keep history readable,
+  don't let it block anything new" principle as everywhere else in this phase. Converting it to
+  `balanceTokens` early (while the job is still open) would double-count if the customer later
+  also gets a Option B/C conversion for the same tokens.
+- **No option is implemented.** This section is the report the master prompt asked for; which
+  option (if any) to build is a product/finance decision for the next instruction, not something
+  inferred from "replace tokens with a fee" alone.
+
+**B2, the fee: `FeeService` (`apps/api/src/marketplace/fee.service.ts`), same cached-read-from-
+`system_config` pattern as `MarketplaceConfig`/`MonetizationConfig`.** Default 1000 bps (10%, the
+master prompt's explicit decision — not the pre-existing, never-wired `commission_bps: 600` seed
+value, which is left in place with a comment explaining it's superseded rather than deleted),
+floored at `platform_fee_min_paise` (₹20 default) so a very cheap job still carries a meaningful
+fee, overridable per category via the new nullable `ServiceCategory.feeBps`. **Computed and frozen
+at the exact same instant the price itself is agreed** — inside `MatchingService.accept()`'s
+auto-agree transaction for a fixed-price category, and inside `QuotesService.accept()`'s
+quote-acceptance transaction for "other" — stored on the new `Job.platformFeePaise`, the same
+freeze-the-number-once reasoning as `agreedPricePaise` itself (D-080): a customer who saw a total
+must not have it shift while the job is in flight.
+
+**B3, cash vs online, built around a new `JobPayment` row created once at `complete()`:**
+`servicePricePaise` (the agreed price, plus any APPROVED `JobAddOn`s summed in at completion —
+A5's add-ons are finished deciding by the time a job completes, there's nothing left to wait for),
+`feePaise`, `totalPaise`. CASH: the Ranger's `cashCollectedPaise` is recorded at `complete()`; the
+customer's `cashConfirmedPaise` at `confirm()` — a mismatch sets `JobPayment.status = MISMATCHED`
+(an admin-review flag, not a block: the job still confirms either way) and, regardless of match or
+mismatch, the Ranger owes the fee as dues (`WorkerWalletService.addDues`) because they kept the
+*entire* cash amount including the fee. ONLINE reuses `WalletService`'s existing order pipeline
+unchanged (`createOrder → verify/sandbox-pay/webhook → credit()`) with a fifth `PaymentOrder`
+purpose, `JOB_PAYMENT` (additive `ALTER TYPE ... ADD VALUE`, same as every other enum growth in
+this codebase) — but deliberately split into two moments: `credit()`'s new `creditJobPayment`
+branch only *links* the captured `PaymentOrder` to the `JobPayment` row; the Ranger's earnings are
+only actually credited (`WorkerWalletService.creditEarning`, the service price minus the fee the
+platform silently retained at capture) inside `confirm()`, per the master prompt's explicit
+"released after the customer confirms." `confirm()` now refuses to proceed for an ONLINE job with
+no captured payment linked (`PAYMENT_NOT_CAPTURED`) and for a CASH job with no
+`cashConfirmedPaise` in the request body (`CASH_CONFIRMATION_REQUIRED`) — the payment and the
+completion-confirmation happen in the same transaction, on purpose, since confirming *is* what
+releases the money now.
+
+**A new wallet, not a re-use of `CustomerWallet`:** `WorkerWallet` (`balancePaise`, withdrawable;
+`duesPaise`, owed) + `WorkerWalletLedgerEntry` (same append-only-via-trigger pattern as
+`WalletLedgerEntry`, `EARNING`/`FEE_DUE`/`DUES_SETTLED`/`WITHDRAWAL`/`ADJUSTMENT`). Deliberately
+separate from the customer wallet rather than a generic "wallet" both sides share — a Ranger's
+wallet only ever grows from *finished, paid-for work* or shrinks from *settling what they already
+owe*; nothing about "reserve before you can act" (`CustomerWallet`'s whole `HOLD`/`RELEASE` reason
+for existing) applies to a Ranger at all, and conflating the two shapes into one table would have
+meant nullable columns that are only ever used by one side.
+
+**B4, the dues threshold, enforced at the two places a Ranger takes on new work:**
+`MatchingService.accept()` and `QuotesService.submit()` both now call
+`WorkerWalletService.duesBlocked()` before anything else, refusing with `DUES_THRESHOLD` if
+`duesPaise >= worker_dues_threshold_paise` (₹500 default, `FeeService`-managed like the fee
+itself). Checked at accept/quote-time, not continuously — a Ranger already mid-job when they cross
+the threshold finishes that job normally; the block only stops the *next* one.
+
+**B5 (online discount) and B6 (withdrawal) are built as working sandbox features, not stubs** —
+`online_payment_discount_bps` (2% default) actually reduces `createJobPaymentOrder`'s amount;
+`WorkerWalletController`'s `POST /worker/wallet/withdraw` actually moves money out of
+`balancePaise` into a `WITHDRAWAL` ledger entry. What's explicitly *not* built for either: a real
+payout rail (there is no bank/UPI transfer integration anywhere in this codebase, same gap
+`PaymentsProvider` already has for live Razorpay) and B6's "manual admin approval" — withdrawal is
+instant in sandbox, with no approval queue. Flagged in code comments on both methods, not hidden.
+
+Covered by two new unit suites (`fee.service.spec.ts`, 5 tests; `worker-wallet.service.spec.ts`, 7
+tests, both the mocked-`PrismaService` pattern established in D-080). API unit suite green:
+186/186 (168 + 5 + 7 + 6 from A5's job-addons suite already counted once). `wallet.e2e-spec.ts`'s
+hold/consume/release `describe` block is now entirely dead-path testing (every assertion in it
+exercises a code path nothing calls any more) — flagged for the next pass to either delete or
+retarget at the still-live top-up/Plus/Rush/Boost paths, not yet done in this commit.
+
+Not yet done: B7 (refundable deposit for flagged customers), B8 (satisfaction guarantee/redo-or-
+refund), B9 (cancellation fees actually charged — `Job.cancellationFeeApplies` has existed as a
+flag since D3/Phase 3 with no charging code behind it, still true), B10 (dedicated idempotency/
+webhook-retry test coverage for the new `JOB_PAYMENT` purpose specifically — the existing
+`credit()` race-safety is purpose-agnostic and already covers it mechanically, but no test
+exercises *this* purpose through it yet), B11 (GST/payout-tax/aggregator-welfare-fee config keys
+are seeded at 0bps, read by nothing — pure placeholders per the master prompt's "assume no
+rates"), B12 (Contract employer payment tracking). Mobile: no UI anywhere yet for the fee
+breakdown, cash recording/confirmation, online job payment, or the Ranger earnings/dues screen —
+API only this round, same "API first, mobile next" split as every sub-phase in this project.

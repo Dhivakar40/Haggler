@@ -3,6 +3,7 @@ import { StorageModule } from '../adapters/storage/storage.service';
 import { CatalogModule } from '../catalog/catalog.module';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ChatService } from './chat.service';
+import { FeeService } from './fee.service';
 import { JobAddOnsService } from './job-addons.service';
 import { JobTransitions } from './job-transitions.service';
 import { JobViewService } from './job-view.service';
@@ -34,6 +35,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
   providers: [
     RealtimeService,
     MarketplaceConfig,
+    FeeService,
     PresenceService,
     JobTransitions,
     JobViewService,
@@ -51,6 +53,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
   exports: [
     RealtimeService,
     MarketplaceConfig,
+    FeeService,
     PresenceService,
     MatchingService,
     SchedulerService,

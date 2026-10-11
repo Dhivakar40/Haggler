@@ -232,9 +232,8 @@ export class RequestsService {
       const job = await tx.job.create({
         data: { requestId: id, customerId, nextWaveAt: startAt, isRush },
       });
-      // D-037/D-038: reserve one token now, before the request can broadcast, so a customer can
-      // never end up confirming more jobs than they have paid for. Throws INSUFFICIENT_TOKENS.
-      await this.wallet.hold(tx, customerId, job.id);
+      // Phase Commerce B1: no token reserve any more — pay-after means nothing is charged at
+      // booking time at all. (Was: this.wallet.hold(tx, customerId, job.id), D-037/D-038.)
       if (input.mediaIds.length)
         await tx.requestMedia.updateMany({
           where: { id: { in: input.mediaIds } },

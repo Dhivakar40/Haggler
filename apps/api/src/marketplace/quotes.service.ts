@@ -3,6 +3,8 @@ import { ERROR_CODES, OTHER_CATEGORY_SLUG, SOCKET_EVENTS, type QuoteInput } from
 import { CodedException, conflict, forbidden, notFound } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { WorkerWalletService } from '../wallet/worker-wallet.service';
+import { FeeService } from './fee.service';
 import { JobTransitions } from './job-transitions.service';
 import { JobViewService } from './job-view.service';
 
@@ -20,6 +22,8 @@ export class QuotesService {
     private readonly transitions: JobTransitions,
     private readonly view: JobViewService,
     private readonly realtime: RealtimeService,
+    private readonly fee: FeeService,
+    private readonly workerWallet: WorkerWalletService,
   ) {}
 
   private async parties(jobId: string): Promise<string[]> {
@@ -43,6 +47,10 @@ export class QuotesService {
       });
     if (job.status !== 'BROADCASTING')
       throw conflict('This request is no longer open for quotes.', { code: 'NOT_OPEN' });
+    // Phase Commerce B4: a Ranger with unsettled dues over the threshold can't send new quotes.
+    const feeCfg = await this.fee.get();
+    if (await this.workerWallet.duesBlocked(workerId, feeCfg.worker_dues_threshold_paise))
+      throw conflict('Settle your dues before sending a new quote.', { code: 'DUES_THRESHOLD' });
     const invited = await this.prisma.requestBroadcast.findFirst({
       where: { jobId, workerId, attempt: job.broadcastAttempt },
     });
@@ -81,12 +89,20 @@ export class QuotesService {
 
   /** Customer: accept one quote. Performs the match at that quote's price, declines the rest. */
   async accept(customerId: string, jobId: string, quoteId: string) {
-    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+      include: { request: { select: { category: { select: { feeBps: true } } } } },
+    });
     if (!job || job.customerId !== customerId) throw notFound('Job not found');
     const quote = await this.prisma.jobQuote.findUnique({ where: { id: quoteId } });
     if (!quote || quote.jobId !== jobId) throw notFound('Quote not found');
     if (job.status !== 'BROADCASTING' || job.workerId)
       throw conflict('This request has already been matched.', { code: 'REQUEST_TAKEN' });
+    // Phase Commerce B2: frozen at the same instant the quote's price becomes the agreed price.
+    const feePaise = await this.fee.computeFeePaise(
+      quote.amountPaise,
+      job.request.category.feeBps,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.jobQuote.updateMany({
@@ -122,7 +138,7 @@ export class QuotesService {
         from: 'MATCHED',
         to: 'AGREED',
         actor: 'SYSTEM',
-        data: { agreedAt: new Date(), agreedPricePaise: quote.amountPaise },
+        data: { agreedAt: new Date(), agreedPricePaise: quote.amountPaise, platformFeePaise: feePaise },
       });
     });
     this.realtime.emitToUser(quote.workerId, SOCKET_EVENTS.matched, { jobId, requestId: job.requestId });

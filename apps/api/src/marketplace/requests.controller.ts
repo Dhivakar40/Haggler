@@ -6,6 +6,7 @@ import {
   mediaPresignRequestSchema,
   verifyArrivalSchema,
   completeJobSchema,
+  confirmJobSchema,
   cancelJobSchema,
   proposeAddOnSchema,
   quoteInputSchema,
@@ -14,6 +15,7 @@ import {
 import { z } from 'zod';
 import { ApiZodBody, CurrentUser, Roles, type AuthUser } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
+import { WalletService } from '../wallet/wallet.service';
 import { ChatService } from './chat.service';
 import { JobAddOnsService } from './job-addons.service';
 import { JobViewService } from './job-view.service';
@@ -132,6 +134,7 @@ export class JobsController {
     private readonly life: LifecycleService,
     private readonly tracking: TrackingService,
     private readonly chat: ChatService,
+    private readonly wallet: WalletService,
   ) {}
 
   @Get()
@@ -279,14 +282,31 @@ export class JobsController {
     @Param('id', id) jobId: string,
     @Body(new ZodPipe(completeJobSchema)) body: z.infer<typeof completeJobSchema>,
   ) {
-    return this.life.complete(u.id, jobId, body.paymentMethod);
+    return this.life.complete(u.id, jobId, body.paymentMethod, body.cashCollectedPaise);
   }
 
   @Post(':id/confirm')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Customer: confirm the work is done' })
-  confirm(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
-    return this.life.confirm(u.id, jobId);
+  @ApiOperation({
+    summary:
+      'Customer: confirm the work is done. For a CASH job, pass cashConfirmedPaise (B3).',
+  })
+  @ApiZodBody(confirmJobSchema)
+  confirm(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(confirmJobSchema)) body: z.infer<typeof confirmJobSchema>,
+  ) {
+    return this.life.confirm(u.id, jobId, body.cashConfirmedPaise);
+  }
+
+  @Post(':id/payment/online')
+  @ApiOperation({
+    summary:
+      'Customer: start paying online for a completed job (B3) — creates a payment order; complete it via /wallet/orders/:id/{verify,sandbox-pay}',
+  })
+  startOnlinePayment(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.wallet.createJobPaymentOrder(u.id, jobId);
   }
 
   @Post(':id/cancel')

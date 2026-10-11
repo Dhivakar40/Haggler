@@ -1,10 +1,12 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ERROR_CODES, type IncomingRequest, OTHER_CATEGORY_SLUG, SOCKET_EVENTS } from '@haggler/shared';
-import { CodedException, notFound } from '../common/http-errors';
+import { CodedException, conflict, notFound } from '../common/http-errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { WorkerWalletService } from '../wallet/worker-wallet.service';
+import { FeeService } from './fee.service';
 import { JobTransitions } from './job-transitions.service';
 import { MarketplaceConfig } from './marketplace-config.service';
 import { PresenceService } from './presence.service';
@@ -81,6 +83,8 @@ export class MatchingService {
     private readonly presence: PresenceService,
     private readonly transitions: JobTransitions,
     private readonly realtime: RealtimeService,
+    private readonly fee: FeeService,
+    private readonly workerWallet: WorkerWalletService,
   ) {}
 
   // ---- waves ---------------------------------------------------------------------------------------
@@ -269,7 +273,7 @@ export class MatchingService {
         request: {
           select: {
             listedPricePaise: true,
-            category: { select: { slug: true } },
+            category: { select: { slug: true, feeBps: true } },
           },
         },
       },
@@ -284,6 +288,10 @@ export class MatchingService {
         'Send a quote for this request instead of accepting directly.',
         { code: 'QUOTE_REQUIRED' },
       );
+    // Phase Commerce B4: a Ranger with unsettled dues over the threshold can't take new jobs.
+    const feeCfg = await this.fee.get();
+    if (await this.workerWallet.duesBlocked(workerId, feeCfg.worker_dues_threshold_paise))
+      throw conflict('Settle your dues before taking a new job.', { code: 'DUES_THRESHOLD' });
     const inv = await this.prisma.requestBroadcast.findFirst({
       where: { jobId: job.id, workerId, attempt: job.broadcastAttempt },
     });
@@ -296,6 +304,13 @@ export class MatchingService {
     if (job.status !== 'BROADCASTING' || job.workerId) throw new RequestTakenException();
     if (inv.response !== 'PENDING')
       throw new RequestTakenException('You already responded to this request.');
+
+    // Phase Commerce B2: computed once, outside the transaction (a pure read) — the fee is
+    // frozen onto the job at the same instant the price is, same reasoning as the price freeze.
+    const feePaise =
+      job.request.listedPricePaise != null
+        ? await this.fee.computeFeePaise(job.request.listedPricePaise, job.request.category.feeBps)
+        : null;
 
     // Layer 1: the Redis gate. Losing here is instant and free.
     const lockKey = `request:${job.id}:lock`;
@@ -358,7 +373,11 @@ export class MatchingService {
               from: 'MATCHED',
               to: 'AGREED',
               actor: 'SYSTEM',
-              data: { agreedAt: new Date(), agreedPricePaise: job.request.listedPricePaise },
+              data: {
+                agreedAt: new Date(),
+                agreedPricePaise: job.request.listedPricePaise,
+                platformFeePaise: feePaise,
+              },
             });
           },
           { maxWait: 10_000, timeout: 15_000 },

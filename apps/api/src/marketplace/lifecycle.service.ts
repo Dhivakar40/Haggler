@@ -14,6 +14,7 @@ import {
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReputationService } from '../reputation/reputation.service';
+import { WorkerWalletService } from '../wallet/worker-wallet.service';
 import { haversineMeters } from './geo';
 import { CUSTOMER_CANCELLABLE } from './job-state';
 import { JobTransitions } from './job-transitions.service';
@@ -38,6 +39,7 @@ export class LifecycleService {
     private readonly cfg: MarketplaceConfig,
     private readonly env: EnvService,
     private readonly reputation: ReputationService,
+    private readonly workerWallet: WorkerWalletService,
   ) {}
 
   private async workerJob(workerId: string, jobId: string) {
@@ -255,7 +257,12 @@ export class LifecycleService {
     return this.done(jobId, workerId);
   }
 
-  async complete(workerId: string, jobId: string, paymentMethod: PaymentMethodName) {
+  async complete(
+    workerId: string,
+    jobId: string,
+    paymentMethod: PaymentMethodName,
+    cashCollectedPaise?: number,
+  ) {
     const job = await this.workerJob(workerId, jobId);
     if (job.status === 'IN_PROGRESS') {
       const after = await this.prisma.jobPhoto.count({
@@ -266,24 +273,57 @@ export class LifecycleService {
           code: 'AFTER_PHOTO_REQUIRED',
         });
     }
-    await this.prisma.$transaction((tx) =>
-      this.transitions.move(tx, {
+    // Phase Commerce B3: the payment record, created once at completion. approvedAddOns (A5) are
+    // folded into the total here — they only ever get here by being APPROVED, so there's nothing
+    // left to decide about them by the time the job is done.
+    const approvedAddOns = await this.prisma.jobAddOn.aggregate({
+      where: { jobId, status: 'APPROVED' },
+      _sum: { pricePaise: true },
+    });
+    const servicePricePaise = (job.agreedPricePaise ?? 0) + (approvedAddOns._sum.pricePaise ?? 0);
+    const feePaise = job.platformFeePaise ?? 0;
+    await this.prisma.$transaction(async (tx) => {
+      await this.transitions.move(tx, {
         jobId,
         from: job.status,
         to: 'COMPLETED_BY_WORKER',
         actor: 'WORKER',
         actorUserId: workerId,
         data: { completedByWorkerAt: new Date(), paymentMethod },
-      }),
-    );
+      });
+      await tx.jobPayment.upsert({
+        where: { jobId },
+        update: {},
+        create: {
+          jobId,
+          mode: paymentMethod === 'CASH' ? 'CASH' : 'ONLINE',
+          servicePricePaise,
+          feePaise,
+          totalPaise: servicePricePaise + feePaise,
+          cashRecordedPaise: paymentMethod === 'CASH' ? (cashCollectedPaise ?? null) : null,
+        },
+      });
+    });
     return this.done(jobId, workerId);
   }
 
   /** Customer confirms the work. This is the moment a token is consumed (Phase 3 hooks in here)
    * and jobsCompleted/bookingsCompleted increment, which can move a Ranger's league (D-076) and
    * the client's own league (D-077) even without a new review. */
-  async confirm(customerId: string, jobId: string) {
+  async confirm(customerId: string, jobId: string, cashConfirmedPaise?: number) {
     const job = await this.customerJob(customerId, jobId);
+    // Phase Commerce B3: the payment is settled in the same transaction as confirming, since
+    // confirming IS what releases money (a Ranger's online earnings, or the fee they now owe on
+    // a cash job) — reusing the job-event audit trail rather than a separate step to get wrong.
+    const payment = await this.prisma.jobPayment.findUnique({ where: { jobId } });
+    if (payment?.mode === 'CASH' && cashConfirmedPaise === undefined)
+      throw unprocessable('Confirm what you actually paid.', {
+        code: 'CASH_CONFIRMATION_REQUIRED',
+      });
+    if (payment?.mode === 'ONLINE' && !payment.paymentOrderId)
+      throw conflict('Pay for this job online before confirming.', {
+        code: 'PAYMENT_NOT_CAPTURED',
+      });
     // The league recompute (and any bonus it pays) doesn't change what this call returns, so it
     // runs after the transaction below commits rather than inside it — see
     // reputation.service.ts's scheduleConfirmLeagueRecompute (D-078). The counter increments it
@@ -299,6 +339,29 @@ export class LifecycleService {
         actorUserId: customerId,
         data: { confirmedAt: new Date() },
       });
+      if (payment && job.workerId) {
+        if (payment.mode === 'CASH') {
+          const mismatched = cashConfirmedPaise !== payment.cashRecordedPaise;
+          await tx.jobPayment.update({
+            where: { jobId },
+            data: {
+              cashConfirmedPaise,
+              status: mismatched ? 'MISMATCHED' : 'CONFIRMED',
+            },
+          });
+          // The Ranger kept the full cash amount, including the fee — owed to the platform
+          // regardless of whether the confirmed amount matched what they recorded.
+          await this.workerWallet.addDues(tx, job.workerId, payment.feePaise, jobId);
+        } else {
+          await tx.jobPayment.update({ where: { jobId }, data: { status: 'CONFIRMED' } });
+          await this.workerWallet.creditEarning(
+            tx,
+            job.workerId,
+            payment.servicePricePaise,
+            jobId,
+          );
+        }
+      }
       if (job.workerId) {
         // workerStats's upsert and the anti-farming kyc_tier lookup below are independent of each
         // other, so they go over the wire together — one fewer sequential round trip inside a

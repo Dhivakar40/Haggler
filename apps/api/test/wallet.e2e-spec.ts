@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { type Harness, startHarness } from './harness';
-import { Market, northOf } from './market-helpers';
+import { CENTER, Market, northOf } from './market-helpers';
 
 let h: Harness;
 let m: Market;
@@ -238,106 +238,157 @@ describe('wallet: balance, bundles and top-up (Phase 3, D-037/D-038/D-039)', () 
   });
 });
 
-describe('wallet: hold on request, consume on confirm, release on cancel/no-show (D-037/D-038)', () => {
-  it('a customer with zero tokens cannot create a request', async () => {
+describe('tokens are no longer reserved at all (Phase Commerce B1)', () => {
+  it('a customer with zero tokens can still create a request — nothing is held any more', async () => {
     const c = await m.customer({ tokens: 0 });
-    const res = await m.request(c).expect(422);
-    expect(res.body.error.details.code).toBe('INSUFFICIENT_TOKENS');
-  });
-
-  it('creating a request holds exactly one token: balance down, held up, a HELD wallet_holds row', async () => {
-    const c = await m.customer({ tokens: 5 });
     const { jobId } = await m.open(c);
     const wallet = await m.api.get(c, '/v1/wallet').expect(200);
-    expect(wallet.body.balanceTokens).toBe(4);
-    expect(wallet.body.heldTokens).toBe(1);
-    const hold = await m.prisma.walletHold.findUniqueOrThrow({ where: { jobId } });
-    expect(hold.status).toBe('HELD');
-    expect(hold.tokens).toBe(1);
+    expect(wallet.body).toEqual({ balanceTokens: 0, heldTokens: 0, recentLedger: [] });
+    expect(await m.prisma.walletHold.findUnique({ where: { jobId } })).toBeNull();
   });
 
-  it('confirming the job consumes the held token permanently: held drops, balance stays put', async () => {
-    const area = northOf(0);
-    const c = await m.customer({ at: area, tokens: 3 });
-    const r = await m.ranger({ at: area });
-    const { jobId } = await m.match(c, r);
-    await m.agree(c, r, jobId);
-    await m.runToCompletion(c, r, jobId);
-    await m.api.post(c, `/v1/jobs/${jobId}/confirm`, {}).expect(200);
-
-    const wallet = await m.api.get(c, '/v1/wallet').expect(200);
-    expect(wallet.body.balanceTokens).toBe(2); // spent at hold time, never refunded
-    expect(wallet.body.heldTokens).toBe(0);
-    const hold = await m.prisma.walletHold.findUniqueOrThrow({ where: { jobId } });
-    expect(hold.status).toBe('CONSUMED');
-    const consumeRow = await m.prisma.walletLedgerEntry.findFirst({
-      where: { jobId, type: 'CONSUME' },
-    });
-    expect(consumeRow).toMatchObject({ tokensDelta: 0, heldDelta: -1 });
-  });
-
-  it('cancelling before match releases the token: balance restored, held back to zero', async () => {
-    const c = await m.customer({ tokens: 2 });
-    const { requestId, jobId } = await m.open(c);
-    await m.api.post(c, `/v1/requests/${requestId}/cancel`, {}).expect(200);
-
-    const wallet = await m.api.get(c, '/v1/wallet').expect(200);
-    expect(wallet.body.balanceTokens).toBe(2);
-    expect(wallet.body.heldTokens).toBe(0);
-    const hold = await m.prisma.walletHold.findUniqueOrThrow({ where: { jobId } });
-    expect(hold.status).toBe('RELEASED');
-  });
-
-  it('cancelling after match also releases the token', async () => {
-    const area = northOf(20);
-    const c = await m.customer({ at: area, tokens: 2 });
-    const r = await m.ranger({ at: area });
-    const { jobId } = await m.match(c, r);
-    await m.api.post(c, `/v1/jobs/${jobId}/cancel`, {}).expect(200);
-
-    const wallet = await m.api.get(c, '/v1/wallet').expect(200);
-    expect(wallet.body.balanceTokens).toBe(2);
-    expect(wallet.body.heldTokens).toBe(0);
-  });
-
-  it("a Ranger no-show releases the customer's token", async () => {
-    const area = northOf(40);
-    const c = await m.customer({ at: area, tokens: 2 });
-    const r = await m.ranger({ at: area });
-    const { jobId } = await m.match(c, r);
-    await m.agree(c, r, jobId);
-    await m.api.post(r, `/v1/jobs/${jobId}/en-route`, {}).expect(200);
-    await m.prisma.job.update({
-      where: { id: jobId },
-      data: { enRouteAt: new Date(Date.now() - 45 * 60_000) },
-    });
-    await m.api.post(c, `/v1/jobs/${jobId}/report-no-show`, {}).expect(200);
-
-    const wallet = await m.api.get(c, '/v1/wallet').expect(200);
-    expect(wallet.body.balanceTokens).toBe(2);
-    expect(wallet.body.heldTokens).toBe(0);
-  });
-
-  it('release and consume are idempotent no-ops when there was never a hold for that job', async () => {
-    // Exercises the "no hold row" branch directly: nothing to release/consume, must not throw.
+  it('release and consume are still callable directly and remain idempotent no-ops (dead code kept, not deleted)', async () => {
     const fakeJobId = randomUUID();
     await m.prisma.$transaction(async (tx) => {
       await m.wallet.release(tx, fakeJobId);
       await m.wallet.consume(tx, fakeJobId);
     });
   });
+});
 
-  it('the ledger fully explains the wallet counters: sum(tokensDelta) = balance, sum(heldDelta) = held', async () => {
-    const c = await m.customer({ tokens: 4 });
-    const { requestId: r1 } = await m.open(c);
-    await m.open(c);
-    await m.api.post(c, `/v1/requests/${r1}/cancel`, {}).expect(200);
+describe('Phase Commerce B2/B3/B4: the platform fee and pay-after payments', () => {
+  it('the fee is computed and frozen at the same moment the price is agreed', async () => {
+    const area = northOf(60);
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: area });
+    const { jobId } = await m.match(c, r);
+    const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    expect(job.status).toBe('AGREED');
+    expect(job.agreedPricePaise).toBe(34900); // electrician's seeded DEFAULT price (see D-080)
+    expect(job.platformFeePaise).toBe(3490); // 10% default
+  });
 
-    const wallet = await m.prisma.customerWallet.findUniqueOrThrow({ where: { userId: c.userId } });
-    const ledger = await m.prisma.walletLedgerEntry.findMany({ where: { walletId: wallet.id } });
-    const sumBalance = ledger.reduce((a, l) => a + l.tokensDelta, 0);
-    const sumHeld = ledger.reduce((a, l) => a + l.heldDelta, 0);
-    expect(sumBalance).toBe(wallet.balanceTokens);
-    expect(sumHeld).toBe(wallet.heldTokens);
+  it('CASH: matching recorded and confirmed amounts credits the fee as dues, no mismatch flag', async () => {
+    const area = northOf(80);
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: area });
+    const { jobId } = await m.match(c, r);
+    await m.confirmJob(c, r, jobId);
+
+    const payment = await m.prisma.jobPayment.findUniqueOrThrow({ where: { jobId } });
+    expect(payment).toMatchObject({
+      mode: 'CASH',
+      servicePricePaise: 34900,
+      feePaise: 3490,
+      totalPaise: 38390,
+      status: 'CONFIRMED',
+    });
+    const wallet = await m.prisma.workerWallet.findUniqueOrThrow({ where: { userId: r.userId } });
+    expect(wallet.duesPaise).toBe(3490);
+    expect(wallet.balancePaise).toBe(0); // cash never touches the withdrawable balance
+  });
+
+  it('CASH: a mismatched confirmed amount is flagged for review, but the fee is still owed', async () => {
+    const area = northOf(100);
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: area });
+    const { jobId } = await m.match(c, r);
+    await m.runToCompletion(c, r, jobId); // records the full agreed amount
+    await m.api.post(c, `/v1/jobs/${jobId}/confirm`, { cashConfirmedPaise: 1000 }).expect(200);
+
+    const payment = await m.prisma.jobPayment.findUniqueOrThrow({ where: { jobId } });
+    expect(payment.status).toBe('MISMATCHED');
+    expect(payment.cashConfirmedPaise).toBe(1000);
+    const wallet = await m.prisma.workerWallet.findUniqueOrThrow({ where: { userId: r.userId } });
+    expect(wallet.duesPaise).toBe(3490); // owed regardless of the mismatch
+  });
+
+  it('CASH: confirming without cashConfirmedPaise is refused', async () => {
+    const area = northOf(120);
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: area });
+    const { jobId } = await m.match(c, r);
+    await m.runToCompletion(c, r, jobId);
+    const res = await m.api.post(c, `/v1/jobs/${jobId}/confirm`, {}).expect(422);
+    expect(res.body.error.details.code).toBe('CASH_CONFIRMATION_REQUIRED');
+  });
+
+  it('ONLINE: confirming before paying is refused; paying then confirming credits earnings (fee excluded)', async () => {
+    const area = northOf(140);
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: area });
+    const { jobId } = await m.match(c, r);
+    await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+    await m.ping(r, CENTER);
+    await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(200);
+    const code = (await m.api.get(c, `/v1/jobs/${jobId}`)).body.arrivalCode as string;
+    await m.api.post(r, `/v1/jobs/${jobId}/verify-arrival`, { code }).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'BEFORE');
+    await m.api.post(r, `/v1/jobs/${jobId}/start`).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'AFTER');
+    await m.api.post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'UPI' }).expect(200);
+
+    const early = await m.api.post(c, `/v1/jobs/${jobId}/confirm`, {}).expect(409);
+    expect(early.body.error.details.code).toBe('PAYMENT_NOT_CAPTURED');
+
+    const order = await m.api.post(c, `/v1/jobs/${jobId}/payment/online`).expect(201);
+    expect(order.body.purpose).toBe('JOB_PAYMENT');
+    expect(order.body.amountPaise).toBe(Math.round(38390 * 0.98)); // minus the 2% online discount
+    await m.api.post(c, `/v1/wallet/orders/${order.body.orderId}/sandbox-pay`).expect(200);
+    await m.api.post(c, `/v1/jobs/${jobId}/confirm`, {}).expect(200);
+
+    const payment = await m.prisma.jobPayment.findUniqueOrThrow({ where: { jobId } });
+    expect(payment.status).toBe('CONFIRMED');
+    const wallet = await m.prisma.workerWallet.findUniqueOrThrow({ where: { userId: r.userId } });
+    expect(wallet.balancePaise).toBe(34900); // the service price only — the fee stays with the platform
+    expect(wallet.duesPaise).toBe(0);
+  });
+
+  it('a Ranger over the dues threshold cannot accept a new request', async () => {
+    const area = northOf(160);
+    const c1 = await m.customer({ at: area });
+    const r = await m.ranger({ at: area });
+    const { jobId } = await m.match(c1, r);
+    await m.confirmJob(c1, r, jobId); // pushes dues to 3490, under the 50000 default threshold
+    await m.prisma.workerWallet.update({
+      where: { userId: r.userId },
+      data: { duesPaise: 50_000 },
+    });
+    const c2 = await m.customer({ at: area });
+    const { requestId } = await m.open(c2);
+    const res = await m.api.post(r, `/v1/requests/${requestId}/accept`).expect(409);
+    expect(res.body.error.details.code).toBe('DUES_THRESHOLD');
+  });
+});
+
+describe('worker wallet: summary, settle dues, withdraw (Phase Commerce B4/B6)', () => {
+  it('a fresh Ranger has zero balance and zero dues', async () => {
+    const r = await m.ranger();
+    const wallet = await m.api.get(r, '/v1/worker/wallet').expect(200);
+    expect(wallet.body).toEqual({ balancePaise: 0, duesPaise: 0, recentLedger: [] });
+  });
+
+  it('settling dues reduces duesPaise, capped at what is owed', async () => {
+    const r = await m.ranger();
+    await m.prisma.workerWallet.create({ data: { userId: r.userId, duesPaise: 3000 } });
+    const res = await m.api.post(r, '/v1/worker/wallet/dues/settle', { amountPaise: 10_000 }).expect(200);
+    expect(res.body).toEqual({ settledPaise: 3000 });
+    const wallet = await m.api.get(r, '/v1/worker/wallet').expect(200);
+    expect(wallet.body.duesPaise).toBe(0);
+  });
+
+  it('withdrawing refuses more than the available balance', async () => {
+    const r = await m.ranger();
+    await m.prisma.workerWallet.create({ data: { userId: r.userId, balancePaise: 500 } });
+    const res = await m.api.post(r, '/v1/worker/wallet/withdraw', { amountPaise: 1000 }).expect(422);
+    expect(res.body.error.details.code).toBe('INSUFFICIENT_BALANCE');
+  });
+
+  it('withdrawing within the balance succeeds and moves the money', async () => {
+    const r = await m.ranger();
+    await m.prisma.workerWallet.create({ data: { userId: r.userId, balancePaise: 5000 } });
+    await m.api.post(r, '/v1/worker/wallet/withdraw', { amountPaise: 2000 }).expect(200);
+    const wallet = await m.api.get(r, '/v1/worker/wallet').expect(200);
+    expect(wallet.body.balancePaise).toBe(3000);
   });
 });

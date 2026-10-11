@@ -8,6 +8,7 @@ import { EnvService } from '../config/env.service';
 import { MonetizationConfig } from '../monetization/monetization-config.service';
 import { PlusService } from '../monetization/plus.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkerWalletService } from './worker-wallet.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -41,6 +42,7 @@ export class WalletService {
     private readonly env: EnvService,
     private readonly plus: PlusService,
     private readonly monetization: MonetizationConfig,
+    private readonly workerWallet: WorkerWalletService,
   ) {}
 
   // ---- reads ---------------------------------------------------------------------------------
@@ -210,10 +212,40 @@ export class WalletService {
     });
   }
 
+  /** Phase Commerce B3 (ONLINE): a customer pays the total (service price + platform fee, minus
+   * the online-payment discount) for a job already marked complete. Capturing this payment only
+   * *links* it to the job (see creditJobPayment below) — the Ranger's earnings are released at
+   * confirm(), not at capture, per B3's "released after the customer confirms." */
+  async createJobPaymentOrder(userId: string, jobId: string) {
+    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+    if (!job || job.customerId !== userId) throw notFound('Job not found');
+    if (job.status !== 'COMPLETED_BY_WORKER')
+      throw conflict('This job is not awaiting payment.', { code: 'NOT_AWAITING_PAYMENT' });
+    const payment = await this.prisma.jobPayment.findUnique({ where: { jobId } });
+    if (!payment || payment.mode !== 'ONLINE')
+      throw conflict('This job is not an online payment.', { code: 'NOT_ONLINE' });
+    // Read directly rather than importing marketplace's FeeService here, to avoid a cross-module
+    // dependency between two @Global modules over one config value.
+    const discountRow = await this.prisma.systemConfig.findUnique({
+      where: { key: 'online_payment_discount_bps' },
+    });
+    const discountBps = typeof discountRow?.value === 'number' ? discountRow.value : 200;
+    const amountPaise = Math.max(
+      0,
+      payment.totalPaise - Math.round((payment.totalPaise * discountBps) / 10_000),
+    );
+    return this.startOrder(userId, {
+      purpose: 'JOB_PAYMENT',
+      amountPaise,
+      receipt: `job:${jobId}`,
+      targetJobId: jobId,
+    });
+  }
+
   private async startOrder(
     userId: string,
     opts: {
-      purpose: 'TOKEN_TOPUP' | 'PLUS_SUBSCRIPTION' | 'RUSH_FEE' | 'BOOSTED_LISTING';
+      purpose: 'TOKEN_TOPUP' | 'PLUS_SUBSCRIPTION' | 'RUSH_FEE' | 'BOOSTED_LISTING' | 'JOB_PAYMENT';
       amountPaise: number;
       receipt: string;
       bundleId?: string;
@@ -334,7 +366,22 @@ export class WalletService {
         case 'BOOSTED_LISTING':
           await this.creditBoostedListing(tx, order);
           break;
+        case 'JOB_PAYMENT':
+          await this.creditJobPayment(tx, order);
+          break;
       }
+    });
+  }
+
+  /** Phase Commerce B3 (ONLINE): links the captured payment to the job's JobPayment row. Does
+   * NOT yet credit the Ranger's wallet or mark the payment CONFIRMED — that happens at
+   * LifecycleService.confirm(), per B3's "released after the customer confirms." A no-op (not an
+   * error) if the JobPayment row is somehow missing — the money was still captured. */
+  private async creditJobPayment(tx: Tx, order: { id: string; targetJobId: string | null }) {
+    if (!order.targetJobId) return;
+    await tx.jobPayment.updateMany({
+      where: { jobId: order.targetJobId },
+      data: { paymentOrderId: order.id },
     });
   }
 

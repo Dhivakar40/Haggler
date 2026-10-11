@@ -220,8 +220,10 @@ export class Market {
     return this.api.post(r, `/v1/jobs/${jobId}/photos/${p.body.photoId}/confirm`);
   }
 
-  /** Drive a job from AGREED to COMPLETED_BY_WORKER through the real endpoints. */
-  async runToCompletion(c: Customer, r: Ranger, jobId: string) {
+  /** Drive a job from AGREED to COMPLETED_BY_WORKER through the real endpoints. Pays CASH,
+   * recording exactly the agreed price + fee as collected (Phase Commerce B3) — a test that wants
+   * a mismatch drives complete()/confirm() directly instead of through this helper. */
+  async runToCompletion(c: Customer, r: Ranger, jobId: string, cashCollectedPaise?: number) {
     await this.api.post(r, `/v1/jobs/${jobId}/en-route`).then((x) => expectOk(x, 'en-route'));
     await this.ping(r, CENTER); // the customer's address is at CENTER
     await this.api.post(r, `/v1/jobs/${jobId}/arrive`).then((x) => expectOk(x, 'arrive'));
@@ -232,15 +234,23 @@ export class Market {
     await this.uploadJobPhoto(r, jobId, 'BEFORE').then((x) => expectOk(x, 'before photo'));
     await this.api.post(r, `/v1/jobs/${jobId}/start`).then((x) => expectOk(x, 'start'));
     await this.uploadJobPhoto(r, jobId, 'AFTER').then((x) => expectOk(x, 'after photo'));
+    const job = await this.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    const collected =
+      cashCollectedPaise ?? (job.agreedPricePaise ?? 0) + (job.platformFeePaise ?? 0);
     await this.api
-      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH' })
+      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH', cashCollectedPaise: collected })
       .then((x) => expectOk(x, 'complete'));
   }
 
-  /** Runs a job all the way to CONFIRMED_BY_CUSTOMER (Phase 4 tests usually just want this). */
+  /** Runs a job all the way to CONFIRMED_BY_CUSTOMER (Phase 4 tests usually just want this).
+   * Confirms the exact cash amount runToCompletion recorded, so this stays a clean no-mismatch
+   * happy path by default. */
   async confirmJob(c: Customer, r: Ranger, jobId: string): Promise<void> {
     await this.runToCompletion(c, r, jobId);
-    await this.api.post(c, `/v1/jobs/${jobId}/confirm`).then((x) => expectOk(x, 'confirm'));
+    const payment = await this.prisma.jobPayment.findUniqueOrThrow({ where: { jobId } });
+    await this.api
+      .post(c, `/v1/jobs/${jobId}/confirm`, { cashConfirmedPaise: payment.cashRecordedPaise })
+      .then((x) => expectOk(x, 'confirm'));
     // D-078: confirm()'s league recompute runs after the HTTP response, not before — tests that
     // check league/wallet state right after confirmJob() need this settled first.
     await this.app.get(ReputationService).drainPendingRecomputes();

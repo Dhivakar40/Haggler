@@ -46,12 +46,13 @@ export type WalletDto = z.infer<typeof walletSchema>;
 
 export const PAYMENT_PROVIDERS = ['sandbox', 'razorpay'] as const;
 
-/** What a PaymentOrder is for (Phase 9, D-069) — one payment pipeline, four purposes. */
+/** What a PaymentOrder is for (Phase 9, D-069; Phase Commerce B3 added JOB_PAYMENT). */
 export const PAYMENT_PURPOSES = [
   'TOKEN_TOPUP',
   'PLUS_SUBSCRIPTION',
   'RUSH_FEE',
   'BOOSTED_LISTING',
+  'JOB_PAYMENT',
 ] as const;
 export type PaymentPurpose = (typeof PAYMENT_PURPOSES)[number];
 
@@ -130,3 +131,58 @@ export const plusMembershipSchema = z
   })
   .nullable();
 export type PlusMembershipDto = z.infer<typeof plusMembershipSchema>;
+
+// ---- Worker wallet (Phase Commerce B3/B4/B6) ---------------------------------------------------
+
+export const WORKER_WALLET_LEDGER_TYPES = [
+  'EARNING',
+  'FEE_DUE',
+  'DUES_SETTLED',
+  'WITHDRAWAL',
+  'ADJUSTMENT',
+] as const;
+
+export const workerWalletLedgerEntrySchema = z.object({
+  id: uuid,
+  type: z.enum(WORKER_WALLET_LEDGER_TYPES),
+  amountPaise: z.number().int(),
+  jobId: uuid.nullable(),
+  note: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type WorkerWalletLedgerEntryDto = z.infer<typeof workerWalletLedgerEntrySchema>;
+
+export const workerWalletSchema = z.object({
+  balancePaise: z.number().int().nonnegative(),
+  duesPaise: z.number().int().nonnegative(),
+  recentLedger: z.array(workerWalletLedgerEntrySchema),
+});
+export type WorkerWalletDto = z.infer<typeof workerWalletSchema>;
+
+export const settleDuesSchema = z.object({ amountPaise: z.number().int().positive() });
+export type SettleDuesInput = z.infer<typeof settleDuesSchema>;
+
+export const withdrawSchema = z.object({ amountPaise: z.number().int().positive() });
+export type WithdrawInput = z.infer<typeof withdrawSchema>;
+
+// ---- Job payments (Phase Commerce B3) ----------------------------------------------------------
+
+export const JOB_PAYMENT_MODES = ['CASH', 'ONLINE'] as const;
+export const JOB_PAYMENT_STATUSES = ['PENDING', 'CONFIRMED', 'MISMATCHED'] as const;
+
+export const jobPaymentSchema = z.object({
+  mode: z.enum(JOB_PAYMENT_MODES),
+  servicePricePaise: paiseSchema,
+  feePaise: paiseSchema,
+  totalPaise: paiseSchema,
+  cashRecordedPaise: paiseSchema.nullable(),
+  cashConfirmedPaise: paiseSchema.nullable(),
+  status: z.enum(JOB_PAYMENT_STATUSES),
+});
+export type JobPaymentDto = z.infer<typeof jobPaymentSchema>;
+
+export const confirmJobSchema = z.object({
+  /** Required only when the job's payment mode is CASH: what the customer actually paid. */
+  cashConfirmedPaise: paiseSchema.optional(),
+});
+export type ConfirmJobInput = z.infer<typeof confirmJobSchema>;

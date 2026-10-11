@@ -221,6 +221,9 @@ model ServiceCategory {
   /// isn't known until a Ranger looks). The customer books and pays this fixed charge instead of
   /// a catalogue price; the Ranger then proposes JobAddOn items from the price list on site.
   inspectionChargePaise Int? @map("inspection_charge_paise")
+  /// Phase Commerce B2: overrides the global `platform_fee_bps` system_config default for this
+  /// category. Null means "use the default" — most categories never need one.
+  feeBps          Int?     @map("fee_bps")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -822,6 +825,10 @@ model Job {
   workerId               String?        @map("worker_id") @db.Uuid
   status                 JobStatus      @default(REQUESTED)
   agreedPricePaise       Int?           @map("agreed_price_paise")
+  /// Phase Commerce B2: the platform fee, frozen at the same moment as agreedPricePaise (same
+  /// reasoning — a customer who saw a price must not have the fee shift under them either).
+  /// Null until agreed. Total the customer owes is agreedPricePaise + platformFeePaise.
+  platformFeePaise       Int?           @map("platform_fee_paise")
   /// Broadcast progress. The scheduler picks up jobs whose next_wave_at has passed.
   currentWave            Int            @default(0) @map("current_wave")
   /// Bumped by each re-broadcast so previously invited Rangers can be invited again.
@@ -859,6 +866,7 @@ model Job {
   offers     Offer[]
   addOns     JobAddOn[]
   quotes     JobQuote[]
+  payment    JobPayment?
   events     JobEvent[]
   photos     JobPhoto[]
   locations  JobLocation[]
@@ -1313,6 +1321,8 @@ enum PaymentPurpose {
   PLUS_SUBSCRIPTION
   RUSH_FEE
   BOOSTED_LISTING
+  /// Phase Commerce B3: an ONLINE job payment (service price + platform fee) at job completion.
+  JOB_PAYMENT
 
   @@map("payment_purpose")
 }
@@ -1356,6 +1366,90 @@ model PaymentOrder {
   @@unique([provider, providerOrderId])
   @@index([userId, createdAt(sort: Desc)])
   @@map("payment_orders")
+}
+
+/// Phase Commerce B3/B4/B6: a Ranger's earnings and dues, replacing the token system's customer-
+/// side wallet with the Ranger-side equivalent pay-after needs. `balancePaise` is withdrawable
+/// online-job earnings (the fee already deducted before crediting); `duesPaise` is platform fee
+/// owed from CASH jobs, where the Ranger collected the full amount and still owes the fee.
+model WorkerWallet {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  balancePaise Int      @default(0) @map("balance_paise")
+  duesPaise    Int      @default(0) @map("dues_paise")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  ledger WorkerWalletLedgerEntry[]
+
+  @@map("worker_wallets")
+}
+
+enum WorkerWalletLedgerType {
+  EARNING
+  FEE_DUE
+  DUES_SETTLED
+  WITHDRAWAL
+  ADJUSTMENT
+
+  @@map("worker_wallet_ledger_type")
+}
+
+/// Append-only, same pattern as WalletLedgerEntry (customer side): the DB trigger blocking UPDATE
+/// lives in the migration that creates this table.
+model WorkerWalletLedgerEntry {
+  id          String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  walletId    String                  @map("wallet_id") @db.Uuid
+  type        WorkerWalletLedgerType
+  amountPaise Int                     @map("amount_paise")
+  jobId       String?                 @map("job_id") @db.Uuid
+  note        String?
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  wallet WorkerWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@map("worker_wallet_ledger_entries")
+}
+
+enum JobPaymentMode {
+  CASH
+  ONLINE
+
+  @@map("job_payment_mode")
+}
+
+enum JobPaymentStatus {
+  PENDING
+  CONFIRMED
+  MISMATCHED
+
+  @@map("job_payment_status")
+}
+
+/// Phase Commerce B3: one row per job, created at job completion. CASH: the Ranger records what
+/// they collected, the customer confirms it in the app; a mismatch is flagged (status
+/// MISMATCHED), never silently resolved either direction, for admin review. ONLINE: a
+/// PaymentOrder (purpose JOB_PAYMENT) drives it instead; status becomes CONFIRMED once that order
+/// is PAID and the customer has confirmed completion.
+model JobPayment {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId              String            @unique @map("job_id") @db.Uuid
+  mode               JobPaymentMode
+  servicePricePaise  Int               @map("service_price_paise")
+  feePaise           Int               @map("fee_paise")
+  totalPaise         Int               @map("total_paise")
+  cashRecordedPaise  Int?              @map("cash_recorded_paise")
+  cashConfirmedPaise Int?              @map("cash_confirmed_paise")
+  status             JobPaymentStatus  @default(PENDING)
+  paymentOrderId     String?           @map("payment_order_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_payments")
 }
 
 /// A purchasable Haggler Plus plan (Phase 9). Customer plans and Employer plans are both rows here
