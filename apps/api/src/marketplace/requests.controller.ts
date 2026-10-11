@@ -10,6 +10,7 @@ import {
   cancelJobSchema,
   proposeAddOnSchema,
   quoteInputSchema,
+  raiseDisputeSchema,
   sendMessageSchema,
   triggerSosSchema,
 } from '@haggler/shared';
@@ -18,6 +19,7 @@ import { ApiZodBody, CurrentUser, Roles, type AuthUser } from '../common/decorat
 import { ZodPipe } from '../common/zod.pipe';
 import { WalletService } from '../wallet/wallet.service';
 import { ChatService } from './chat.service';
+import { DisputeService } from './dispute.service';
 import { JobAddOnsService } from './job-addons.service';
 import { JobViewService } from './job-view.service';
 import { LifecycleService } from './lifecycle.service';
@@ -138,6 +140,7 @@ export class JobsController {
     private readonly chat: ChatService,
     private readonly wallet: WalletService,
     private readonly sos: SosService,
+    private readonly disputes: DisputeService,
   ) {}
 
   @Get()
@@ -348,6 +351,21 @@ export class JobsController {
     @Body(new ZodPipe(triggerSosSchema)) body: z.infer<typeof triggerSosSchema>,
   ) {
     return this.sos.trigger(u.id, jobId, body);
+  }
+
+  @Post(':id/dispute')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Raise a dispute on this job (Sub-phase D) — moves it to DISPUTED pending admin review.',
+  })
+  @ApiZodBody(raiseDisputeSchema)
+  raiseDispute(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(raiseDisputeSchema)) body: z.infer<typeof raiseDisputeSchema>,
+  ) {
+    return this.disputes.raise(u.id, jobId, body);
   }
 
   @Get(':id/track')

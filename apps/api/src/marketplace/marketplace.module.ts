@@ -3,6 +3,7 @@ import { StorageModule } from '../adapters/storage/storage.service';
 import { CatalogModule } from '../catalog/catalog.module';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ChatService } from './chat.service';
+import { DisputeService } from './dispute.service';
 import { FeeService } from './fee.service';
 import { JobAddOnsService } from './job-addons.service';
 import { JobTransitions } from './job-transitions.service';
@@ -51,6 +52,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     SchedulerService,
     RealtimeGateway,
     SosService,
+    DisputeService,
   ],
   exports: [
     RealtimeService,

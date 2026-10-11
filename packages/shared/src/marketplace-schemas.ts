@@ -146,6 +146,22 @@ export const triggerSosSchema = z.object({
 });
 export type TriggerSosInput = z.infer<typeof triggerSosSchema>;
 
+/** D-080 (Sub-phase D): raises the job to JobStatus.DISPUTED. The job's own trail (JobEvent,
+ * photos, GPS, JobPayment) is the evidence; this record is just who/why/decision. */
+export const disputeDtoSchema = z.object({
+  id: uuid,
+  role: z.enum(['CUSTOMER', 'WORKER']),
+  reason: z.string(),
+  status: z.enum(['OPEN', 'RESOLVED']),
+  resolution: z.enum(['REFUND_CUSTOMER', 'PAY_WORKER', 'NO_ACTION']).nullable(),
+  resolutionNote: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type DisputeDto = z.infer<typeof disputeDtoSchema>;
+
+export const raiseDisputeSchema = z.object({ reason: z.string().min(10).max(1000) });
+export type RaiseDisputeInput = z.infer<typeof raiseDisputeSchema>;
+
 const partySchema = z.object({ id: uuid, firstName: z.string().nullable() });
 
 export const jobDtoSchema = z.object({
@@ -212,6 +228,7 @@ export const jobDtoSchema = z.object({
   /** Phase Commerce B3: exists once complete() has run; null before then. */
   payment: jobPaymentSchema.nullable(),
   sosAlerts: z.array(sosAlertDtoSchema),
+  disputes: z.array(disputeDtoSchema),
   cancellation: z
     .object({ by: z.string().nullable(), reason: z.string().nullable(), feeApplies: z.boolean() })
     .nullable(),

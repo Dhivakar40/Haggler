@@ -99,6 +99,82 @@ describe('D-080 (Sub-phase C): SOS alerts', () => {
   });
 });
 
+describe('D-080 (Sub-phase D): disputes', () => {
+  it('raises after confirmation, admin can resolve against the Ranger (dispute rate) or not', async () => {
+    const { c, r, jobId } = await pair();
+    await m.confirmJob(c, r, jobId);
+    const reviewer = await m.api.createAdmin(['DISPUTE_AGENT']);
+    const reviewerToken = await m.api.adminToken(reviewer);
+
+    // Cannot dispute a job that was never confirmed.
+    const { jobId: unconfirmed } = await pair();
+    await m.api
+      .post(c, `/v1/jobs/${unconfirmed}/dispute`, { reason: 'x'.repeat(20) })
+      .expect(409);
+
+    const raised = await m.api
+      .post(c, `/v1/jobs/${jobId}/dispute`, { reason: 'The work was not finished properly.' })
+      .expect(200);
+    expect(raised.body.status).toBe('DISPUTED');
+    expect(raised.body.disputes).toMatchObject([
+      { role: 'CUSTOMER', status: 'OPEN', reason: 'The work was not finished properly.' },
+    ]);
+    // A second dispute cannot be opened while one is already open.
+    await m.api.post(r, `/v1/jobs/${jobId}/dispute`, { reason: 'y'.repeat(20) }).expect(409);
+
+    const queue = (await m.api.adminGet(reviewerToken, '/v1/admin/disputes').expect(200)).body;
+    expect(queue.items).toHaveLength(1);
+    expect(queue.items[0]).toMatchObject({ jobId, role: 'CUSTOMER', status: 'OPEN' });
+
+    const statsBefore = await m.prisma.workerStats.findUniqueOrThrow({
+      where: { workerUserId: r.userId },
+    });
+    await m.api
+      .adminPost(reviewerToken, `/v1/admin/disputes/${queue.items[0].id}/resolve`, {
+        resolution: 'REFUND_CUSTOMER',
+        note: 'Customer sent photos showing the fan was still loose.',
+      })
+      .expect(200);
+    expect(await statusOf(jobId)).toBe('REFUNDED');
+    const statsAfter = await m.prisma.workerStats.findUniqueOrThrow({
+      where: { workerUserId: r.userId },
+    });
+    expect(statsAfter.jobsDisputed).toBe(statsBefore.jobsDisputed + 1);
+
+    // Already resolved: cannot resolve again.
+    await m.api
+      .adminPost(reviewerToken, `/v1/admin/disputes/${queue.items[0].id}/resolve`, {
+        resolution: 'NO_ACTION',
+        note: 'y'.repeat(10),
+      })
+      .expect(409);
+  });
+
+  it('resolving PAY_WORKER/NO_ACTION returns the job to CONFIRMED_BY_CUSTOMER with no mark against the Ranger', async () => {
+    const { c, r, jobId } = await pair();
+    await m.confirmJob(c, r, jobId);
+    const reviewer = await m.api.createAdmin(['DISPUTE_AGENT']);
+    const reviewerToken = await m.api.adminToken(reviewer);
+    await m.api.post(c, `/v1/jobs/${jobId}/dispute`, { reason: 'x'.repeat(20) }).expect(200);
+    const queue = (await m.api.adminGet(reviewerToken, '/v1/admin/disputes').expect(200)).body;
+
+    const statsBefore = await m.prisma.workerStats.findUniqueOrThrow({
+      where: { workerUserId: r.userId },
+    });
+    await m.api
+      .adminPost(reviewerToken, `/v1/admin/disputes/${queue.items[0].id}/resolve`, {
+        resolution: 'PAY_WORKER',
+        note: 'The after photo shows the job was done correctly.',
+      })
+      .expect(200);
+    expect(await statusOf(jobId)).toBe('CONFIRMED_BY_CUSTOMER');
+    const statsAfter = await m.prisma.workerStats.findUniqueOrThrow({
+      where: { workerUserId: r.userId },
+    });
+    expect(statsAfter.jobsDisputed).toBe(statsBefore.jobsDisputed);
+  });
+});
+
 describe('first accept wins', () => {
   it('two Rangers accept: one wins, the other gets 409 REQUEST_TAKEN, and both are told', async () => {
     const area = newArea();
@@ -358,6 +434,46 @@ describe('D-080 (A4): "other"-category quotes (no negotiation, one quote per Ran
     const r2 = await m.ranger({ at: northOf(9000) });
     const res = await m.api.post(r2, `/v1/jobs/${jobId}/quotes`, { amountPaise: 50000 }).expect(409);
     expect(res.body.error.details.code).toBe('NOT_QUOTABLE');
+  });
+
+  describe('D-080 (Sub-phase D): admin moderation of "other" jobs', () => {
+    it('browses by description text and cancels one before the Ranger is underway', async () => {
+      const { jobId, requestId } = await otherPair();
+      const reviewer = await m.api.createAdmin(['DISPUTE_AGENT']);
+      const reviewerToken = await m.api.adminToken(reviewer);
+
+      const found = await m.api
+        .adminGet(
+          reviewerToken,
+          `/v1/admin/other-jobs?q=${encodeURIComponent('does not fit any listed category')}`,
+        )
+        .expect(200);
+      expect(found.body.items.some((x: { requestId: string }) => x.requestId === requestId)).toBe(
+        true,
+      );
+
+      await m.api
+        .adminPost(reviewerToken, `/v1/admin/other-jobs/${jobId}/cancel`, {
+          reason: 'Description describes something outside the platform scope.',
+        })
+        .expect(200);
+      expect(await statusOf(jobId)).toBe('CANCELLED');
+
+      // Already terminal: a second cancel is refused.
+      await m.api
+        .adminPost(reviewerToken, `/v1/admin/other-jobs/${jobId}/cancel`, { reason: 'y'.repeat(10) })
+        .expect(409);
+    });
+
+    it('cannot cancel once the Ranger has already set off (EN_ROUTE)', async () => {
+      const { r, jobId } = await pair(); // fixed-price, but the state rule applies to any job
+      const reviewer = await m.api.createAdmin(['DISPUTE_AGENT']);
+      const reviewerToken = await m.api.adminToken(reviewer);
+      await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+      await m.api
+        .adminPost(reviewerToken, `/v1/admin/other-jobs/${jobId}/cancel`, { reason: 'x'.repeat(10) })
+        .expect(409);
+    });
   });
 });
 

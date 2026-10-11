@@ -300,6 +300,15 @@ export const adminHideReviewSchema = z.object({
 });
 export type AdminHideReviewInput = z.infer<typeof adminHideReviewSchema>;
 
+/** Sub-phase D: an admin's decision on a raised dispute. REFUND_CUSTOMER moves the job to
+ * REFUNDED and counts against the Ranger's dispute rate; PAY_WORKER/NO_ACTION return it to
+ * CONFIRMED_BY_CUSTOMER with no mark against the Ranger. */
+export const adminResolveDisputeSchema = z.object({
+  resolution: z.enum(['REFUND_CUSTOMER', 'PAY_WORKER', 'NO_ACTION']),
+  note: z.string().trim().min(5).max(1000),
+});
+export type AdminResolveDisputeInput = z.infer<typeof adminResolveDisputeSchema>;
+
 export const adminCancelListingSchema = z.object({
   reason: z.string().trim().min(5).max(500),
 });

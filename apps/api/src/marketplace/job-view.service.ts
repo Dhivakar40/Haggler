@@ -47,6 +47,7 @@ export class JobViewService {
         photos: { where: { status: 'UPLOADED' } },
         payment: true,
         sosAlerts: { orderBy: { createdAt: 'desc' } },
+        disputes: { orderBy: { createdAt: 'desc' } },
         thread: true,
       },
     });
@@ -251,6 +252,15 @@ export class JobViewService {
         note: s.note,
         status: s.status,
         createdAt: s.createdAt.toISOString(),
+      })),
+      disputes: job.disputes.map((d) => ({
+        id: d.id,
+        role: d.role,
+        reason: d.reason,
+        status: d.status,
+        resolution: d.resolution,
+        resolutionNote: d.resolutionNote,
+        createdAt: d.createdAt.toISOString(),
       })),
       cancellation:
         job.status === 'CANCELLED' || job.status.startsWith('NO_SHOW')

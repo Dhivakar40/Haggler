@@ -9,6 +9,7 @@ import {
   adminLoginSchema,
   adminPriceListAddOnUpsertSchema,
   adminPriceListEntryUpsertSchema,
+  adminResolveDisputeSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
 import {
@@ -21,9 +22,11 @@ import {
 } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { AdminAuthGuard, AdminAuthService } from './admin-auth';
+import { AdminDisputesService } from './admin-disputes.service';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
 import { AdminListingsService } from './admin-listings.service';
+import { AdminOtherJobsService } from './admin-other-jobs.service';
 import { AdminPriceListService } from './admin-price-list.service';
 import { AdminReviewsService } from './admin-reviews.service';
 import { AdminSosService } from './admin-sos.service';
@@ -54,6 +57,8 @@ export class AdminController {
     private readonly listings: AdminListingsService,
     private readonly priceList: AdminPriceListService,
     private readonly sos: AdminSosService,
+    private readonly disputes: AdminDisputesService,
+    private readonly otherJobs: AdminOtherJobsService,
   ) {}
 
   @Post('auth/login')
@@ -205,6 +210,67 @@ export class AdminController {
     @CurrentAdmin() admin: AuthAdmin,
   ) {
     return this.sos.resolve(id, admin);
+  }
+
+  @Get('disputes')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Open disputes, oldest first (Sub-phase D)' })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  disputesQueue(@Query(new ZodPipe(listQuery)) q: z.infer<typeof listQuery>) {
+    return this.disputes.queue(q.cursor, q.limit);
+  }
+
+  @Post('disputes/:id/resolve')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Resolve a dispute: REFUND_CUSTOMER, PAY_WORKER, or NO_ACTION, with a note',
+  })
+  @ApiZodBody(adminResolveDisputeSchema)
+  resolveDispute(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminResolveDisputeSchema)) body: z.infer<typeof adminResolveDisputeSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.disputes.resolve(id, body, admin);
+  }
+
+  @Get('other-jobs')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '"Other"-category jobs, newest first; q searches the free-text description (Sub-phase D)',
+  })
+  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  browseOtherJobs(@Query(new ZodPipe(browseListingsQuery)) q: z.infer<typeof browseListingsQuery>) {
+    return this.otherJobs.browse(q.q, q.cursor, q.limit);
+  }
+
+  @Post('other-jobs/:id/cancel')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Cancel a fraudulent or abusive "other" job, before the Ranger is underway (REQUESTED/BROADCASTING/MATCHED/AGREED only)',
+  })
+  @ApiZodBody(adminCancelListingSchema)
+  cancelOtherJob(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminCancelListingSchema)) body: z.infer<typeof adminCancelListingSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.otherJobs.cancel(id, body.reason, admin);
   }
 
   @Get('contract-listings')

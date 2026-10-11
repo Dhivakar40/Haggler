@@ -1401,3 +1401,65 @@ unrelated violations as D-082).
 Not yet done, same list as D-081's close: B7-B12, plus the Plus token-bundle-discount product
 question. Sub-phase B's mobile gap is now closed; the live smoke test remains the one gate this
 sandbox cannot run (no device/emulator).
+
+## D-084: Sub-phase D (Fraud and disputes) — disputes and "other"-job moderation, API only
+
+**A survey first, again — and this one found the most pre-built scaffolding of any sub-phase
+yet.** The no-Ranger-responds fallback (D-033: three broadcast waves, then `timeOut()` leaves the
+job for the customer to re-broadcast or cancel, 2h auto-cancel if untouched) was already complete;
+nothing needed building there. More strikingly, `JobStatus.DISPUTED`/`REFUNDED` and their exact
+state-machine edges (`job-state.ts`'s `TRANSITIONS` table), plus `WorkerStats.jobsDisputed` and the
+league's `disputeRate` formula (`league-tier.ts`), have existed since D-076 — `league-tier.spec.ts`
+even has a test named *"dispute rate is wired in but inert today"* confirming nothing had ever set
+`jobsDisputed` above 0. This sub-phase's dispute flow is almost entirely "plug something into an
+already-built socket," the same shape as D-083's tier-3 KYC wiring up `TRADE_LICENSE`.
+
+**The dispute flow, scoped down from what the state table technically allows.**
+`DisputeService.raise()` only opens a dispute from `CONFIRMED_BY_CUSTOMER`, even though
+`job-state.ts` also permits `DISPUTED` from `IN_PROGRESS` and `COMPLETED_BY_WORKER`. The reason is
+a correctness trap, not a style choice: resolving a dispute moves the job back out of `DISPUTED`
+via a bare `JobTransitions.move()` (admin-disputes.service.ts), which does **not** re-run
+`lifecycle.service.ts confirm()`'s payment settlement (crediting the Ranger's wallet,
+`jobsCompleted`). From `CONFIRMED_BY_CUSTOMER` that settlement already ran once, so skipping it on
+the way back is correct. From an earlier status it never ran — resolving a dispute from there would
+need to trigger it, which this round doesn't build. Restricting `raise()` to post-confirmation
+disputes sidesteps a double-credit (or never-credit) bug rather than shipping one; disputing a
+still-in-flight job is also the least common real case (cancel/SOS already cover mid-job problems).
+A new `Dispute` row records who raised it and why; the job's own trail — `JobEvent`, `JobPhoto`,
+`JobLocation`, `JobPayment` — **is** the evidence, nothing duplicates it. Resolving
+(`POST /v1/admin/disputes/:id/resolve`, `DISPUTE_AGENT`) picks one of three outcomes:
+`REFUND_CUSTOMER` (job → `REFUNDED`, `WorkerStats.jobsDisputed` incremented, league recomputed),
+`PAY_WORKER`/`NO_ACTION` (job → `CONFIRMED_BY_CUSTOMER`, no mark against the Ranger). **No outcome
+moves real money** — the same Razorpay-refund-API gap flagged in D-081's token migration-plan
+report; this records the decision, a human still has to act on a real refund.
+
+**"Other"-category moderation**, the other greenfield item: `GET /v1/admin/other-jobs` (search the
+free-text description, the one category where a customer's own words are the entire listing) and
+`POST /v1/admin/other-jobs/:id/cancel`, same "browse-and-search, not a report queue" shape as
+D-059's Contract/Campus listing moderation (no report mechanic exists for jobs either). Cancellation
+is deliberately capped at `REQUESTED`/`BROADCASTING`/`MATCHED`/`AGREED` — `job-state.ts` simply has
+no `SYSTEM`-actor edge into `CANCELLED` from `EN_ROUTE`/`ARRIVED`/`IN_PROGRESS`, so an admin cannot
+unilaterally cancel once a Ranger is already underway, matching the travel-fee consideration the
+customer/Ranger's own `cancel()` already accounts for there.
+
+**Deferred, with reasons (not inferred into existence):**
+- *League-bonus / anti-farming controls beyond what already exists.* D-077 already closed the
+  re-crossing-the-same-tier double-pay gap (`highestLeague`) and the same-person self-dealing gap
+  (KYC-tier floor on a booking counting). What's still open is a *different* Ranger↔customer pair
+  colluding across two real accounts to farm cheap repeat completions for league-up bonuses —
+  detecting that needs a velocity/pairing analysis (e.g. "same two accounts complete >N jobs in a
+  week") that risks false positives against genuinely loyal repeat customers without a carefully
+  tuned threshold. Flagged rather than guessed at.
+- *Multi-account detection via Aadhaar hash.* Flagged already in D-083 for the same reason: this is
+  squarely Sub-phase D's territory, not built yet. The admin-kyc decision flow would need a new
+  full-Aadhaar-number input (today only `aadhaarLast4` is ever typed in), hashed immediately and
+  checked against every other `WorkerProfile`'s hash before approval — a real schema and flow
+  change, not a one-line addition, deferred to keep this round's scope honest.
+
+Mobile: no UI for either dispute-raising or the "other"-job moderation queue (admin-only, so no
+mobile surface needed there anyway) — API first, same split as every sub-phase. API unit suite
+green: 189/189 across 22 suites (4 new in `dispute.service.spec.ts`). e2e coverage written and
+traced by hand (no Postgres in this sandbox) in `jobs.e2e-spec.ts`: dispute raise/queue/resolve both
+ways (with and without the dispute-rate mark), refusing a dispute on an unconfirmed job, refusing a
+second open dispute, and the "other"-job moderation browse/cancel/already-cancelled/
+already-underway cases.

@@ -874,6 +874,7 @@ model Job {
   shares     TrustedShare[]
   reviews    Review[]
   sosAlerts  SosAlert[]
+  disputes   Dispute[]
 
   @@index([customerId, createdAt(sort: Desc)])
   @@index([workerId, createdAt(sort: Desc)])
@@ -1079,6 +1080,47 @@ model SosAlert {
   @@index([jobId, createdAt(sort: Desc)])
   @@index([status, createdAt])
   @@map("sos_alerts")
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+
+  @@map("dispute_status")
+}
+
+enum DisputeResolution {
+  REFUND_CUSTOMER
+  PAY_WORKER
+  NO_ACTION
+
+  @@map("dispute_resolution")
+}
+
+/// D-080 (Sub-phase D): raises the job into JobStatus.DISPUTED (D-076's state-machine edges, never
+/// used until now — WorkerStats.jobsDisputed and the league dispute-rate formula were already
+/// wired in for exactly this). The job itself (status, JobEvent trail, photos, GPS, JobPayment) IS
+/// the evidence — this table only records who raised it, why, and the eventual decision. No money
+/// moves automatically on REFUND_CUSTOMER: a real refund needs the same Razorpay-refund-API gap
+/// flagged in D-081's token migration-plan report.
+model Dispute {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId          String             @map("job_id") @db.Uuid
+  raisedBy       String             @map("raised_by") @db.Uuid
+  role           PartyRole
+  reason         String
+  status         DisputeStatus      @default(OPEN)
+  resolution     DisputeResolution?
+  resolutionNote String?            @map("resolution_note")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt     DateTime?          @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy     String?            @map("resolved_by") @db.Uuid
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([status, createdAt])
+  @@map("disputes")
 }
 
 model ChatThread {
