@@ -159,6 +159,7 @@ export const makeJob = (over: Partial<JobDto> = {}): JobDto => ({
   paymentMethod: null,
   payment: null,
   sosAlerts: [],
+  disputes: [],
   cancellation: null,
   media: [],
   threadId: null,

@@ -305,14 +305,15 @@ adapters, D-074 — a "hosted but still a test environment" deploy is `developme
 own definition, not a new value), point `eas.json`'s `preview` profile's `EXPO_PUBLIC_API_URL` at
 the Render URL, and trigger `eas build --profile preview --platform android` from `apps/mobile`.
 
-### Rotating secrets later (D-078 note) — MUST happen before any real user data
+### Rotating secrets later (D-078 note, extended in D-085/Sub-phase E) — MUST happen before any real user data
 
 **`JWT_ACCESS_SECRET`, `ADMIN_JWT_SECRET`, `FIELD_ENCRYPTION_KEY`, and the Backblaze B2 storage
 keys (`S3_ACCESS_KEY`/`S3_SECRET_KEY`) are all still the values that were pasted in plaintext chat
 earlier in this project's history, reused as-is through both the original D-074 setup and the
 D-078 Mumbai/Singapore move.** That reuse was a deliberate, scoped decision each time (infra moves
 and testing-environment setup, not secret hygiene work) — it is **not** acceptable once this
-deployment stores any real person's data. Rotate all four before that point, not after.
+deployment stores any real person's data. Rotate all six below (the original four, plus the two
+D-085 adds further down) before that point, not after.
 
 - **`JWT_ACCESS_SECRET` / `ADMIN_JWT_SECRET`**: safe to rotate anytime — just generate a new value
   (`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`) and update the
@@ -337,6 +338,18 @@ deployment stores any real person's data. Rotate all four before that point, not
   rotation is actually needed, don't improvise it live against a running deployment. If this
   deployment never collects real KYC data before a FIELD_ENCRYPTION_KEY rotation, this step is
   moot — swapping the key is then safe with nothing to re-encrypt.
+- **`RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET`** (D-085, not covered above because sandbox
+  testing never needed real keys until now): rotate from the Razorpay dashboard — generate a new
+  key pair (or a new webhook signing secret) under Settings → API Keys / Webhooks, update both env
+  vars together, then revoke the old key pair from the same dashboard once the new one is
+  confirmed live. A captured-but-not-yet-verified payment signed with the old webhook secret
+  within the rotation window would fail verification — in practice this never happens, since
+  Razorpay's own webhook retries only span minutes, not the time a manual rotation takes.
+- **`FCM_SERVICE_ACCOUNT_JSON`** (D-085, same reason): generate a new Firebase service-account key
+  from the Firebase console (Project Settings → Service Accounts → Generate new private key),
+  swap the env var, then delete the old key from the same console. No data is encrypted with it —
+  it only authenticates outbound push sends — so rotation is a straightforward swap-and-revoke
+  with no decrypt/re-encrypt step, unlike `FIELD_ENCRYPTION_KEY` above.
 
 ### Redeploying after a code change
 
@@ -403,3 +416,18 @@ the EAS dashboard (`expo.dev` → your project → Builds).
       been exercised against a real Firebase project (D-051).
 - [ ] Wire iOS push (APNs token → FCM bridge) before shipping to iOS, or keep iOS push disabled
       and say so in the App Store listing (D-051).
+- [ ] Review the Phase Commerce platform-fee defaults (`system_config`: `platform_fee_bps` 1000,
+      `platform_fee_min_paise` 2000, `online_payment_discount_bps` 200,
+      `worker_dues_threshold_paise` 50000, D-081) — all placeholders, overridable without a deploy.
+- [ ] Decide the token-bundle migration path (D-081's three options: leave dead, Razorpay refund,
+      or convert to platform-fee credit) before launch — nothing is implemented, and leaving
+      existing `balanceTokens` dead on a real customer's account is a real complaint waiting to
+      happen once tokens stop doing anything.
+- [ ] Decide who the `DISPUTE_AGENT` reviewers are for the SOS (D-083) and dispute (D-084) queues —
+      same open question as the KYC-reviewer item above, now with two more queues feeding it.
+- [ ] Review which categories need `requiresLicense` (tier-3 KYC, D-083) — only
+      `gas_appliance_repair` is seeded `true` today; decide if any other category legally needs a
+      trade license before Rangers are matched to it.
+- [ ] Get a real legal/CA read on GST, payout tax, and the aggregator welfare fee
+      (`gst_on_fee_bps`/`payout_tax_bps`/`aggregator_welfare_fee_bps`, all seeded 0, D-081) — these
+      are placeholders explicitly pending that review, not a considered "no tax" decision.

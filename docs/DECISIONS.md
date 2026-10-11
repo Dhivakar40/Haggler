@@ -1463,3 +1463,47 @@ traced by hand (no Postgres in this sandbox) in `jobs.e2e-spec.ts`: dispute rais
 ways (with and without the dispute-rate mark), refusing a dispute on an unconfirmed job, refusing a
 second open dispute, and the "other"-job moderation browse/cancel/already-cancelled/
 already-underway cases.
+
+## D-085: Sub-phase E (Reliability) — the weak-signal location retry queue, and extending D-078's secrets/hosting docs
+
+**A third survey, and a third pre-built chunk of the answer.** D-033's broadcast-exhaustion
+fallback (already covered in D-084's close) and D-078's "Current hosting layout" /
+"Rotating secrets later" / "Before launch" sections in `docs/RUNBOOK.md` already exist in detail —
+this sub-phase's "rotate-secrets checklist" and "hosting-readiness note" items are mostly
+*extending* that existing documentation, not writing it from scratch.
+
+**The one real code change: `apps/mobile/src/location/retryQueue.ts`.** Before this, a failed
+`sendLocation()` call — a weak-signal moment: a lift, a basement, a tunnel — was caught and
+silently dropped (`tracker.ts`'s own comment said as much: *"the next update will try again"*,
+which was only true in the sense that a *later* point would still be sent, not that the *lost*
+one would ever be recovered). `withRetryQueue()` wraps a sender so a failed point joins an
+in-memory queue (capped at 20, oldest dropped first — a live trail cares most about the most
+recent position) instead of vanishing, and the next successful send flushes the backlog first,
+oldest point first, before sending the new one. Wired into both paths that call `sendLocation` —
+the foreground `watchPositionAsync` callback and the background task (`defineBackgroundTask`) —
+sharing one module-level queue, since both are the same logical Ranger-location stream.
+
+**Deliberately not attempted: preserving the queued point's original capture time.** A retried
+point lands in `JobLocation.recordedAt` with whatever time the server assigns it on arrival, not
+the moment it was actually captured — doing that properly would mean `locationUpdateSchema`
+accepting and trusting a client-supplied `recordedAt`, and that same timestamp also feeds the
+arrival-geofence freshness check (`presence.service.ts`'s `updateLocation`/`lastLocation`).
+Backdating it wrong is a safety-relevant bug (a stale point could look fresh, or vice versa), not
+a cosmetic one, so this round scopes to "don't lose the point," not "get the trail's exact timing
+right" — documented directly in the module's own comment, not just here.
+
+**Docs extended, not rewritten:** `docs/RUNBOOK.md`'s "Rotating secrets later" section (D-078)
+covered `JWT_ACCESS_SECRET`/`ADMIN_JWT_SECRET`/`FIELD_ENCRYPTION_KEY`/Backblaze B2 keys but not
+`RAZORPAY_KEY_SECRET`/`RAZORPAY_WEBHOOK_SECRET` or `FCM_SERVICE_ACCOUNT_JSON` — both added now,
+each with the same "is this a drop-in swap or does old-encrypted-data need re-encrypting" framing
+the existing four entries use (both new ones are plain swap-and-revoke, no re-encryption needed).
+The "Before launch" ops checklist gained five new items surfacing Sub-phase B/C/D's own
+placeholders and open product questions (platform-fee defaults, the token-bundle migration
+decision, who the `DISPUTE_AGENT` reviewers are, which categories need `requiresLicense`, and the
+GST/payout-tax/aggregator-fee legal review) — each one already flagged inline in its own D-08x
+entry; this just makes sure "before launch" is the one place that collects all of them, rather than
+requiring someone to reread every decision entry to reconstruct the list.
+
+Mobile suite green: 516/516 across 57 suites (6 new in `retryQueue.spec.ts`). Root lint clean (same
+15 pre-existing, unrelated violations as every prior sub-phase this round). No API changes this
+round — Sub-phase E was mobile- and docs-only.

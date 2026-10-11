@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef } from 'react';
 import { sendLocation } from '../api/market';
+import { withRetryQueue } from './retryQueue';
 
 export const BACKGROUND_TASK = 'haggler-background-location';
 
@@ -75,6 +76,8 @@ export async function stopBackgroundTracking(): Promise<void> {
  * The OS wakes this task with new positions, even when the app is not on screen. It talks to the
  * API over REST (no socket in the background) using the stored refresh token to stay signed in.
  */
+const sendLocationWithRetry = withRetryQueue((p) => sendLocation(p.latitude, p.longitude, p.accuracyM));
+
 export function defineBackgroundTask(): void {
   if (TaskManager.isTaskDefined(BACKGROUND_TASK)) return;
   TaskManager.defineTask(BACKGROUND_TASK, async ({ data, error }) => {
@@ -84,13 +87,13 @@ export function defineBackgroundTask(): void {
     const last = locations[locations.length - 1];
     if (!last) return;
     try {
-      await sendLocation(
-        last.coords.latitude,
-        last.coords.longitude,
-        last.coords.accuracy ?? undefined,
-      );
+      await sendLocationWithRetry({
+        latitude: last.coords.latitude,
+        longitude: last.coords.longitude,
+        accuracyM: last.coords.accuracy ?? undefined,
+      });
     } catch {
-      /* the next update will try again */
+      /* queued — the next successful send (foreground or background) will flush it */
     }
   });
 }
@@ -108,7 +111,7 @@ export function useLocationTracker(
   send: Sender,
 ): void {
   const sendRef = useRef(send);
-  sendRef.current = send;
+  sendRef.current = withRetryQueue(send);
 
   useEffect(() => {
     if (mode === 'off') return;
