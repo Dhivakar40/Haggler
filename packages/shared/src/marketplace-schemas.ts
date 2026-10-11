@@ -117,6 +117,17 @@ export const quoteDtoSchema = z.object({
 });
 export type QuoteDto = z.infer<typeof quoteDtoSchema>;
 
+/** D-080 (A5): a Ranger's mid-job proposal of a catalogue add-on; name/price are snapshotted at
+ * proposal time. */
+export const jobAddOnDtoSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  pricePaise: paiseSchema,
+  status: z.enum(['PROPOSED', 'APPROVED', 'DECLINED']),
+  proposedAt: z.string(),
+});
+export type JobAddOnDto = z.infer<typeof jobAddOnDtoSchema>;
+
 const partySchema = z.object({ id: uuid, firstName: z.string().nullable() });
 
 export const jobDtoSchema = z.object({
@@ -167,6 +178,8 @@ export const jobDtoSchema = z.object({
   offers: z.array(offerDtoSchema),
   /** D-080 (A4): populated only for "other"-category jobs still at BROADCASTING/MATCHED. */
   quotes: z.array(quoteDtoSchema),
+  /** D-080 (A5): mid-job add-on proposals, inspection-charge categories only (A2). */
+  addOns: z.array(jobAddOnDtoSchema),
   /** Phase 4: whether the viewer can/did leave a review for this job. */
   review: z.object({ canReview: z.boolean(), submitted: z.boolean() }),
   /** The 4-digit code the customer reads out; shown to the CUSTOMER only, while the Ranger is there. */
@@ -281,6 +294,11 @@ export const quoteInputSchema = z.object({
   amountPaise: z.number().int().min(100).max(10_000_000),
 });
 export type QuoteInput = z.infer<typeof quoteInputSchema>;
+
+// ---- Mid-job add-ons (D-080, A5) ---------------------------------------------------------------
+
+export const proposeAddOnSchema = z.object({ addOnId: uuid });
+export type ProposeAddOnInput = z.infer<typeof proposeAddOnSchema>;
 
 // ---- Job actions ------------------------------------------------------------------------------
 

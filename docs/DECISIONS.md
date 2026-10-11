@@ -1109,7 +1109,34 @@ amount against a panel that also renders a status label and a worker's name need
 false }`. Fixed all three class of breakage before considering Sub-phase A done; final state:
 mobile suite 499/499, design-token lint 0 violations, typecheck clean.
 
-Not yet done: A5's `JobAddOn` propose/approve UI (the inspection-charge-category mid-job add-on
-flow) has no mobile screen yet — API only. Sub-phase A's gate (API unit + mobile suite + live
-smoke test, per the master prompt) is satisfied for everything built so far except the live smoke
-test, which needs a deployed backend this sandbox can't reach to exercise end-to-end.
+## D-080: Sub-phase A5 — mid-job add-on propose/approve endpoints
+
+**Three endpoints, no new schema** (the `JobAddOn`/`JobAddOnStatus` table and enum already
+existed from A1's migration, unused until now): `POST /v1/jobs/:id/add-ons` (Ranger proposes,
+`WORKER` role), `POST /v1/jobs/:id/add-ons/:addOnId/{approve,decline}` (customer decides,
+`CUSTOMER` role). A new `JobAddOnsService`, not folded into `LifecycleService` or `QuotesService`
+— it doesn't touch job status at all (no transition happens on propose/approve/decline, unlike
+every other action in this module), so it earns its own small service rather than growing an
+unrelated one.
+
+**Propose is gated on `job.status === 'IN_PROGRESS'`** (not `ARRIVED`, not `COMPLETED_BY_WORKER`)
+— A2's inspection-charge framing is "the Ranger looks at the problem once actually on the job and
+proposes what it needs," which is the in-progress window, not before work starts or after it's
+done. **The add-on must belong to the job's own category** (`PriceListAddOn.categoryId` must match
+`ServiceRequest.categoryId`) — same reasoning as A4's category-gated quoting, a plumbing add-on
+has no business on an electrician job. Approve/decline reuse the same race-safe
+`updateMany({ where: { status: 'PROPOSED' } })` → `count !== 1` → 409 pattern used everywhere else
+state is claimed in this codebase (offer accept, quote accept), so a double-tap or a stale client
+can't double-decide the same add-on.
+
+Covered by a new unit suite (`job-addons.service.spec.ts`, 6 tests, mocked Prisma — same pattern
+as `catalog.service.spec.ts`): propose succeeds in-category while IN_PROGRESS, refused outside
+IN_PROGRESS, refused for an add-on from the wrong category, a non-matched worker gets 404 not a
+job, approve and decline both work, and a race on an already-decided add-on is refused.
+
+Not yet done: the mobile UI for both sides (Ranger proposing from the catalogue mid-job, customer
+approving/declining) — API only this round. Sub-phase A's gate (API unit + mobile suite + live
+smoke test, per the master prompt) is now fully green for everything built: API 168/168, mobile
+499/499, design-token lint 0 violations, both typechecks clean. The live smoke test itself needs a
+deployed backend this sandbox can't reach to exercise end-to-end — the one gate item left
+unverified for the whole of Sub-phase A.

@@ -150,6 +150,7 @@ export const makeJob = (over: Partial<JobDto> = {}): JobDto => ({
   review: { canReview: false, submitted: false },
   offers: [],
   quotes: [],
+  addOns: [],
   arrivalCode: null,
   arrivalVerified: false,
   hasBeforePhoto: false,

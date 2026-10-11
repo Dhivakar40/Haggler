@@ -126,6 +126,9 @@ pnpm dev:infra && pnpm db:migrate && pnpm db:seed
   per Ranger per request), `POST .../quotes/:quoteId/{accept,decline}` (customer — accepting
   performs the match), `POST .../quotes/:quoteId/withdraw` (Ranger). Calling the normal accept
   endpoint on an `other` job is refused with `QUOTE_REQUIRED`.
+- Inspection-charge categories (A2) let a Ranger propose a catalogue add-on while the job is
+  `IN_PROGRESS`: `POST /v1/jobs/:id/add-ons` (Ranger, body `{addOnId}`), `POST
+  .../add-ons/:addOnId/{approve,decline}` (customer). No mobile screen yet — API only.
 
 ## Push notifications (Phase 5)
 

@@ -7,6 +7,7 @@ import {
   verifyArrivalSchema,
   completeJobSchema,
   cancelJobSchema,
+  proposeAddOnSchema,
   quoteInputSchema,
   sendMessageSchema,
 } from '@haggler/shared';
@@ -14,6 +15,7 @@ import { z } from 'zod';
 import { ApiZodBody, CurrentUser, Roles, type AuthUser } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { ChatService } from './chat.service';
+import { JobAddOnsService } from './job-addons.service';
 import { JobViewService } from './job-view.service';
 import { LifecycleService } from './lifecycle.service';
 import { MatchingService } from './matching.service';
@@ -126,6 +128,7 @@ export class JobsController {
     private readonly requests: RequestsService,
     private readonly view: JobViewService,
     private readonly quotes: QuotesService,
+    private readonly addOns: JobAddOnsService,
     private readonly life: LifecycleService,
     private readonly tracking: TrackingService,
     private readonly chat: ChatService,
@@ -334,6 +337,44 @@ export class JobsController {
   @ApiOperation({ summary: 'The chat thread for this job' })
   thread(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
     return this.chat.threadForJob(jobId, u.id);
+  }
+
+  @Post(':id/add-ons')
+  @Roles('WORKER')
+  @ApiOperation({
+    summary: 'Ranger: propose a catalogue add-on (A2/A5, inspection-charge categories)',
+  })
+  @ApiZodBody(proposeAddOnSchema)
+  proposeAddOn(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(proposeAddOnSchema)) body: z.infer<typeof proposeAddOnSchema>,
+  ) {
+    return this.addOns.propose(u.id, jobId, body.addOnId);
+  }
+
+  @Post(':id/add-ons/:addOnId/approve')
+  @HttpCode(200)
+  @Roles('CUSTOMER')
+  @ApiOperation({ summary: 'Customer: approve a proposed add-on' })
+  approveAddOn(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Param('addOnId', id) addOnId: string,
+  ) {
+    return this.addOns.approve(u.id, jobId, addOnId);
+  }
+
+  @Post(':id/add-ons/:addOnId/decline')
+  @HttpCode(200)
+  @Roles('CUSTOMER')
+  @ApiOperation({ summary: 'Customer: decline a proposed add-on' })
+  declineAddOn(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Param('addOnId', id) addOnId: string,
+  ) {
+    return this.addOns.decline(u.id, jobId, addOnId);
   }
 }
 

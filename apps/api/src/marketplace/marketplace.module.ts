@@ -3,6 +3,7 @@ import { StorageModule } from '../adapters/storage/storage.service';
 import { CatalogModule } from '../catalog/catalog.module';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ChatService } from './chat.service';
+import { JobAddOnsService } from './job-addons.service';
 import { JobTransitions } from './job-transitions.service';
 import { JobViewService } from './job-view.service';
 import { LifecycleService } from './lifecycle.service';
@@ -40,6 +41,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     RequestsService,
     OffersService,
     QuotesService,
+    JobAddOnsService,
     LifecycleService,
     ChatService,
     TrackingService,
@@ -56,6 +58,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     JobViewService,
     OffersService,
     QuotesService,
+    JobAddOnsService,
     LifecycleService,
     RequestsService,
     ChatService,
