@@ -6,6 +6,7 @@ import { UsersModule } from '../users/users.module';
 import { ChatService } from './chat.service';
 import { DisputeService } from './dispute.service';
 import { FeeService } from './fee.service';
+import { FraudDetectionService } from './fraud-detection.service';
 import { IncidentService } from './incident.service';
 import { JobAddOnsService } from './job-addons.service';
 import { JobTransitions } from './job-transitions.service';
@@ -60,6 +61,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     QuoteBuilderService,
     PartsPauseService,
     IncidentService,
+    FraudDetectionService,
   ],
   exports: [
     RealtimeService,
@@ -77,6 +79,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     RequestsService,
     ChatService,
     TrackingService,
+    FraudDetectionService,
   ],
 })
 export class MarketplaceModule {}

@@ -129,6 +129,31 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
       "D-087 (H2/H3): true requires the server-generated completion code to confirm an ONLINE job instead of a bare confirm(). Defaults to false, same reasoning as quote_flow_enabled.",
   },
   {
+    key: 'fraud_velocity_max_jobs',
+    value: 15,
+    description: 'D-093 (K1): flags (never blocks) a league promotion with this many or more confirmed jobs within fraud_velocity_window_hours',
+  },
+  {
+    key: 'fraud_velocity_window_hours',
+    value: 24,
+    description: 'D-093 (K1): the lookback window for the velocity signal',
+  },
+  {
+    key: 'fraud_repeat_pair_max_count',
+    value: 5,
+    description: 'D-093 (K1): flags a promotion if the same customer accounts for this many or more of the confirmed jobs within fraud_repeat_pair_window_days',
+  },
+  {
+    key: 'fraud_repeat_pair_window_days',
+    value: 30,
+    description: 'D-093 (K1): the lookback window for the repeat-pair signal',
+  },
+  {
+    key: 'fraud_min_job_value_paise',
+    value: 5_000,
+    description: 'D-093 (K1): a job below this value is too cheap to count as credible toward a promotion; placeholder',
+  },
+  {
     key: 'gst_on_fee_bps',
     value: 0,
     description: 'GST on the platform fee, in basis points. 0 until finance/counsel confirms the rate (B11)',

@@ -1999,3 +1999,67 @@ auto-holds and blocks the held account's own next request; OTHER does not auto-h
 CLEAR vs. SUSPEND end to end including the evidence-view call; SOS holds the other party, not
 the one who raised it) — hand-traced against the real implementation, not run, same no-Postgres
 sandbox constraint as every e2e addition this project.
+
+## D-094: Sub-phase K — fraud controls, and a real cancel-fee bypass found and fixed
+
+**K3, done first: verifying cancellation-fee/no-show/auto-reassignment "still work" surfaced two
+real findings, not zero.**
+1. *A cancel-fee bypass, caused by this phase's own earlier work.* `CUSTOMER_CANCELLABLE` (what
+   `LifecycleService.cancel()` checks) had grown to include QUOTING and PAUSED_PARTS — added
+   during D-087's foundation because job-state.ts's TRANSITIONS table needed those edges for
+   `QuoteBuilderService.reject()`/`PartsPauseService.rejectExtension()` to use. But
+   `CUSTOMER_CANCELLABLE` and the TRANSITIONS table are different things: including them in the
+   former meant a customer could call the generic `/cancel` instead of `/quote/reject` or
+   `/pause/reject` and skip the visit fee entirely, since `cancel()` only ever computes a fee for
+   EN_ROUTE/ARRIVED. Fixed by removing both from `CUSTOMER_CANCELLABLE` — `cancel()` now refuses
+   them with `USE_QUOTE_REJECT`/`USE_PAUSE_REJECT`, pointing at the endpoint that charges
+   correctly. The state machine's own permissiveness for those two edges is untouched (the
+   dedicated services still use it directly), so nothing else is affected.
+2. *Auto-reassignment never existed.* Not a regression — there was simply no path forward after
+   `NO_SHOW_WORKER` at all (only `NO_SHOW_WORKER -> REFUNDED[SYSTEM]` was reserved in the state
+   table, and nothing ever called it). Added `NO_SHOW_WORKER -> BROADCASTING[CUSTOMER]` and
+   `RequestsService.reassignAfterNoShow()` (new `POST /v1/jobs/:id/reassign`): resets the job to
+   a fresh broadcast wave, same shape as the existing `rebroadcast()`. No refund step is needed
+   first — nothing has been paid yet at this point in either the pre-D-087 or quote-first flow.
+   No-show handling itself (the grace-period timers, who can report whom) was unaffected by this
+   phase's changes and needed no fix.
+
+**K1: league-bonus fraud signals — queued, never acted on automatically, as specified.** New
+`FraudReviewItem` model + `FraudDetectionService.checkWorkerPromotion()`, called from
+`ReputationService.recomputeWorkerLeague()` at the exact point a promotion bonus is paid, inside
+the same transaction, but **only ever reads Job rows and writes a review item** — it cannot
+change the bonus, the league, or any balance, by construction (no method on the service does
+anything else). Three signals, all admin-tunable via the existing `FeeService` config pattern:
+VELOCITY (too many confirmed jobs too fast), REPEAT_PAIR (one customer accounting for too much of
+a worker's recent completed-job count), LOW_VALUE (a promotion driven mostly by jobs below a
+minimum credible value). Each flag is deduplicated — a worker who keeps tripping the same signal
+doesn't pile up duplicate queue rows. `AdminFraudService` (new, mirrors the dispute/incident
+queue pattern) exposes `queue()`/`resolve()`; resolving only changes the item's own status.
+
+**K2: multi-account detection — device overlap only, the gap documented rather than papered
+over.** The master prompt asks for phone/device/payment. Phone is already structurally
+impossible to duplicate (`User.phone` is globally `@unique`) — nothing to detect there. Payment:
+this codebase stores no payment-instrument fingerprint at all (the Razorpay sandbox integration
+never needed one, no card/VPA data is kept anywhere), so that check cannot be built without
+first deciding to start collecting something new — out of scope to decide unilaterally.
+**Device is the one real signal available**: `AdminFraudService.multiAccountCandidates()` finds
+`device_id` values shared by more than one `user_id` via a straightforward grouped query — no
+new schema needed, `Device.deviceId` was never globally unique by design (D-07x device binding).
+Read-only: it surfaces candidates, nothing is held or suspended by the query itself.
+
+Migration `20261012040000_phase22_fraud_review_items`: two new enums and one new table.
+Additive only; nothing existing is touched, and nothing in this table is read by any balance or
+league computation — the relationship only runs the other way (promotion -> flag, never flag ->
+promotion).
+
+Routes added: admin `GET/POST /v1/admin/fraud-review`, `/fraud-review/:id/resolve`,
+`GET /v1/admin/fraud-review/multi-account-candidates`; `POST /v1/jobs/:id/reassign`.
+
+API unit suite green: 227/227 (6 new, genuinely run, not hand-traced — `fraud-detection.service.
+spec.ts` mocks `Prisma.TransactionClient` and `FeeService`, no Postgres needed, covering all
+three signals, the per-kind dedup, and the lookback-window boundary; 1 more new test in
+`job-state.spec.ts` for the new `NO_SHOW_WORKER -> BROADCASTING` edge). `npx tsc --noEmit` clean
+(Prisma client regenerated for the new model). New `admin-fraud.e2e-spec.ts` (routes/auth only,
+since the signal logic itself is already unit-tested) and new assertions in `quote-flow.e2e-
+spec.ts`/`parts-pause.e2e-spec.ts`/`jobs.e2e-spec.ts` for the K3 fixes — all hand-traced, not
+run, same no-Postgres sandbox constraint as every e2e addition this project.

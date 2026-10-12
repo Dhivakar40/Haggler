@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { ClientLeagueTierName, LeagueTierName, Prisma } from '@prisma/client';
+import { FraudDetectionService } from '../marketplace/fraud-detection.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import {
@@ -91,6 +92,7 @@ export class ReputationService implements OnModuleInit {
     private readonly cfg: ReputationConfig,
     private readonly wallet: WalletService,
     private readonly prisma: PrismaService,
+    private readonly fraud: FraudDetectionService,
   ) {}
 
   /** D-078: confirm() defers the league recompute below (scheduleConfirmLeagueRecompute) to after
@@ -305,6 +307,9 @@ export class ReputationService implements OnModuleInit {
     const bonusTokens = LEAGUE_UP_BONUS_TOKENS[league] ?? 0;
     if (bonusTokens > 0)
       await this.wallet.grantLeagueBonus(tx, workerId, bonusTokens, `Reached ${league} league`);
+    // D-093 (K1): read-only signal check, queues for admin review only — never blocks or
+    // reduces the bonus just paid above.
+    await this.fraud.checkWorkerPromotion(tx, workerId, league);
     return { from: stats.league, to: league, bonusTokens };
   }
 

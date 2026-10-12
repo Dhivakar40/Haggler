@@ -5,6 +5,7 @@ import { AdminController } from './admin.controller';
 import { AdminConfigService } from './admin-config.service';
 import { AdminDisputesService } from './admin-disputes.service';
 import { AdminEmployerService } from './admin-employer.service';
+import { AdminFraudService } from './admin-fraud.service';
 import { AdminIncidentsService } from './admin-incidents.service';
 import { AdminOtherJobsService } from './admin-other-jobs.service';
 import { AdminKycService } from './admin-kyc.service';
@@ -27,6 +28,7 @@ import { AdminSosService } from './admin-sos.service';
     AdminSosService,
     AdminDisputesService,
     AdminIncidentsService,
+    AdminFraudService,
     AdminOtherJobsService,
     AdminConfigService,
   ],

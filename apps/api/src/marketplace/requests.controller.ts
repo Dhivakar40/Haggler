@@ -358,6 +358,15 @@ export class JobsController {
     return this.life.reportNoShow(u.id, jobId);
   }
 
+  @Post(':id/reassign')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Customer: ask to be rematched with a different Ranger after a no-show (Sub-phase K3)',
+  })
+  reassignAfterNoShow(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.requests.reassignAfterNoShow(u.id, jobId);
+  }
+
   @Post(':id/sos')
   @HttpCode(200)
   @ApiOperation({

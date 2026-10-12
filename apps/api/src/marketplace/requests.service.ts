@@ -296,6 +296,39 @@ export class RequestsService {
     return this.view.build(job.id, customerId);
   }
 
+  /** D-093 (Sub-phase K3): a worker no-show otherwise had no path forward at all — found while
+   * verifying auto-reassignment "still exists" and discovering it never did. Resets the job to
+   * a fresh broadcast, same shape as rebroadcast() above; nothing has been paid yet at this
+   * point in either the pre-D-087 or quote-first flow, so there is no refund step first. */
+  async reassignAfterNoShow(customerId: string, jobId: string) {
+    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+    if (!job || job.customerId !== customerId) throw notFound('Job not found');
+    if (job.status !== 'NO_SHOW_WORKER')
+      throw conflict('This job was not closed as a no-show.', { code: 'NOT_NO_SHOW' });
+
+    await this.prisma.$transaction((tx) =>
+      this.transitions.move(tx, {
+        jobId,
+        from: 'NO_SHOW_WORKER',
+        to: 'BROADCASTING',
+        actor: 'CUSTOMER',
+        actorUserId: customerId,
+        data: {
+          workerId: null,
+          matchedAt: null,
+          agreedAt: null,
+          enRouteAt: null,
+          currentWave: 0,
+          broadcastAttempt: { increment: 1 },
+          nextWaveAt: new Date(),
+          broadcastDeadline: null,
+        },
+      }),
+    );
+    await this.matching.advance(jobId);
+    return this.view.build(jobId, customerId);
+  }
+
   /** Customer cancels a request that has not been matched yet. After matching use POST /jobs/:id/cancel. */
   async cancelRequest(customerId: string, requestId: string) {
     const job = await this.prisma.job.findUnique({ where: { requestId } });

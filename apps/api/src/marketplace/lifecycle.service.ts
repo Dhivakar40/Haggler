@@ -534,10 +534,21 @@ export class LifecycleService {
     if (!job || (job.customerId !== userId && job.workerId !== userId))
       throw notFound('Job not found');
     const role = job.customerId === userId ? 'CUSTOMER' : 'WORKER';
-    if (role === 'CUSTOMER' && !CUSTOMER_CANCELLABLE.includes(job.status))
+    if (role === 'CUSTOMER' && !CUSTOMER_CANCELLABLE.includes(job.status)) {
+      // D-093 (K3): QUOTING/PAUSED_PARTS each have their own reject endpoint that freezes the
+      // visit fee correctly — pointing the customer there instead of a generic "not cancellable".
+      if (job.status === 'QUOTING')
+        throw conflict('Reject the quote instead — that also tells the Ranger why.', {
+          code: 'USE_QUOTE_REJECT',
+        });
+      if (job.status === 'PAUSED_PARTS')
+        throw conflict('Decline the extension instead — that also tells the Ranger why.', {
+          code: 'USE_PAUSE_REJECT',
+        });
       throw conflict('This job can no longer be cancelled. Raise a dispute instead.', {
         code: 'NOT_CANCELLABLE',
       });
+    }
 
     let feeApplies = false;
     if (

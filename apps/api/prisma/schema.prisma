@@ -1336,6 +1336,46 @@ model IncidentReport {
   @@map("incident_reports")
 }
 
+enum FraudSignalKind {
+  /// Too many confirmed jobs in too short a window.
+  VELOCITY
+  /// A suspicious concentration of completed jobs between the same two accounts.
+  REPEAT_PAIR
+  /// A league promotion driven mostly by jobs below the minimum value to count as credible.
+  LOW_VALUE
+
+  @@map("fraud_signal_kind")
+}
+
+enum FraudReviewStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+
+  @@map("fraud_review_status")
+}
+
+/// D-093 (Sub-phase K1): a queued fraud signal — never anything that changes a balance or a
+/// league by itself (FraudDetectionService only ever reads and writes rows here; every balance/
+/// league change in this codebase still goes through its own existing, unrelated code path).
+/// An admin reviewing this decides what, if anything, happens next using the existing dispute/
+/// incident-report/suspension tools.
+model FraudReviewItem {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind          FraudSignalKind
+  subjectUserId String            @map("subject_user_id") @db.Uuid
+  relatedUserId String?           @map("related_user_id") @db.Uuid
+  detail        Json
+  status        FraudReviewStatus @default(OPEN)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt    DateTime?         @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy    String?           @map("resolved_by") @db.Uuid
+
+  @@index([subjectUserId])
+  @@index([status, createdAt])
+  @@map("fraud_review_items")
+}
+
 model ChatThread {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   jobId     String   @unique @map("job_id") @db.Uuid

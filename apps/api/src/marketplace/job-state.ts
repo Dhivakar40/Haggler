@@ -58,7 +58,11 @@ export const TRANSITIONS: Record<JobStatus, Partial<Record<JobStatus, Actor[]>>>
   COMPLETED_BY_WORKER: { CONFIRMED_BY_CUSTOMER: [C, S, W], DISPUTED: [C, W] },
   CONFIRMED_BY_CUSTOMER: { DISPUTED: [C, W], REFUNDED: [S] },
   CANCELLED: {},
-  NO_SHOW_WORKER: { REFUNDED: [S] },
+  // D-093 (K3): a no-show job had no path forward at all — found while verifying auto-
+  // reassignment "still exists" per the master prompt, and it turned out never to have existed.
+  // BROADCASTING:[C] is the customer asking to be rematched with a different Ranger; nothing has
+  // been paid yet at this point in either flow, so there is no refund step needed first.
+  NO_SHOW_WORKER: { REFUNDED: [S], BROADCASTING: [C] },
   NO_SHOW_CUSTOMER: {},
   DISPUTED: { REFUNDED: [S], CONFIRMED_BY_CUSTOMER: [S] },
   REFUNDED: {},
@@ -89,7 +93,16 @@ export function assertTransition(from: JobStatus, to: JobStatus, actor: Actor): 
 export const isActiveStatus = (s: JobStatus): boolean =>
   (ACTIVE_JOB_STATES as readonly string[]).includes(s);
 
-/** Statuses from which the customer may still cancel without a dispute. */
+/** Statuses from which the customer may still cancel without a dispute, through the generic
+ * LifecycleService.cancel(). D-093 (K3): QUOTING and PAUSED_PARTS are deliberately NOT here,
+ * even though job-state.ts's own TRANSITIONS table allows a customer-actor move to CANCELLED
+ * from both — that permissiveness exists for QuoteBuilderService.reject() and PartsPauseService.
+ * rejectExtension() to use directly, each of which freezes a visit fee first. Generic cancel()
+ * never charges that fee (it only computes cancellationFeeApplies for EN_ROUTE/ARRIVED), so
+ * including these two here would let a customer skip the visit fee entirely by calling /cancel
+ * instead of /quote/reject or /pause/reject — found while verifying this cancellation path
+ * still behaved correctly after Sub-phases G/I added those two statuses (see docs/DECISIONS.md
+ * D-093). cancel() refuses both with NOT_CANCELLABLE, same as any other closed-off status. */
 export const CUSTOMER_CANCELLABLE: JobStatus[] = [
   'REQUESTED',
   'BROADCASTING',
@@ -98,6 +111,4 @@ export const CUSTOMER_CANCELLABLE: JobStatus[] = [
   'AGREED',
   'EN_ROUTE',
   'ARRIVED',
-  'QUOTING',
-  'PAUSED_PARTS',
 ];

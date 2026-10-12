@@ -60,6 +60,17 @@ export interface FeeSettings {
    * in a second method or a riskier refactor of a transaction this project has never had a unit
    * test for). Flagged honestly in DECISIONS.md D-089, not silently done differently. */
   completion_otp_enabled: boolean;
+  /** D-093 (K1): a worker league promotion is flagged (never blocked — see FraudDetectionService)
+   * if they confirmed this many or more jobs within fraud_velocity_window_hours. */
+  fraud_velocity_max_jobs: number;
+  fraud_velocity_window_hours: number;
+  /** D-093 (K1): flagged if the same customer accounts for this many or more of the worker's
+   * confirmed jobs within fraud_repeat_pair_window_days. */
+  fraud_repeat_pair_max_count: number;
+  fraud_repeat_pair_window_days: number;
+  /** D-093 (K1): a job below this value is "too cheap to count as credible" for the low-value
+   * signal — flagged if most of the jobs behind a promotion are below it. */
+  fraud_min_job_value_paise: number;
 }
 
 export const DEFAULT_FEE_SETTINGS: FeeSettings = {
@@ -81,6 +92,11 @@ export const DEFAULT_FEE_SETTINGS: FeeSettings = {
   max_concurrent_paused_jobs_per_worker: 2,
   quote_flow_enabled: false,
   completion_otp_enabled: false,
+  fraud_velocity_max_jobs: 15,
+  fraud_velocity_window_hours: 24,
+  fraud_repeat_pair_max_count: 5,
+  fraud_repeat_pair_window_days: 30,
+  fraud_min_job_value_paise: 5_000, // ₹50 placeholder
 };
 
 /** Every key FeeService recognizes — the admin config endpoint's allowlist (admin-config.service.ts). */

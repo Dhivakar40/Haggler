@@ -318,6 +318,13 @@ export const adminResolveIncidentSchema = z.object({
 });
 export type AdminResolveIncidentInput = z.infer<typeof adminResolveIncidentSchema>;
 
+/** D-093 (Sub-phase K1): acknowledges a fraud review item — never itself moves a balance or a
+ * league; whatever the admin decides to do uses the existing dispute/incident/suspension tools. */
+export const adminResolveFraudSchema = z.object({
+  note: z.string().trim().min(5).max(1000),
+});
+export type AdminResolveFraudInput = z.infer<typeof adminResolveFraudSchema>;
+
 /** D-087: set one Phase Commerce/Flow-Final tunable (FeeService's own keys only — see
  * admin-config.service.ts). The value's shape depends on the key; server-side type-checked
  * against that key's default. */

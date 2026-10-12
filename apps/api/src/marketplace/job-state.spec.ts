@@ -68,6 +68,11 @@ describe('job state machine', () => {
     expect(canTransition('AGREED', 'NO_SHOW_CUSTOMER', 'WORKER')).toBe(false);
   });
 
+  it('(D-093 K3) a customer can ask to be rematched after a worker no-show', () => {
+    expect(canTransition('NO_SHOW_WORKER', 'BROADCASTING', 'CUSTOMER')).toBe(true);
+    expect(canTransition('NO_SHOW_WORKER', 'BROADCASTING', 'WORKER')).toBe(false);
+  });
+
   it('nobody can cancel once work has started (they must raise a dispute instead)', () => {
     expect(canTransition('IN_PROGRESS', 'CANCELLED', 'CUSTOMER')).toBe(false);
     expect(canTransition('IN_PROGRESS', 'CANCELLED', 'WORKER')).toBe(false);

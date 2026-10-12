@@ -10,6 +10,7 @@ import {
   adminPriceListAddOnUpsertSchema,
   adminPriceListEntryUpsertSchema,
   adminResolveDisputeSchema,
+  adminResolveFraudSchema,
   adminResolveIncidentSchema,
   adminSetConfigSchema,
 } from '@haggler/shared';
@@ -26,6 +27,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { AdminAuthGuard, AdminAuthService } from './admin-auth';
 import { AdminConfigService } from './admin-config.service';
 import { AdminDisputesService } from './admin-disputes.service';
+import { AdminFraudService } from './admin-fraud.service';
 import { AdminIncidentsService } from './admin-incidents.service';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
@@ -63,6 +65,7 @@ export class AdminController {
     private readonly sos: AdminSosService,
     private readonly disputes: AdminDisputesService,
     private readonly incidents: AdminIncidentsService,
+    private readonly fraud: AdminFraudService,
     private readonly otherJobs: AdminOtherJobsService,
     private readonly config: AdminConfigService,
   ) {}
@@ -287,6 +290,45 @@ export class AdminController {
     @CurrentAdmin() admin: AuthAdmin,
   ) {
     return this.incidents.resolve(id, body, admin);
+  }
+
+  @Get('fraud-review')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Queued fraud signals, oldest first (Sub-phase K1) — never auto-acted on' })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  fraudQueue(@Query(new ZodPipe(listQuery)) q: z.infer<typeof listQuery>) {
+    return this.fraud.queue(q.cursor, q.limit);
+  }
+
+  @Post('fraud-review/:id/resolve')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Acknowledge a fraud signal as reviewed' })
+  @ApiZodBody(adminResolveFraudSchema)
+  resolveFraud(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminResolveFraudSchema)) body: z.infer<typeof adminResolveFraudSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.fraud.resolve(id, admin, body.note);
+  }
+
+  @Get('fraud-review/multi-account-candidates')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Accounts sharing a registered device (Sub-phase K2) — phone is already unique per account; no payment fingerprint is stored to check',
+  })
+  @ApiQuery({ name: 'limit', required: false })
+  multiAccountCandidates(@Query(new ZodPipe(listQuery)) q: z.infer<typeof listQuery>) {
+    return this.fraud.multiAccountCandidates(q.limit);
   }
 
   @Get('other-jobs')

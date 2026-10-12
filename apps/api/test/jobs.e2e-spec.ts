@@ -717,6 +717,31 @@ describe('cancellation, fees and no-shows', () => {
     await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(409); // it is over
   });
 
+  it('(D-093 K3) after a no-show, the customer can ask to be rematched with a different Ranger', async () => {
+    const { area, c, r, jobId } = await pair();
+    await m.agree(c, r, jobId);
+    await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+    await m.prisma.job.update({
+      where: { id: jobId },
+      data: { enRouteAt: new Date(Date.now() - 31 * 60_000) },
+    });
+    await m.api.post(c, `/v1/jobs/${jobId}/report-no-show`).expect(200);
+
+    const reassigned = await m.api.post(c, `/v1/jobs/${jobId}/reassign`).expect(200);
+    expect(reassigned.body.status).toBe('BROADCASTING');
+    const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    expect(job.workerId).toBeNull();
+
+    // A different Ranger can now accept the same job.
+    const r2 = await m.ranger({ at: northOf(300, area) });
+    const accepted = await m.api.post(r2, `/v1/requests/${job.requestId}/accept`).expect(200);
+    expect(accepted.body.status).not.toBe('BROADCASTING');
+
+    const again = await m.api.post(c, `/v1/jobs/${jobId}/reassign`);
+    expect(again.status).toBe(409);
+    expect(again.body.error.details.code).toBe('NOT_NO_SHOW');
+  });
+
   it('a Ranger can report a customer no-show after waiting 15 minutes at the door', async () => {
     const { area, c, r, jobId } = await pair();
     await m.agree(c, r, jobId);

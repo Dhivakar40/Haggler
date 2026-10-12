@@ -133,6 +133,26 @@ describe('D-087 (Sub-phase G): the quote-first flow, behind quote_flow_enabled',
     expect(job.closeReason).toBe('QUOTE_REJECTED');
   });
 
+  it('(K3) the generic cancel endpoint refuses a QUOTING job — it would skip the visit fee', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: northOf(300, area) });
+    const { jobId } = await m.match(c, r);
+    const item = await makeLabourItem(40_000);
+    await arriveWithSelfie(c, r, jobId);
+    await m.api
+      .post(r, `/v1/jobs/${jobId}/quote`, {
+        items: [{ kind: 'LABOUR', catalogItemId: item.id, name: item.name, unitPricePaise: 40_000, quantity: 1 }],
+      })
+      .expect(200);
+
+    const bypass = await m.api.post(c, `/v1/jobs/${jobId}/cancel`, {});
+    expect(bypass.status).toBe(409);
+    expect(bypass.body.error.details.code).toBe('USE_QUOTE_REJECT');
+    const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    expect(job.status).toBe('QUOTING'); // unchanged — the bypass did not go through
+  });
+
   it('above-ceiling needs a photo and a reason, and gets flagged for admin review', async () => {
     const area = newArea();
     const c = await m.customer({ at: area });

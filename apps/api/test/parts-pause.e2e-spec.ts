@@ -127,6 +127,26 @@ describe('D-087 (Sub-phase I, core): pausing an in-progress job to fetch a part'
     expect(tooSoon.body.error.details.code).toBe('NOT_IN_PROGRESS');
   });
 
+  it('(K3) the generic cancel endpoint refuses a PAUSED_PARTS job — it would skip the visit fee', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: northOf(300, area) });
+    const { jobId } = await m.match(c, r);
+    await toInProgress(c, r, jobId);
+    await m.api
+      .post(r, `/v1/jobs/${jobId}/pause`, {
+        reason: 'Need a part',
+        expectedReturnAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      })
+      .expect(200);
+
+    const bypass = await m.api.post(c, `/v1/jobs/${jobId}/cancel`, {});
+    expect(bypass.status).toBe(409);
+    expect(bypass.body.error.details.code).toBe('USE_PAUSE_REJECT');
+    const job = await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    expect(job.status).toBe('PAUSED_PARTS');
+  });
+
   // NOTE: max_concurrent_paused_jobs_per_worker's check in PartsPauseService.requestPause() has
   // no test exercising the over-cap branch here. jobs_one_active_per_worker (a unique index from
   // D-087's foundation, covering PAUSED_PARTS too) already stops a Ranger from being matched to a
