@@ -1861,3 +1861,58 @@ its production refusal). `npx tsc --noEmit` clean (required regenerating the Pri
 after the schema change). Two new e2e tests added to `jobs.e2e-spec.ts` (expired code refused +
 successful regeneration; cannot regenerate once already verified) — hand-traced, not run, same
 sandbox constraint as every e2e addition this project.
+
+## D-092: Sub-phase I finished — settlement, reminders/Wait, concurrency cap, item handovers
+
+Closes out everything D-090 left deferred from Sub-phase I, except Rebook (see below).
+
+- **I2, the work-done settlement.** `PartsPauseService.proposeSettlement()`: the Ranger
+  proposes an amount for work already done before the pause, capped at the job's agreed labour
+  total (the accepted quote's `servicePaise` under the new flow, `agreedPricePaise` under the
+  pre-D-087 one) — never an unconstrained number either side can type in. `JobDto` gained a
+  top-level `pauseSettlementPaise` (kept visible after the job closes, unlike `pause`, which
+  only exists while PAUSED_PARTS — this is what the customer owes alongside `visitFeePaise`).
+  The master prompt's "approved by the customer or reviewed by admin" step is still not built:
+  `rejectExtension()` freezes whatever amount was last proposed with no separate approval
+  gate. A customer who disagrees with the number has the existing `DisputeService` to raise it
+  with — reusing that rather than building a second, parallel review queue for one more kind of
+  disagreement.
+- **I3, reminders and Wait/Cancel.** `SchedulerService.tick()` gained `flagOverduePauses()`: any
+  PAUSED_PARTS job past its `pausedReturnBy` gets the customer a push notification once (guarded
+  by the new `pausedOverdueNotifiedAt`, cleared on every fresh pause and by the new
+  `acknowledgeWait()` — the "Wait" choice). "Cancel" is D-090's existing `rejectExtension()`, now
+  carrying the I2 settlement too. **Rebook is not built.** Reconstructing a fresh request from
+  the original (address, category, description, media) to put a job back out for broadcast is a
+  distinctly riskier piece of work than the rest of this sub-phase — unconsumed media reuse,
+  re-validating an address that already passed validation once, re-triggering a broadcast — and
+  this sandbox has no Postgres to verify a clone like that doesn't violate something subtle.
+  Flagged rather than guessed at.
+- **I4, the concurrency cap — real code, but currently unreachable.** `requestPause()` now
+  checks `max_concurrent_paused_jobs_per_worker` (seeded since D-087, never read until now).
+  Tracing it against the existing `jobs_one_active_per_worker` unique index (also D-087) turned
+  up that a Ranger can never actually hold two active jobs at once — PAUSED_PARTS is one of the
+  statuses that index already blocks a second match against. The cap check is correct and left
+  in (defensive, and ready if that one-job-at-a-time rule is ever relaxed), but it is honestly
+  dead code today. Documented in the test file itself, not silently left as if it were covered.
+  Return-slot reservation and reliability-score penalties (the rest of I4) are still not built —
+  nothing yet defines what `WorkerProfile.reliabilityScore` should measure.
+- **I5, item handover records.** New `ItemHandover` model (photo, description, workshop,
+  expected return time, customer sign-off) plus `recordHandover()`/`signOffHandover()`. Surfaced
+  on `JobDto` as `itemHandovers[]`.
+
+Migration `20261012020000_phase20_pause_settlement_handover`: four new nullable columns on
+`jobs` (the overdue-notified flag and the three settlement fields) and the new
+`item_handovers` table. Purely additive.
+
+Routes added: `POST /v1/jobs/:id/pause/settlement`, `/pause/wait`, `/handovers`,
+`/handovers/:handoverId/sign-off`.
+
+API unit suite still green: 220/220 (no new unit-testable branches — this is all state-machine-
+and-config logic, same e2e-only pattern as the rest of `PartsPauseService`). `npx tsc --noEmit`
+clean (Prisma client regenerated for the new model/columns). `parts-pause.e2e-spec.ts` gained 3
+tests (settlement cap + survives into the closed job; overdue pause flagged once and
+acknowledgeable; handover recorded and signed off), hand-traced, not run — same no-Postgres
+sandbox constraint as every e2e addition this project. The I4 concurrency-cap test originally
+written for this round was removed once tracing showed the behaviour it targeted cannot occur
+under the existing one-job-per-worker constraint — left as a code comment instead of a
+misleading test.

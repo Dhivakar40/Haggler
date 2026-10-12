@@ -50,6 +50,7 @@ export class JobViewService {
         disputes: { orderBy: { createdAt: 'desc' } },
         events: { orderBy: { createdAt: 'asc' } },
         thread: true,
+        itemHandovers: { orderBy: { createdAt: 'asc' } },
       },
     });
     // D-080 (A4): a Ranger who has sent a quote on an "other" job can read it (their own
@@ -314,6 +315,16 @@ export class JobViewService {
               extensionCount: job.pausedExtensionCount,
             }
           : null,
+      pauseSettlementPaise: job.pauseSettlementPaise,
+      itemHandovers: job.itemHandovers.map((h) => ({
+        id: h.id,
+        photoId: h.photoId,
+        description: h.description,
+        workshop: h.workshop,
+        expectedReturnAt: h.expectedReturnAt.toISOString(),
+        customerSignedOffAt: h.customerSignedOffAt ? h.customerSignedOffAt.toISOString() : null,
+        createdAt: h.createdAt.toISOString(),
+      })),
       visitFeePaise: job.visitFeePaise,
       closeReason: job.closeReason,
       createdAt: job.createdAt.toISOString(),

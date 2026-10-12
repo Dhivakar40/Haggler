@@ -907,6 +907,16 @@ model Job {
   pausedReason           String?        @map("paused_reason")
   pausedExtensionCount   Int            @default(0) @map("paused_extension_count")
   pausedReturnBy         DateTime?      @map("paused_return_by") @db.Timestamptz(6)
+  /// D-092 (I3): set once the Scheduler has pushed the "Ranger hasn't returned" reminder for the
+  /// current pause, so it is sent once, not every tick; cleared on resume/the next pause/the
+  /// customer acknowledging "I'll keep waiting."
+  pausedOverdueNotifiedAt DateTime?      @map("paused_overdue_notified_at") @db.Timestamptz(6)
+  /// D-092 (I2): the Ranger's proposed amount for work already done before a pause, shown to the
+  /// customer when they reject the extension — in addition to the visit fee, not instead of it.
+  /// Null means no proposal was made (the pre-D-092 behaviour: visit fee only).
+  pauseSettlementPaise      Int?         @map("pause_settlement_paise")
+  pauseSettlementBillPhotoId String?     @map("pause_settlement_bill_photo_id") @db.Uuid
+  pauseSettlementProposedAt DateTime?    @map("pause_settlement_proposed_at") @db.Timestamptz(6)
   /// D-087: the frozen visit-fee amount once charged (quote rejection, or a paused-job closure
   /// that owes one) — null until charged. Distinct from platformFeePaise, which is the
   /// commission on a completed job's labour.
@@ -938,6 +948,7 @@ model Job {
   offers          Offer[]
   addOns          JobAddOn[]
   quotes          JobQuote[]
+  itemHandovers   ItemHandover[]
   payment         JobPayment?
   events          JobEvent[]
   photos          JobPhoto[]
@@ -1123,6 +1134,25 @@ model JobQuoteItem {
 
   @@index([quoteId])
   @@map("job_quote_items")
+}
+
+/// D-092 (Sub-phase I5): a record of a part the Ranger handed off-site for (e.g. taken to a
+/// workshop for repair) while a job is PAUSED_PARTS — photo, description, where it went, when
+/// it's expected back, and the customer's in-app sign-off that they agreed to the handover.
+model ItemHandover {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId              String    @map("job_id") @db.Uuid
+  photoId            String    @map("photo_id") @db.Uuid
+  description        String
+  workshop           String
+  expectedReturnAt   DateTime  @map("expected_return_at") @db.Timestamptz(6)
+  customerSignedOffAt DateTime? @map("customer_signed_off_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("item_handovers")
 }
 
 model JobEvent {

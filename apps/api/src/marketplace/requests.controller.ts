@@ -12,6 +12,8 @@ import {
   quoteInputSchema,
   raiseDisputeSchema,
   sendMessageSchema,
+  proposePauseSettlementSchema,
+  recordHandoverSchema,
   requestPauseSchema,
   submitLineItemQuoteSchema,
   triggerSosSchema,
@@ -455,6 +457,53 @@ export class JobsController {
   })
   pausePartsUnavailable(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
     return this.partsPause.partsUnavailable(u.id, jobId);
+  }
+
+  @Post(':id/pause/settlement')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({
+    summary: 'Ranger: propose an amount for work already done before the pause (Sub-phase I2)',
+  })
+  @ApiZodBody(proposePauseSettlementSchema)
+  proposePauseSettlement(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(proposePauseSettlementSchema))
+    body: z.infer<typeof proposePauseSettlementSchema>,
+  ) {
+    return this.partsPause.proposeSettlement(u.id, jobId, body);
+  }
+
+  @Post(':id/pause/wait')
+  @HttpCode(200)
+  @ApiOperation({ summary: "Customer: \"I'll keep waiting\" — acknowledges the overdue reminder" })
+  acknowledgeWait(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.partsPause.acknowledgeWait(u.id, jobId);
+  }
+
+  @Post(':id/handovers')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Ranger: record a part handed off-site while paused (Sub-phase I5)' })
+  @ApiZodBody(recordHandoverSchema)
+  recordHandover(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(recordHandoverSchema)) body: z.infer<typeof recordHandoverSchema>,
+  ) {
+    return this.partsPause.recordHandover(u.id, jobId, body);
+  }
+
+  @Post(':id/handovers/:handoverId/sign-off')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Customer: sign off that they agreed to a handover' })
+  signOffHandover(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Param('handoverId', id) handoverId: string,
+  ) {
+    return this.partsPause.signOffHandover(u.id, jobId, handoverId);
   }
 
   @Get(':id/track')

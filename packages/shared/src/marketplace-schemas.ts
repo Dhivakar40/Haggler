@@ -174,6 +174,33 @@ export const requestPauseSchema = z.object({
 });
 export type RequestPauseInput = z.infer<typeof requestPauseSchema>;
 
+/** D-092 (Sub-phase I2): the Ranger's proposed amount for work already done before a pause,
+ * shown to the customer alongside the visit fee if they reject the extension. */
+export const proposePauseSettlementSchema = z.object({
+  amountPaise: paiseSchema,
+  billPhotoId: z.string().uuid().optional(),
+});
+export type ProposePauseSettlementInput = z.infer<typeof proposePauseSettlementSchema>;
+
+/** D-092 (Sub-phase I5): a record of a part handed off-site (e.g. to a workshop) while paused. */
+export const recordHandoverSchema = z.object({
+  photoId: z.string().uuid(),
+  description: z.string().trim().min(3).max(300),
+  workshop: z.string().trim().min(2).max(120),
+  expectedReturnAt: z.string().datetime(),
+});
+export type RecordHandoverInput = z.infer<typeof recordHandoverSchema>;
+export const itemHandoverDtoSchema = z.object({
+  id: uuid,
+  photoId: uuid,
+  description: z.string(),
+  workshop: z.string(),
+  expectedReturnAt: z.string(),
+  customerSignedOffAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type ItemHandoverDto = z.infer<typeof itemHandoverDtoSchema>;
+
 /** D-080 (A5): a Ranger's mid-job proposal of a catalogue add-on; name/price are snapshotted at
  * proposal time. */
 export const jobAddOnDtoSchema = z.object({
@@ -309,6 +336,12 @@ export const jobDtoSchema = z.object({
       extensionCount: z.number().int(),
     })
     .nullable(),
+  /** D-092 (I2): the Ranger's proposed work-done-so-far amount, kept visible after the job
+   * closes too (unlike `pause`, which only exists while status is PAUSED_PARTS), since this is
+   * what the customer owes alongside visitFeePaise once an extension is rejected. */
+  pauseSettlementPaise: paiseSchema.nullable(),
+  /** D-092 (I5): parts handed off-site while paused, oldest first. */
+  itemHandovers: z.array(itemHandoverDtoSchema),
   /** D-087: the frozen visit-fee amount, once charged (quote rejection or a paused-job close). */
   visitFeePaise: paiseSchema.nullable(),
   closeReason: z.string().nullable(),

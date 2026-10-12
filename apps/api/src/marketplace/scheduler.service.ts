@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { EnvService } from '../config/env.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketplaceConfig } from './marketplace-config.service';
 import { JobTransitions } from './job-transitions.service';
@@ -26,6 +27,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly cfg: MarketplaceConfig,
     private readonly transitions: JobTransitions,
     private readonly env: EnvService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit(): void {
@@ -38,20 +40,49 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  async tick(now = new Date()): Promise<{ waves: number; offers: number; cancelled: number }> {
-    if (this.running) return { waves: 0, offers: 0, cancelled: 0 };
+  async tick(
+    now = new Date(),
+  ): Promise<{ waves: number; offers: number; cancelled: number; overduePauses: number }> {
+    if (this.running) return { waves: 0, offers: 0, cancelled: 0, overduePauses: 0 };
     this.running = true;
     try {
       const waves = await this.matching.processDue(now);
       const offers = await this.offers.sweep(now);
       const cancelled = await this.cancelStaleTimedOut(now);
-      return { waves, offers, cancelled };
+      const overduePauses = await this.flagOverduePauses(now);
+      return { waves, offers, cancelled, overduePauses };
     } catch (err) {
       this.logger.error(`scheduler tick failed: ${String(err)}`);
-      return { waves: 0, offers: 0, cancelled: 0 };
+      return { waves: 0, offers: 0, cancelled: 0, overduePauses: 0 };
     } finally {
       this.running = false;
     }
+  }
+
+  /** D-092 (Sub-phase I3): a Ranger who hasn't returned by their promised time gets the
+   * customer a "Wait or Cancel?" nudge, once per overdue pause — `pausedOverdueNotifiedAt`
+   * (cleared on every new pause and on `acknowledgeWait`) is what makes this idempotent. */
+  private async flagOverduePauses(now: Date): Promise<number> {
+    const overdue = await this.prisma.job.findMany({
+      where: {
+        status: 'PAUSED_PARTS',
+        pausedReturnBy: { lt: now },
+        pausedOverdueNotifiedAt: null,
+      },
+      select: { id: true, customerId: true },
+    });
+    for (const job of overdue) {
+      await this.prisma.job.update({
+        where: { id: job.id },
+        data: { pausedOverdueNotifiedAt: now },
+      });
+      await this.notifications.notify(job.customerId, {
+        title: 'Your Ranger is running late',
+        body: 'They have not returned with the part yet. Wait a bit longer, or cancel the job.',
+        data: { jobId: job.id, type: 'PAUSE_OVERDUE' },
+      });
+    }
+    return overdue.length;
   }
 
   /** A timed-out broadcast nobody re-broadcast or cancelled is closed after a while. */
