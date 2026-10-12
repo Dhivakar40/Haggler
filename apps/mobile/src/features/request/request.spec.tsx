@@ -654,6 +654,16 @@ describe('RequestStatusScreen', () => {
       workerFirstName: 'Ravi',
       amountPaise: 50000,
       status: 'PENDING' as const,
+      servicePaise: null,
+      partsPaise: 0,
+      extraPaise: 0,
+      extraDescription: null,
+      feePaise: null,
+      totalPaise: null,
+      aboveCeiling: false,
+      aboveCeilingReason: null,
+      flaggedForReview: false,
+      items: [],
       createdAt: iso(-1000),
     };
     let accepted = false;
