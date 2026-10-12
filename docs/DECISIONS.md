@@ -1916,3 +1916,86 @@ sandbox constraint as every e2e addition this project. The I4 concurrency-cap te
 written for this round was removed once tracing showed the behaviour it targeted cannot occur
 under the existing one-job-per-worker constraint — left as a code comment instead of a
 misleading test.
+
+## D-093: Sub-phase J1/J3/J6 — incident reports, automatic hold, duplicate-identity flag
+
+J2 (selfie capture) and J7 (women-Ranger preference, lone-customer rules) were already built in
+earlier phases; this round covers J1's hold mechanism, J3's report/review flow, and J6's
+duplicate-account hash. J4 (mid-job "are you okay?" check-in) and J5 (trusted-contacts/live-
+location beyond the existing SOS share) are not built this round — flagged below.
+
+**A new account state, built carefully to not be a ban.** `UserStatus` gained
+`TEMPORARY_HOLD` — automatic, time-boxed, pending admin review (`JwtAuthGuard` already refuses
+anything but `ACTIVE`, so this alone blocks sign-in, same as `SUSPENDED` always has). The new
+`AccountHoldService.holdForSafety()` is the one place anything sets it, and it only moves
+`ACTIVE -> TEMPORARY_HOLD` — never re-triggers on an account already held, suspended, or
+deleted. `User.holdStartedAt` records when, so the admin queue can flag a report that has
+passed the master prompt's 24h review SLA (`overdueForReview` in
+`AdminIncidentsService.queue()`'s response) — there is no auto-release; silently restoring
+access to an unresolved safety report would defeat the point. Only `AdminIncidentsService.
+resolve()`'s two outcomes — CLEAR (back to ACTIVE) or SUSPEND (permanent, the one and only
+automatic-never path) — ever change it again. The same SUSPEND path also finally wires up
+`CUSTOMER_SUSPENDED`, a `DisputeResolution` value added back in D-087 that nothing ever acted
+on until now (`AdminDisputesService.resolve()`).
+
+**J1/J3: incident reports and what triggers an automatic hold.** New `IncidentService.report()`
+(customer or Ranger, any of the 6 existing `IncidentReportReason` values). THEFT and HARASSMENT
+hold the accused party immediately; the other four reasons (DAMAGE, DISCRIMINATION, ACCIDENT,
+OTHER) queue the report OPEN with no automatic hold — credible enough to review, not credible
+enough on the reason alone to restrict someone's account before anyone has looked at it.
+**SOS also holds the other party now** (`SosService.trigger()`), per the master prompt's
+explicit "theft, harassment, or SOS" grouping — documented honestly in that file's own comment
+as a real trade-off: an SOS is not always about the other person (a medical emergency, an
+accident unrelated to them), so this errs toward protecting the reporter at the cost of
+sometimes holding an account over an unrelated emergency, with the 24h review SLA as the thing
+that keeps that error short-lived rather than a claim that every SOS is credible.
+
+`AdminIncidentsService` (new, mirrors `AdminSosService`'s/`AdminDisputesService`'s existing
+queue/resolve pattern): `queue()` (open/reviewing, oldest first), `evidence()` (the job's
+photos via presigned URLs, event log, and chat — **every call audit-logged**, via the existing
+`AuditService`, before anything is read back), `resolve()` (CLEAR/SUSPEND, as above).
+
+**J6: a duplicate-identity flag, not a block.** `AdminKycService.decide()` now computes
+`WorkerProfile.identityHash` (a keyed HMAC, same `hmacHex`/`JWT_ACCESS_SECRET` pattern as every
+other hashed code in this codebase — no new secret) from Aadhaar-last-4 + date of birth, the
+only identity fields this codebase keeps (full Aadhaar was never collected, see `maskPhone`'s
+own D-018-era comment). That field has been `@unique` since D-087's foundation but nothing
+wrote to it until now. A collision — another `WorkerProfile` with the same hash — does **not**
+block approval: last-4 + DOB is weak enough that two different real people coinciding is
+plausible, and this project has no stronger identifier to hash instead. A collision is caught
+(the unique constraint violation), audit-logged as `kyc.duplicate_identity_flagged` with the
+matched profile's id, and approval proceeds with the hash left unwritten for the second profile
+— flagged for a human to actually compare, never silently either blocked or ignored.
+**The UIDAI/DPDP question this raises, as asked**: whether this project may ever hash the full
+Aadhaar number (not just the last 4 it already masks everywhere else) specifically to make this
+duplicate check strong enough to act on by itself, is a legal question this document is flagging
+rather than deciding — see the FINAL REPORT for where this needs a lawyer's sign-off before any
+change to what's collected.
+
+**Not built this round:**
+- *J4, the mid-job "are you okay?" check-in with escalation.* Needs a scheduled check timed to
+  job progress plus an escalation path (who gets notified, what counts as "no response") that
+  the master prompt doesn't specify precisely enough to build without guessing at the UX.
+- *J5, trusted-contacts/live-location beyond the existing SOS-triggered share.* The existing
+  `TrustedShare` link (client-composed, shared manually) already covers "share my location with
+  someone I trust" for a live trip; an always-on background location feed to trusted contacts
+  independent of SOS is a meaningfully bigger feature (battery, continuous-tracking consent,
+  a new background-location permission on the mobile side) than this round's budget allowed.
+- *K (fraud controls) and the mobile UI for any of Sub-phase J/I* are entirely separate, still
+  to come.
+
+Migration `20261012030000_phase21_temporary_hold`: one new enum value (`TEMPORARY_HOLD`) and
+one new nullable column (`users.hold_started_at`). Additive only.
+
+Routes added: `POST /v1/jobs/:id/incident-reports`; admin `GET /v1/admin/incident-reports`,
+`GET /v1/admin/incident-reports/:id/evidence`, `POST /v1/admin/incident-reports/:id/resolve`.
+
+API unit suite still green: 220/220 (`sos.service.spec.ts` gained 2 assertions on the existing
+tests rather than new `it()` blocks, since the hold call fits naturally into what those tests
+already set up; no new unit-testable branches elsewhere — this is state-machine/config logic in
+the same e2e-only pattern as the rest of this phase). `npx tsc --noEmit` clean (Prisma client
+regenerated for the new enum value/column). New `incident-reports.e2e-spec.ts` (4 tests: THEFT
+auto-holds and blocks the held account's own next request; OTHER does not auto-hold; admin
+CLEAR vs. SUSPEND end to end including the evidence-view call; SOS holds the other party, not
+the one who raised it) — hand-traced against the real implementation, not run, same no-Postgres
+sandbox constraint as every e2e addition this project.

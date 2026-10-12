@@ -309,6 +309,15 @@ export const adminResolveDisputeSchema = z.object({
 });
 export type AdminResolveDisputeInput = z.infer<typeof adminResolveDisputeSchema>;
 
+/** D-093 (Sub-phase J3): an admin's decision on an incident report. CLEAR releases any
+ * TEMPORARY_HOLD the report caused; SUSPEND is the one and only path to a permanent SUSPENDED
+ * status (never set automatically — see IncidentReport/UserStatus comments). */
+export const adminResolveIncidentSchema = z.object({
+  resolution: z.enum(['CLEAR', 'SUSPEND']),
+  note: z.string().trim().min(5).max(1000),
+});
+export type AdminResolveIncidentInput = z.infer<typeof adminResolveIncidentSchema>;
+
 /** D-087: set one Phase Commerce/Flow-Final tunable (FeeService's own keys only — see
  * admin-config.service.ts). The value's shape depends on the key; server-side type-checked
  * against that key's default. */

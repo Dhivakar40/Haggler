@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MapsModule } from '../adapters/maps/maps.provider';
 import { StorageModule } from '../adapters/storage/storage.service';
+import { AccountHoldService } from './account-hold.service';
 import { AccountLifecycleService } from './account-lifecycle.service';
 import { AddressesService } from './addresses.service';
 import { EmergencyContactsService } from './emergency-contacts.service';
@@ -10,7 +11,13 @@ import { UsersService } from './users.service';
 @Module({
   imports: [MapsModule, StorageModule],
   controllers: [UsersController],
-  providers: [UsersService, AddressesService, EmergencyContactsService, AccountLifecycleService],
-  exports: [UsersService, AccountLifecycleService],
+  providers: [
+    UsersService,
+    AddressesService,
+    EmergencyContactsService,
+    AccountLifecycleService,
+    AccountHoldService,
+  ],
+  exports: [UsersService, AccountLifecycleService, AccountHoldService],
 })
 export class UsersModule {}

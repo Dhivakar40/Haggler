@@ -14,6 +14,7 @@ import {
   sendMessageSchema,
   proposePauseSettlementSchema,
   recordHandoverSchema,
+  reportIncidentSchema,
   requestPauseSchema,
   submitLineItemQuoteSchema,
   triggerSosSchema,
@@ -24,6 +25,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { WalletService } from '../wallet/wallet.service';
 import { ChatService } from './chat.service';
 import { DisputeService } from './dispute.service';
+import { IncidentService } from './incident.service';
 import { JobAddOnsService } from './job-addons.service';
 import { JobViewService } from './job-view.service';
 import { LifecycleService } from './lifecycle.service';
@@ -146,6 +148,7 @@ export class JobsController {
     private readonly chat: ChatService,
     private readonly wallet: WalletService,
     private readonly sos: SosService,
+    private readonly incidents: IncidentService,
     private readonly disputes: DisputeService,
     private readonly quoteBuilder: QuoteBuilderService,
     private readonly partsPause: PartsPauseService,
@@ -367,6 +370,21 @@ export class JobsController {
     @Body(new ZodPipe(triggerSosSchema)) body: z.infer<typeof triggerSosSchema>,
   ) {
     return this.sos.trigger(u.id, jobId, body);
+  }
+
+  @Post(':id/incident-reports')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Report a safety incident on this job (theft/harassment auto-hold the accused account pending admin review — Sub-phase J3)',
+  })
+  @ApiZodBody(reportIncidentSchema)
+  reportIncident(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(reportIncidentSchema)) body: z.infer<typeof reportIncidentSchema>,
+  ) {
+    return this.incidents.report(u.id, jobId, body);
   }
 
   @Post(':id/dispute')

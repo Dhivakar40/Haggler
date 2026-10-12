@@ -94,6 +94,14 @@ export class AdminDisputesService {
         });
         await this.reputation.recomputeWorkerLeague(tx, job.workerId);
       }
+      // D-093: the one place CUSTOMER_SUSPENDED (added D-087, never wired until now) actually
+      // acts — a deliberate admin decision, not automatic like IncidentReport's TEMPORARY_HOLD.
+      if (body.resolution === 'CUSTOMER_SUSPENDED') {
+        await tx.user.update({
+          where: { id: job.customerId },
+          data: { status: 'SUSPENDED', holdStartedAt: null },
+        });
+      }
       await this.audit.record(
         {
           actorType: 'ADMIN',

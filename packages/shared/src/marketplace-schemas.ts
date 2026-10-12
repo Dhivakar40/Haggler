@@ -245,6 +245,34 @@ export type DisputeDto = z.infer<typeof disputeDtoSchema>;
 export const raiseDisputeSchema = z.object({ reason: z.string().min(10).max(1000) });
 export type RaiseDisputeInput = z.infer<typeof raiseDisputeSchema>;
 
+/** D-093 (Sub-phase J3): a formal safety incident report on a job, distinct from a Dispute
+ * (money/quality) or an SOS alert (in-the-moment emergency). */
+export const INCIDENT_REPORT_REASONS = [
+  'THEFT',
+  'DAMAGE',
+  'HARASSMENT',
+  'DISCRIMINATION',
+  'ACCIDENT',
+  'OTHER',
+] as const;
+export const incidentReportReasonSchema = z.enum(INCIDENT_REPORT_REASONS);
+export const reportIncidentSchema = z.object({
+  reason: incidentReportReasonSchema,
+  description: z.string().trim().min(10).max(1000),
+});
+export type ReportIncidentInput = z.infer<typeof reportIncidentSchema>;
+export const incidentReportDtoSchema = z.object({
+  id: uuid,
+  jobId: uuid,
+  reporterRole: z.enum(['CUSTOMER', 'WORKER']),
+  reason: incidentReportReasonSchema,
+  description: z.string(),
+  status: z.enum(['OPEN', 'REVIEWING', 'RESOLVED']),
+  createdAt: z.string(),
+  resolvedAt: z.string().nullable(),
+});
+export type IncidentReportDto = z.infer<typeof incidentReportDtoSchema>;
+
 /** Sub-phase F: the job's own status history, for a timeline view. Not the full audit record
  * (no actor/meta) — just enough to draw "what happened, when" on the job screen. */
 export const jobEventDtoSchema = z.object({

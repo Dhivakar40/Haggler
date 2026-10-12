@@ -10,6 +10,7 @@ import {
   adminPriceListAddOnUpsertSchema,
   adminPriceListEntryUpsertSchema,
   adminResolveDisputeSchema,
+  adminResolveIncidentSchema,
   adminSetConfigSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
@@ -25,6 +26,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { AdminAuthGuard, AdminAuthService } from './admin-auth';
 import { AdminConfigService } from './admin-config.service';
 import { AdminDisputesService } from './admin-disputes.service';
+import { AdminIncidentsService } from './admin-incidents.service';
 import { AdminEmployerService } from './admin-employer.service';
 import { AdminKycService } from './admin-kyc.service';
 import { AdminListingsService } from './admin-listings.service';
@@ -60,6 +62,7 @@ export class AdminController {
     private readonly priceList: AdminPriceListService,
     private readonly sos: AdminSosService,
     private readonly disputes: AdminDisputesService,
+    private readonly incidents: AdminIncidentsService,
     private readonly otherJobs: AdminOtherJobsService,
     private readonly config: AdminConfigService,
   ) {}
@@ -241,6 +244,49 @@ export class AdminController {
     @CurrentAdmin() admin: AuthAdmin,
   ) {
     return this.disputes.resolve(id, body, admin);
+  }
+
+  @Get('incident-reports')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Open/reviewing incident reports, oldest first (Sub-phase J3)' })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  incidentsQueue(@Query(new ZodPipe(listQuery)) q: z.infer<typeof listQuery>) {
+    return this.incidents.queue(q.cursor, q.limit);
+  }
+
+  @Get('incident-reports/:id/evidence')
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "The job's photos/event log/chat as evidence for a report. Each view is audit-logged.",
+  })
+  incidentEvidence(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @CurrentAdmin() admin: AuthAdmin,
+    @ClientIp() ip?: string,
+  ) {
+    return this.incidents.evidence(id, admin, ip);
+  }
+
+  @Post('incident-reports/:id/resolve')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard)
+  @AdminRoles('DISPUTE_AGENT')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Resolve a report: CLEAR the hold, or SUSPEND the account (the only permanent path)',
+  })
+  @ApiZodBody(adminResolveIncidentSchema)
+  resolveIncident(
+    @Param('id', new ZodPipe(z.string().uuid())) id: string,
+    @Body(new ZodPipe(adminResolveIncidentSchema)) body: z.infer<typeof adminResolveIncidentSchema>,
+    @CurrentAdmin() admin: AuthAdmin,
+  ) {
+    return this.incidents.resolve(id, body, admin);
   }
 
   @Get('other-jobs')

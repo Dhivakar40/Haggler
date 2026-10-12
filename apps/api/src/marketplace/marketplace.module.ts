@@ -2,9 +2,11 @@ import { Global, Module } from '@nestjs/common';
 import { StorageModule } from '../adapters/storage/storage.service';
 import { CatalogModule } from '../catalog/catalog.module';
 import { RealtimeService } from '../realtime/realtime.service';
+import { UsersModule } from '../users/users.module';
 import { ChatService } from './chat.service';
 import { DisputeService } from './dispute.service';
 import { FeeService } from './fee.service';
+import { IncidentService } from './incident.service';
 import { JobAddOnsService } from './job-addons.service';
 import { JobTransitions } from './job-transitions.service';
 import { JobViewService } from './job-view.service';
@@ -27,7 +29,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
 
 @Global()
 @Module({
-  imports: [StorageModule, CatalogModule],
+  imports: [StorageModule, CatalogModule, UsersModule],
   controllers: [
     RequestsController,
     JobsController,
@@ -57,6 +59,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     DisputeService,
     QuoteBuilderService,
     PartsPauseService,
+    IncidentService,
   ],
   exports: [
     RealtimeService,

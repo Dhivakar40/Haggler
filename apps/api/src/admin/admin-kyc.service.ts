@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma as PrismaNS } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { decodeCursor, ERROR_CODES, type AdminKycDecision, toPage } from '@haggler/shared';
 import { StorageService } from '../adapters/storage/storage.service';
 import { AuditService } from '../audit/audit.service';
-import { EncryptionService } from '../common/crypto';
+import { EncryptionService, hmacHex } from '../common/crypto';
 import { conflict, notFound, unprocessable } from '../common/http-errors';
+import { EnvService } from '../config/env.service';
 import { isAdult, isValidPastDate } from '../kyc/kyc.rules';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthAdmin } from '../common/decorators';
@@ -19,7 +21,18 @@ export class AdminKycService {
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly encryption: EncryptionService,
+    private readonly env: EnvService,
   ) {}
+
+  /** D-093 (Sub-phase J6): a keyed hash of an identifier the app already collects (Aadhaar last
+   * 4 + date of birth — the only identity fields this codebase keeps, see D-018/maskPhone above)
+   * — never the raw identifier itself. Weak on its own (last-4 + DOB can coincide for two real
+   * people), which is exactly why a collision only flags for admin review rather than blocking
+   * approval; see decide() below and docs/DECISIONS.md D-093 for the UIDAI/DPDP question this
+   * raises about whether a stronger identifier may ever be hashed this way. */
+  private identityHash(aadhaarLast4: string, dateOfBirth: string): string {
+    return hmacHex(this.env.env.JWT_ACCESS_SECRET, `identity:${aadhaarLast4}:${dateOfBirth}`);
+  }
 
   /** Oldest first: people who have waited longest are reviewed first. */
   async queue(
@@ -149,6 +162,7 @@ export class AdminKycService {
       throw conflict('This verification is not waiting for review.', { status: check.status });
 
     let encrypted: { aadhaarLast4Enc: string; dateOfBirthEnc: string } | undefined;
+    let identityHash: string | undefined;
     if (body.decision === 'APPROVE') {
       if (check.tier === 1) {
         if (!body.aadhaarLast4 || !body.dateOfBirth) {
@@ -184,6 +198,7 @@ export class AdminKycService {
           aadhaarLast4Enc: this.encryption.encrypt(body.aadhaarLast4),
           dateOfBirthEnc: this.encryption.encrypt(body.dateOfBirth),
         };
+        identityHash = this.identityHash(body.aadhaarLast4, body.dateOfBirth);
       } else if (check.tier === 2) {
         if (body.referenceCall?.outcome !== 'VERIFIED') {
           throw unprocessable(
@@ -233,10 +248,45 @@ export class AdminKycService {
 
       if (body.decision === 'APPROVE') {
         const wp = await tx.workerProfile.findUniqueOrThrow({ where: { userId: check.userId } });
-        await tx.workerProfile.update({
-          where: { id: wp.id },
-          data: { kycTier: Math.max(wp.kycTier, check.tier), ...(encrypted ?? {}) },
-        });
+        if (identityHash) {
+          try {
+            await tx.workerProfile.update({
+              where: { id: wp.id },
+              data: { kycTier: Math.max(wp.kycTier, check.tier), ...encrypted, identityHash },
+            });
+          } catch (err) {
+            // D-093 (J6): the unique constraint caught a collision — someone else's profile
+            // already has this identity hash. Flagged for admin review, not blocked: last-4 +
+            // DOB is weak enough that a coincidence is plausible, and this codebase has no
+            // stronger identifier to hash instead (see the identityHash() comment above).
+            if (err instanceof PrismaNS.PrismaClientKnownRequestError && err.code === 'P2002') {
+              const existing = await tx.workerProfile.findUnique({ where: { identityHash } });
+              await this.audit.record(
+                {
+                  actorType: 'ADMIN',
+                  actorId: admin.id,
+                  action: 'kyc.duplicate_identity_flagged',
+                  entityType: 'worker_profile',
+                  entityId: wp.id,
+                  after: { matchedWorkerProfileId: existing?.id ?? null },
+                  ip,
+                },
+                tx,
+              );
+              await tx.workerProfile.update({
+                where: { id: wp.id },
+                data: { kycTier: Math.max(wp.kycTier, check.tier), ...encrypted },
+              });
+            } else {
+              throw err;
+            }
+          }
+        } else {
+          await tx.workerProfile.update({
+            where: { id: wp.id },
+            data: { kycTier: Math.max(wp.kycTier, check.tier), ...(encrypted ?? {}) },
+          });
+        }
       }
 
       await this.audit.record(

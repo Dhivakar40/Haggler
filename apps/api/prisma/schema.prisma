@@ -29,6 +29,12 @@ enum RoleType {
 
 enum UserStatus {
   ACTIVE
+  /// D-093 (Sub-phase J): automatic, time-boxed, pending admin review (see IncidentReport) — the
+  /// account cannot sign in (JwtAuthGuard only allows ACTIVE) but this is explicitly NOT a ban.
+  /// An admin either clears it back to ACTIVE or escalates to SUSPENDED; nothing auto-lifts it,
+  /// since silently restoring access to an unresolved safety report defeats the point.
+  TEMPORARY_HOLD
+  /// A permanent restriction — an admin decision only (D-093: never set automatically).
   SUSPENDED
   DELETION_PENDING
   DELETED
@@ -93,6 +99,10 @@ model User {
   preferredLanguage    String     @default("en") @map("preferred_language")
   languages            String[]   @default(["en"])
   status               UserStatus @default(ACTIVE)
+  /// D-093 (Sub-phase J): when a TEMPORARY_HOLD started — read by the admin queue to flag a
+  /// report that has passed the 24h review SLA, and cleared whenever status changes away from
+  /// TEMPORARY_HOLD (either back to ACTIVE or escalated to SUSPENDED).
+  holdStartedAt        DateTime?  @map("hold_started_at") @db.Timestamptz(6)
   deletionRequestedAt  DateTime?  @map("deletion_requested_at") @db.Timestamptz(6)
   deletionScheduledFor DateTime?  @map("deletion_scheduled_for") @db.Timestamptz(6)
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
