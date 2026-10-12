@@ -75,6 +75,31 @@ pnpm test:integration     # needs Docker running; spins up throw-away containers
 pnpm openapi              # regenerates docs/openapi.json and docs/API.md
 ```
 
+### Running the e2e suite (D-087 through D-096) — this sandbox cannot run it
+
+Every e2e test added across Phase Flow-Final was written by hand-tracing against the real
+implementation, never executed, because this sandbox has no Docker/Postgres. `pnpm test:integration`
+above is the exact command — on a machine with Docker Desktop running, from the repo root:
+
+```bash
+pnpm --filter @haggler/api test:integration
+```
+
+or, to run just the new files from this phase instead of the whole suite (faster feedback first):
+
+```bash
+cd apps/api
+npx jest --config jest.integration.config.js test/quote-flow.e2e-spec.ts
+npx jest --config jest.integration.config.js test/parts-pause.e2e-spec.ts
+npx jest --config jest.integration.config.js test/incident-reports.e2e-spec.ts
+npx jest --config jest.integration.config.js test/admin-fraud.e2e-spec.ts
+npx jest --config jest.integration.config.js test/jobs.e2e-spec.ts       # K3 fixes live here too
+npx jest --config jest.integration.config.js test/wallet.e2e-spec.ts     # H1-H3 cash/completion-code
+```
+
+Do not trust a claim that these passed unless you actually see the run's own PASS/FAIL output —
+every DECISIONS.md entry in this phase says "hand-traced, not run" for exactly this reason.
+
 ## Reset the local database
 
 ```bash
@@ -431,3 +456,48 @@ the EAS dashboard (`expo.dev` → your project → Builds).
 - [ ] Get a real legal/CA read on GST, payout tax, and the aggregator welfare fee
       (`gst_on_fee_bps`/`payout_tax_bps`/`aggregator_welfare_fee_bps`, all seeded 0, D-081) — these
       are placeholders explicitly pending that review, not a considered "no tax" decision.
+- [ ] (D-091/D-093) Decide whether a stronger identity hash (full Aadhaar, not just the last 4
+      already masked everywhere in this app) may ever be collected to make J6's duplicate-account
+      check strong enough to act on by itself — legal/DPDP/UIDAI question, not a technical one.
+- [ ] (D-093) `quote_flow_enabled`/`completion_otp_enabled` now default to `true` (D-096) — before
+      a real launch, confirm the completion-code auto-release job described below actually exists
+      (it does not yet — see that section) so a withheld code can't strand a Ranger's payout
+      indefinitely.
+- [ ] (D-089/D-092/D-093) H4 (visit-fee collection), H5 (invoicing), H6 (idempotency/
+      reconciliation for the new flow), H7 (token-to-promo-credit conversion), I3's Rebook choice,
+      I4's return-slot calendar/reliability-score, J4 (mid-job check-in), J5 (always-on trusted-
+      contact location) are all still unbuilt — see docs/DECISIONS.md D-089/D-092/D-093 for why
+      each was scoped out this round.
+
+## Going live with real SMS (D-091/D-093)
+
+Today `SMS_MODE=sandbox` (default) — the OTP never leaves the machine, printed to the console in
+development only. To actually send SMS in production:
+
+1. **Register on MSG91** (or swap `Msg91SmsProvider` for whatever provider you pick —
+   `apps/api/src/adapters/sms/sms.provider.ts`'s `SmsProvider` interface is the contract any
+   provider needs to satisfy).
+2. **DLT registration** (mandatory in India for transactional/OTP SMS): register your entity and
+   an OTP template with your telecom operator's DLT platform, then with MSG91. This is a multi-day
+   manual process done on MSG91's dashboard, not something this codebase can do for you.
+3. **Get a sender ID and an approved template ID** from that registration.
+4. **Set the env vars**: `SMS_MODE=live`, `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID` (the approved
+   template's id) — `env.ts` refuses to boot in production with `SMS_MODE=sandbox`, and refuses
+   `SMS_MODE=live` without both MSG91 vars set.
+5. **Remove `TESTING_MODE` and `TESTING_MODE_PHONE_ALLOWLIST`** from the production environment —
+   `env.ts` already refuses to boot in production if either is set, so this is a safety net, not
+   the only gate; don't rely on the refusal and leave them set anyway.
+6. **Test against a real phone** before trusting it — `Msg91SmsProvider` has never been exercised
+   against the real MSG91 API in this project (no account existed to test against).
+
+**The completion-code auto-release job described in the master prompt does not exist yet.**
+`Job.paidPendingCodeAt` is set the moment an ONLINE payment succeeds (D-087/D-089), and
+`FeeService`'s `completion_otp_auto_release_hours` (default 24) is seeded and admin-editable, but
+nothing ever reads either of them — there is no scheduled job that actually releases a Ranger's
+earnings if the customer never shares/enters the completion code. Building it safely means either
+duplicating `LifecycleService.confirm()`'s settlement transaction for a SYSTEM actor or refactoring
+that transaction to be actor-agnostic — the exact same class of risk D-089 already declined to
+take for the Ranger-enters-the-code question, and now more consequential since
+`completion_otp_enabled` defaults to `true` as of D-096. **Build and test this before relying on
+completion-code confirmation in production** — until then, a customer who simply never enters the
+code leaves the Ranger unpaid with no automatic recovery.
