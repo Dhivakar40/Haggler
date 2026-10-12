@@ -1765,3 +1765,53 @@ above). `npx tsc --noEmit` clean. Two new e2e tests (`wallet.e2e-spec.ts`): H1's
 round-trip, and H2/H3's full completion-code flow (missing code, wrong code, correct code,
 Ranger-never-sees-it) — both hand-traced, not run, same sandbox constraint as every e2e addition
 this project.
+
+## D-090: Sub-phase I (core only) — pausing a job to fetch a part
+
+Built the pause/resume/settle mechanism only — the state transitions D-087's foundation already
+reserved (`IN_PROGRESS -> PAUSED_PARTS -> IN_PROGRESS`, `PAUSED_PARTS -> CANCELLED`) now have a
+real service behind them, in a new `PartsPauseService`:
+
+- **I1 core.** `requestPause(workerId, jobId, {reason, expectedReturnAt})`: IN_PROGRESS ->
+  PAUSED_PARTS, refusing once `Job.pausedExtensionCount` reaches the already-seeded
+  `max_parts_extensions` config value (default 2) with `EXTENSION_CAP_REACHED`. `resume()`:
+  PAUSED_PARTS -> IN_PROGRESS, the Ranger is back with the part.
+- **I2, simplified.** `rejectExtension(customerId, jobId)`: the customer declines to keep
+  waiting. PAUSED_PARTS -> CANCELLED, freezing a visit fee the same way G's quote-rejection does
+  (`travelledMeters` + `fee.visitFeePaise`), `closeReason: 'EXTENSION_REJECTED'`. The master
+  prompt's fuller I2 also wants a settled amount for *work already done* before the pause,
+  "proposed by the Ranger, approved by the customer or reviewed by admin" — that three-way
+  negotiation is not built; only the visit fee is charged. Flagged, not silently dropped.
+- **I6, simplified.** `partsUnavailable(workerId, jobId)`: the Ranger reports the part genuinely
+  cannot be sourced. PAUSED_PARTS -> CANCELLED, `closeReason: 'PARTS_UNAVAILABLE'`, visit fee
+  still charged (the visit and diagnosis happened regardless). The master prompt's "unused money
+  refunded" doesn't apply in this architecture as built: payment is only collected once, at
+  completion (step 8 of the flow) — nothing has been paid yet by the time a job can be paused,
+  so there is nothing to refund. "No reliability penalty" is trivially true today because nothing
+  anywhere reads or writes `WorkerProfile.reliabilityScore` yet (see I4/K below).
+
+**Not built this round, each a distinct piece of scope, not an oversight:**
+- *I3's reminders and the end-of-window Wait/Cancel/Rebook choice.* `pausedReturnBy` is recorded
+  but nothing reads it yet — no scheduled reminder, no forced choice when the promised return
+  time passes. `resume()`/`rejectExtension()` can be called at any time regardless of
+  `pausedReturnBy`.
+- *I4, entirely.* No cap on concurrent paused jobs per Ranger, no calendar return-slot
+  reservation, no reliability-score penalty on a missed slot, no reassignment. These need a
+  product decision on what "reliability score" actually measures before there's anything
+  sensible to write to that column.
+- *I5, entirely.* No item-handover record (photos/description/workshop/expected-return,
+  customer sign-off) — would need its own small model and photo-upload flow; scoped out to keep
+  this round bounded to the state-machine mechanism itself.
+
+Routes added to `JobsController`: `POST /v1/jobs/:id/pause`, `/pause/resume`, `/pause/reject`,
+`/pause/unavailable`. `JobDto` gained `pause` (reason/returnBy/extensionCount, non-null only
+while PAUSED_PARTS), `visitFeePaise`, and `closeReason` — all three existed on the Job row from
+D-087's foundation but were never surfaced to a viewer until now.
+
+API unit suite still green: 218/218 (this is state-machine-and-config logic inside
+`PartsPauseService`, same e2e-only pattern as `QuoteBuilderService` — no new unit-testable
+branches beyond what `job-state.spec.ts` already covers for these transitions). `npx tsc
+--noEmit` clean. New `parts-pause.e2e-spec.ts` (5 tests: pause-then-resume, the extension cap,
+customer-rejects-and-owes-a-visit-fee, Ranger-closes-as-parts-unavailable, cannot-pause-a-job-
+not-in-progress) — hand-traced against the real implementation, not run, same no-Postgres
+sandbox constraint as every e2e addition this project.

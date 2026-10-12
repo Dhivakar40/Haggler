@@ -167,6 +167,13 @@ export const submitLineItemQuoteSchema = z.object({
 });
 export type SubmitLineItemQuoteInput = z.infer<typeof submitLineItemQuoteSchema>;
 
+/** D-087 (Sub-phase I): the Ranger asking to pause an in-progress job to fetch parts. */
+export const requestPauseSchema = z.object({
+  reason: z.string().trim().min(3).max(300),
+  expectedReturnAt: z.string().datetime(),
+});
+export type RequestPauseInput = z.infer<typeof requestPauseSchema>;
+
 /** D-080 (A5): a Ranger's mid-job proposal of a catalogue add-on; name/price are snapshotted at
  * proposal time. */
 export const jobAddOnDtoSchema = z.object({
@@ -294,6 +301,17 @@ export const jobDtoSchema = z.object({
     .nullable(),
   media: z.array(z.object({ id: uuid, kind: z.enum(['PHOTO', 'VOICE']), url: z.string() })),
   threadId: uuid.nullable(),
+  /** D-087 (Sub-phase I): set while status is PAUSED_PARTS. */
+  pause: z
+    .object({
+      reason: z.string().nullable(),
+      returnBy: z.string().nullable(),
+      extensionCount: z.number().int(),
+    })
+    .nullable(),
+  /** D-087: the frozen visit-fee amount, once charged (quote rejection or a paused-job close). */
+  visitFeePaise: paiseSchema.nullable(),
+  closeReason: z.string().nullable(),
   createdAt: z.string(),
 });
 export type JobDto = z.infer<typeof jobDtoSchema>;

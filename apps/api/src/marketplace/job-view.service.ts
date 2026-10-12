@@ -306,6 +306,16 @@ export class JobViewService {
           : null,
       media: showAddress ? media : [],
       threadId: job.thread?.id ?? null,
+      pause:
+        job.status === 'PAUSED_PARTS'
+          ? {
+              reason: job.pausedReason,
+              returnBy: job.pausedReturnBy ? job.pausedReturnBy.toISOString() : null,
+              extensionCount: job.pausedExtensionCount,
+            }
+          : null,
+      visitFeePaise: job.visitFeePaise,
+      closeReason: job.closeReason,
       createdAt: job.createdAt.toISOString(),
     };
   }

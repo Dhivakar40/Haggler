@@ -12,6 +12,7 @@ import {
   quoteInputSchema,
   raiseDisputeSchema,
   sendMessageSchema,
+  requestPauseSchema,
   submitLineItemQuoteSchema,
   triggerSosSchema,
 } from '@haggler/shared';
@@ -25,6 +26,7 @@ import { JobAddOnsService } from './job-addons.service';
 import { JobViewService } from './job-view.service';
 import { LifecycleService } from './lifecycle.service';
 import { MatchingService } from './matching.service';
+import { PartsPauseService } from './parts-pause.service';
 import { QuoteBuilderService } from './quote-builder.service';
 import { QuotesService } from './quotes.service';
 import { RequestsService } from './requests.service';
@@ -144,6 +146,7 @@ export class JobsController {
     private readonly sos: SosService,
     private readonly disputes: DisputeService,
     private readonly quoteBuilder: QuoteBuilderService,
+    private readonly partsPause: PartsPauseService,
   ) {}
 
   @Get()
@@ -402,6 +405,48 @@ export class JobsController {
   })
   rejectLineItemQuote(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
     return this.quoteBuilder.reject(u.id, jobId);
+  }
+
+  @Post(':id/pause')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({
+    summary: 'Ranger: pause to go fetch a part (Sub-phase I) — moves IN_PROGRESS to PAUSED_PARTS',
+  })
+  @ApiZodBody(requestPauseSchema)
+  requestPause(
+    @CurrentUser() u: AuthUser,
+    @Param('id', id) jobId: string,
+    @Body(new ZodPipe(requestPauseSchema)) body: z.infer<typeof requestPauseSchema>,
+  ) {
+    return this.partsPause.requestPause(u.id, jobId, body);
+  }
+
+  @Post(':id/pause/resume')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Ranger: back with the part — moves PAUSED_PARTS to IN_PROGRESS' })
+  resumePause(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.partsPause.resume(u.id, jobId);
+  }
+
+  @Post(':id/pause/reject')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Customer: decline to keep waiting — moves PAUSED_PARTS to CANCELLED and freezes the visit fee owed',
+  })
+  rejectPause(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.partsPause.rejectExtension(u.id, jobId);
+  }
+
+  @Post(':id/pause/unavailable')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({
+    summary: 'Ranger: the part cannot be sourced — moves PAUSED_PARTS to CANCELLED, visit fee still charged',
+  })
+  pausePartsUnavailable(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.partsPause.partsUnavailable(u.id, jobId);
   }
 
   @Get(':id/track')

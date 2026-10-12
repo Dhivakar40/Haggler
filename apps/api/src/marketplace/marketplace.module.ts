@@ -12,6 +12,7 @@ import { LifecycleService } from './lifecycle.service';
 import { MarketplaceConfig } from './marketplace-config.service';
 import { MatchingService } from './matching.service';
 import { OffersService } from './offers.service';
+import { PartsPauseService } from './parts-pause.service';
 import { PresenceService } from './presence.service';
 import { PublicTrackController, PublicTrackPageController } from './public-track.controller';
 import { QuoteBuilderService } from './quote-builder.service';
@@ -55,6 +56,7 @@ import { WorkerPresenceController } from './worker-presence.controller';
     SosService,
     DisputeService,
     QuoteBuilderService,
+    PartsPauseService,
   ],
   exports: [
     RealtimeService,
