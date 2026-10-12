@@ -105,12 +105,11 @@ describe('D-087 (Sub-phase G): the quote-first flow, behind quote_flow_enabled',
     await m.uploadJobPhoto(r, jobId, 'BEFORE').then((x) => expect(x.status).toBe(200));
     await m.api.post(r, `/v1/jobs/${jobId}/start`).expect(200);
     await m.uploadJobPhoto(r, jobId, 'AFTER').then((x) => expect(x.status).toBe(200));
-    await m.api
-      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH', cashCollectedPaise: 58_200 })
-      .expect(200);
-    const confirmed = await m.api
-      .post(c, `/v1/jobs/${jobId}/confirm`, { cashConfirmedPaise: 58_200 })
-      .expect(200);
+    // Cash is disabled by default (H1) — the new flow's own payment is in-app.
+    await m.api.post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'UPI' }).expect(200);
+    const order = await m.api.post(c, `/v1/jobs/${jobId}/payment/online`).expect(201);
+    await m.api.post(c, `/v1/wallet/orders/${order.body.orderId}/sandbox-pay`).expect(200);
+    const confirmed = await m.api.post(c, `/v1/jobs/${jobId}/confirm`).expect(200);
     expect(confirmed.body.status).toBe('CONFIRMED_BY_CUSTOMER');
   });
 

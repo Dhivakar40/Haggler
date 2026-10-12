@@ -184,5 +184,11 @@ export type JobPaymentDto = z.infer<typeof jobPaymentSchema>;
 export const confirmJobSchema = z.object({
   /** Required only when the job's payment mode is CASH: what the customer actually paid. */
   cashConfirmedPaise: paiseSchema.optional(),
+  /** D-087 (H2/H3): required only when completion_otp_enabled and the job's ONLINE payment has
+   * already succeeded (JobDto.completionCode shows it to the customer at that point). */
+  completionCode: z
+    .string()
+    .regex(/^\d{4}$/)
+    .optional(),
 });
 export type ConfirmJobInput = z.infer<typeof confirmJobSchema>;

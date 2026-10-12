@@ -66,6 +66,49 @@ export class Market {
     this.fee.refresh();
   }
 
+  /** D-087 (H1): cash defaults to disabled, same reasoning as quote_flow_enabled — most tests
+   * here are not ABOUT cash, they just use it (via runToCompletion/confirmJob below) as a
+   * convenient default payment method, same as before D-087. Rather than touch every call
+   * site, `runToCompletion` enables it for the duration automatically; a test specifically
+   * about the disabled behaviour calls `disableCash()` itself afterward. */
+  async enableCash(): Promise<void> {
+    await this.prisma.systemConfig.upsert({
+      where: { key: 'cash_enabled' },
+      update: { value: true },
+      create: { key: 'cash_enabled', value: true },
+    });
+    this.fee.refresh();
+  }
+
+  async disableCash(): Promise<void> {
+    await this.prisma.systemConfig.upsert({
+      where: { key: 'cash_enabled' },
+      update: { value: false },
+      create: { key: 'cash_enabled', value: false },
+    });
+    this.fee.refresh();
+  }
+
+  /** D-087 (H2/H3): requires the completion code to confirm an ONLINE job. Same default-false,
+   * flip-for-the-one-test-that-needs-it pattern as quote flow/cash above. */
+  async enableCompletionOtp(): Promise<void> {
+    await this.prisma.systemConfig.upsert({
+      where: { key: 'completion_otp_enabled' },
+      update: { value: true },
+      create: { key: 'completion_otp_enabled', value: true },
+    });
+    this.fee.refresh();
+  }
+
+  async disableCompletionOtp(): Promise<void> {
+    await this.prisma.systemConfig.upsert({
+      where: { key: 'completion_otp_enabled' },
+      update: { value: false },
+      create: { key: 'completion_otp_enabled', value: false },
+    });
+    this.fee.refresh();
+  }
+
   async customer(
     over: { at?: { lat: number; lng: number }; located?: boolean; tokens?: number } = {},
   ): Promise<Customer> {
@@ -250,6 +293,7 @@ export class Market {
    * recording exactly the agreed price + fee as collected (Phase Commerce B3) — a test that wants
    * a mismatch drives complete()/confirm() directly instead of through this helper. */
   async runToCompletion(c: Customer, r: Ranger, jobId: string, cashCollectedPaise?: number) {
+    await this.enableCash(); // D-087: disabled by default; this helper's whole point is CASH.
     await this.api.post(r, `/v1/jobs/${jobId}/en-route`).then((x) => expectOk(x, 'en-route'));
     await this.ping(r, CENTER); // the customer's address is at CENTER
     await this.api.post(r, `/v1/jobs/${jobId}/arrive`).then((x) => expectOk(x, 'arrive'));

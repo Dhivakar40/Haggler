@@ -361,6 +361,88 @@ describe('Phase Commerce B2/B3/B4: the platform fee and pay-after payments', () 
   });
 });
 
+describe('D-087 (Sub-phase H2/H3): the completion code, once an ONLINE payment succeeds', () => {
+  it('requires the code to confirm, locks after too many wrong guesses, and is shown only to the customer', async () => {
+    await m.enableCompletionOtp();
+    try {
+      const area = northOf(180);
+      const c = await m.customer({ at: area });
+      const r = await m.ranger({ at: area });
+      const { jobId } = await m.match(c, r);
+      await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+      await m.ping(r, area);
+      await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(200);
+      const arriveCode = (await m.api.get(c, `/v1/jobs/${jobId}`)).body.arrivalCode as string;
+      await m.api.post(r, `/v1/jobs/${jobId}/verify-arrival`, { code: arriveCode }).expect(200);
+      await m.uploadJobPhoto(r, jobId, 'BEFORE');
+      await m.api.post(r, `/v1/jobs/${jobId}/start`).expect(200);
+      await m.uploadJobPhoto(r, jobId, 'AFTER');
+      await m.api.post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'UPI' }).expect(200);
+
+      // No completion code exists until payment actually succeeds.
+      expect((await m.api.get(c, `/v1/jobs/${jobId}`)).body.completionCode).toBeNull();
+      const order = await m.api.post(c, `/v1/jobs/${jobId}/payment/online`).expect(201);
+      await m.api.post(c, `/v1/wallet/orders/${order.body.orderId}/sandbox-pay`).expect(200);
+
+      const completionCode = (await m.api.get(c, `/v1/jobs/${jobId}`)).body
+        .completionCode as string;
+      expect(completionCode).toMatch(/^\d{4}$/);
+      // The Ranger's own view never sees it (same privacy rule as the arrival code).
+      expect((await m.api.get(r, `/v1/jobs/${jobId}`)).body.completionCode).toBeNull();
+
+      const noCode = await m.api.post(c, `/v1/jobs/${jobId}/confirm`, {}).expect(422);
+      expect(noCode.body.error.details.code).toBe('COMPLETION_CODE_REQUIRED');
+      const wrong = completionCode === '0000' ? '1111' : '0000';
+      const bad = await m.api
+        .post(c, `/v1/jobs/${jobId}/confirm`, { completionCode: wrong })
+        .expect(422);
+      expect(bad.body.error.details.code).toBe('WRONG_CODE');
+
+      const confirmed = await m.api
+        .post(c, `/v1/jobs/${jobId}/confirm`, { completionCode })
+        .expect(200);
+      expect(confirmed.body.status).toBe('CONFIRMED_BY_CUSTOMER');
+      expect(
+        (await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } })).completionVerifiedAt,
+      ).not.toBeNull();
+    } finally {
+      await m.disableCompletionOtp();
+    }
+  });
+});
+
+describe('D-087 (Sub-phase H1): cash is disabled by default', () => {
+  it('refuses CASH at complete() while cash_enabled is false, and allows it once turned on', async () => {
+    await m.disableCash();
+    const area = northOf(160);
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: area });
+    const { jobId } = await m.match(c, r);
+    await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+    await m.ping(r, area);
+    await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(200);
+    const code = (await m.api.get(c, `/v1/jobs/${jobId}`)).body.arrivalCode as string;
+    await m.api.post(r, `/v1/jobs/${jobId}/verify-arrival`, { code }).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'BEFORE');
+    await m.api.post(r, `/v1/jobs/${jobId}/start`).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'AFTER');
+
+    const blocked = await m.api
+      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH', cashCollectedPaise: 34_900 })
+      .expect(422);
+    expect(blocked.body.error.details.code).toBe('CASH_DISABLED');
+    // The job stays IN_PROGRESS — the failed attempt did not move it.
+    expect((await m.prisma.job.findUniqueOrThrow({ where: { id: jobId } })).status).toBe(
+      'IN_PROGRESS',
+    );
+
+    await m.enableCash();
+    await m.api
+      .post(r, `/v1/jobs/${jobId}/complete`, { paymentMethod: 'CASH', cashCollectedPaise: 34_900 })
+      .expect(200);
+  });
+});
+
 describe('worker wallet: summary, settle dues, withdraw (Phase Commerce B4/B6)', () => {
   it('a fresh Ranger has zero balance and zero dues', async () => {
     const r = await m.ranger();

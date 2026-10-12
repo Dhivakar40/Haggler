@@ -15,6 +15,7 @@ import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReputationService } from '../reputation/reputation.service';
 import { WorkerWalletService } from '../wallet/worker-wallet.service';
+import { FeeService } from './fee.service';
 import { haversineMeters, travelledMeters } from './geo';
 import { CUSTOMER_CANCELLABLE } from './job-state';
 import { JobTransitions } from './job-transitions.service';
@@ -40,6 +41,7 @@ export class LifecycleService {
     private readonly env: EnvService,
     private readonly reputation: ReputationService,
     private readonly workerWallet: WorkerWalletService,
+    private readonly fee: FeeService,
   ) {}
 
   private async workerJob(workerId: string, jobId: string) {
@@ -119,6 +121,10 @@ export class LifecycleService {
 
   private hashCode(jobId: string, code: string): string {
     return hmacHex(this.env.env.JWT_ACCESS_SECRET, `arrival:${jobId}:${code}`);
+  }
+
+  private hashCompletionCode(jobId: string, code: string): string {
+    return hmacHex(this.env.env.JWT_ACCESS_SECRET, `completion:${jobId}:${code}`);
   }
 
   async verifyArrival(workerId: string, jobId: string, code: string) {
@@ -316,6 +322,15 @@ export class LifecycleService {
         actorUserId: workerId,
         data: { completedByWorkerAt: new Date(), paymentMethod },
       });
+      // D-087 (Sub-phase H1): cash is disabled by default — in-app payment only. Checked only
+      // once the transition itself has already succeeded, so a job in the wrong state still
+      // fails with the state-machine error it always did, not this one. The CASH code path
+      // below and the dues ledger it feeds stay exactly as they are, just unreachable for a
+      // new job while the flag is off.
+      if (paymentMethod === 'CASH' && !(await this.fee.get()).cash_enabled)
+        throw unprocessable('Cash payment is not available — pay in the app instead.', {
+          code: 'CASH_DISABLED',
+        });
       await tx.jobPayment.upsert({
         where: { jobId },
         update: {},
@@ -335,7 +350,12 @@ export class LifecycleService {
   /** Customer confirms the work. This is the moment a token is consumed (Phase 3 hooks in here)
    * and jobsCompleted/bookingsCompleted increment, which can move a Ranger's league (D-076) and
    * the client's own league (D-077) even without a new review. */
-  async confirm(customerId: string, jobId: string, cashConfirmedPaise?: number) {
+  async confirm(
+    customerId: string,
+    jobId: string,
+    cashConfirmedPaise?: number,
+    completionCode?: string,
+  ) {
     const job = await this.customerJob(customerId, jobId);
     // Phase Commerce B3: the payment is settled in the same transaction as confirming, since
     // confirming IS what releases money (a Ranger's online earnings, or the fee they now owe on
@@ -349,6 +369,36 @@ export class LifecycleService {
       throw conflict('Pay for this job online before confirming.', {
         code: 'PAYMENT_NOT_CAPTURED',
       });
+    // D-087 (H2/H3): once payment has succeeded, completion_otp_enabled requires the
+    // server-generated code the customer was shown (JobViewService's completionCode) before
+    // confirm() is allowed to proceed at all.
+    if (payment?.mode === 'ONLINE' && payment.paymentOrderId && job.completionCodeHash) {
+      const otpFlag = await this.prisma.systemConfig.findUnique({
+        where: { key: 'completion_otp_enabled' },
+      });
+      if (otpFlag?.value === true) {
+        const cfg = await this.cfg.get();
+        if (!completionCode)
+          throw unprocessable('Enter the completion code to confirm.', {
+            code: 'COMPLETION_CODE_REQUIRED',
+          });
+        if (job.completionCodeTries >= cfg.arrival_code_max_tries) {
+          throw new CodedException(
+            HttpStatus.TOO_MANY_REQUESTS,
+            ERROR_CODES.RATE_LIMITED,
+            'Too many wrong codes. Contact support.',
+            { code: 'CODE_LOCKED' },
+          );
+        }
+        if (!safeEqualHex(job.completionCodeHash, this.hashCompletionCode(jobId, completionCode))) {
+          await this.prisma.job.update({
+            where: { id: jobId },
+            data: { completionCodeTries: { increment: 1 } },
+          });
+          throw unprocessable('That code is not right.', { code: 'WRONG_CODE' });
+        }
+      }
+    }
     // The league recompute (and any bonus it pays) doesn't change what this call returns, so it
     // runs after the transaction below commits rather than inside it — see
     // reputation.service.ts's scheduleConfirmLeagueRecompute (D-078). The counter increments it
@@ -362,7 +412,10 @@ export class LifecycleService {
         to: 'CONFIRMED_BY_CUSTOMER',
         actor: 'CUSTOMER',
         actorUserId: customerId,
-        data: { confirmedAt: new Date() },
+        data: {
+          confirmedAt: new Date(),
+          ...(completionCode ? { completionVerifiedAt: new Date() } : {}),
+        },
       });
       if (payment && job.workerId) {
         if (payment.mode === 'CASH') {

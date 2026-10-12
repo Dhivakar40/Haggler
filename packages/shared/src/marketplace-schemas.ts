@@ -278,6 +278,7 @@ export const jobDtoSchema = z.object({
   review: z.object({ canReview: z.boolean(), submitted: z.boolean() }),
   /** The 4-digit code the customer reads out; shown to the CUSTOMER only, while the Ranger is there. */
   arrivalCode: z.string().nullable(),
+  completionCode: z.string().nullable(),
   arrivalVerified: z.boolean(),
   hasBeforePhoto: z.boolean(),
   hasAfterPhoto: z.boolean(),

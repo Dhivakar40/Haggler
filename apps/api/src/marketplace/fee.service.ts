@@ -51,6 +51,15 @@ export interface FeeSettings {
    * and has its own e2e coverage (run with the flag explicitly on); switching the default is a
    * one-line config change for whoever can actually run the full suite against it. */
   quote_flow_enabled: boolean;
+  /** D-087 (H2/H3): once an ONLINE payment succeeds, require the server-generated completion
+   * code (Job.completionCodeHash) to confirm, instead of a bare confirm(). Same risk-managed
+   * default-false reasoning as quote_flow_enabled. DEVIATION from the master prompt's literal
+   * wording: the prompt says the Ranger enters the code the customer shares; this round has the
+   * CUSTOMER enter it instead (confirm() already belongs to the customer's auth path — giving
+   * the Ranger an equivalent entry point means either duplicating confirm()'s settlement logic
+   * in a second method or a riskier refactor of a transaction this project has never had a unit
+   * test for). Flagged honestly in DECISIONS.md D-089, not silently done differently. */
+  completion_otp_enabled: boolean;
 }
 
 export const DEFAULT_FEE_SETTINGS: FeeSettings = {
@@ -71,6 +80,7 @@ export const DEFAULT_FEE_SETTINGS: FeeSettings = {
   max_parts_extensions: 2,
   max_concurrent_paused_jobs_per_worker: 2,
   quote_flow_enabled: false,
+  completion_otp_enabled: false,
 };
 
 /** Every key FeeService recognizes — the admin config endpoint's allowlist (admin-config.service.ts). */

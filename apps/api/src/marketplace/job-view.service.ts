@@ -151,6 +151,15 @@ export class JobViewService {
       job.arrivalCodeEnc
         ? this.encryption.decrypt(job.arrivalCodeEnc)
         : null;
+    // D-087 (H2/H3): shown to the customer once payment has succeeded and the code hasn't been
+    // used yet — they enter it themselves to confirm (see completion_otp_enabled's own comment).
+    const completionCode =
+      role === 'CUSTOMER' &&
+      job.status === 'COMPLETED_BY_WORKER' &&
+      !job.completionVerifiedAt &&
+      job.completionCodeEnc
+        ? this.encryption.decrypt(job.completionCodeEnc)
+        : null;
 
     return {
       id: job.id,
@@ -250,6 +259,7 @@ export class JobViewService {
         proposedAt: a.proposedAt.toISOString(),
       })),
       arrivalCode,
+      completionCode,
       arrivalVerified: !!job.arrivalVerifiedAt,
       hasBeforePhoto: job.photos.some((p) => p.kind === 'BEFORE'),
       hasAfterPhoto: job.photos.some((p) => p.kind === 'AFTER'),

@@ -306,7 +306,7 @@ export class JobsController {
     @Param('id', id) jobId: string,
     @Body(new ZodPipe(confirmJobSchema)) body: z.infer<typeof confirmJobSchema>,
   ) {
-    return this.life.confirm(u.id, jobId, body.cashConfirmedPaise);
+    return this.life.confirm(u.id, jobId, body.cashConfirmedPaise, body.completionCode);
   }
 
   @Post(':id/payment/online')

@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ListingKind, Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { decodeCursor, toPage } from '@haggler/shared';
 import { PAYMENTS_PROVIDER, type PaymentsProvider } from '../adapters/payments/payments.provider';
+import { EncryptionService, hmacHex } from '../common/crypto';
 import { conflict, forbidden, notFound, unprocessable } from '../common/http-errors';
 import { EnvService } from '../config/env.service';
 import { MonetizationConfig } from '../monetization/monetization-config.service';
@@ -43,6 +44,7 @@ export class WalletService {
     private readonly plus: PlusService,
     private readonly monetization: MonetizationConfig,
     private readonly workerWallet: WorkerWalletService,
+    private readonly encryption: EncryptionService,
   ) {}
 
   // ---- reads ---------------------------------------------------------------------------------
@@ -383,6 +385,26 @@ export class WalletService {
       where: { jobId: order.targetJobId },
       data: { paymentOrderId: order.id },
     });
+    // D-087 (H2/H3): once payment succeeds, generate the completion code — same hash/encrypt
+    // pattern as the arrival code — so confirm() can require it (gated by
+    // completion_otp_enabled; see that flag's own comment for why the customer enters it rather
+    // than the Ranger, a deliberate deviation from the master prompt's literal wording).
+    const flag = await tx.systemConfig.findUnique({ where: { key: 'completion_otp_enabled' } });
+    if (flag?.value === true) {
+      const code = String(randomInt(0, 10_000)).padStart(4, '0');
+      await tx.job.updateMany({
+        where: { id: order.targetJobId },
+        data: {
+          completionCodeHash: hmacHex(
+            this.env.env.JWT_ACCESS_SECRET,
+            `completion:${order.targetJobId}:${code}`,
+          ),
+          completionCodeEnc: this.encryption.encrypt(code),
+          completionCodeTries: 0,
+          paidPendingCodeAt: new Date(),
+        },
+      });
+    }
   }
 
   private async creditTokenTopup(

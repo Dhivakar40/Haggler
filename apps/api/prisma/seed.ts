@@ -123,6 +123,12 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
       "D-087: true routes a new match through the quote-first flow instead of D-080's auto-agree-at-the-listed-price. Defaults to false until someone with a real Postgres can run the full e2e suite with it on and confirm nothing regresses — see fee.service.ts's own comment.",
   },
   {
+    key: 'completion_otp_enabled',
+    value: false,
+    description:
+      "D-087 (H2/H3): true requires the server-generated completion code to confirm an ONLINE job instead of a bare confirm(). Defaults to false, same reasoning as quote_flow_enabled.",
+  },
+  {
     key: 'gst_on_fee_bps',
     value: 0,
     description: 'GST on the platform fee, in basis points. 0 until finance/counsel confirms the rate (B11)',
