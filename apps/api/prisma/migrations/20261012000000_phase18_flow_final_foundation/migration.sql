@@ -1,10 +1,8 @@
 -- Phase Flow-Final (D-087): the schema foundation for Sub-phases G-J. Additive — new enum
--- values, new columns, new tables. The one non-pure-additive piece is the two paragraphs at the
--- bottom: the double-booking unique index and the matched-needs-worker CHECK constraint are
--- dropped and recreated with the new statuses added to their lists. No data is touched by
--- either — both are metadata-level constraints, not columns or rows — but noted here because
--- "additive only" is usually read as "never DROP anything", and this is the one place this
--- migration drops something (a constraint definition, not data).
+-- values, new columns, new tables. The constraint rebuild that uses the new enum values (the
+-- double-booking unique index and the matched-needs-worker CHECK, both dropped and recreated
+-- with the new statuses added) is a separate migration, 20261012000500_phase18b_active_job_
+-- constraints — see the note near the bottom of this file for why.
 
 -- AlterEnum (additive: new values on existing enums). Each ADD VALUE is its own statement and
 -- none of them is referenced elsewhere in this same migration — the same "don't use a new enum
@@ -124,17 +122,10 @@ CREATE UNIQUE INDEX "worker_profiles_identity_hash_key" ON "worker_profiles"("id
 -- to it yet; see admin-token-migration.service.ts.
 ALTER TABLE "customer_wallets" ADD COLUMN "promo_credit_paise" INTEGER NOT NULL DEFAULT 0;
 
--- Constraint updates: add the new active-ish statuses to the double-booking guard and the
--- matched-needs-worker check (see the file header for why this is safe).
-DROP INDEX "jobs_one_active_per_worker";
-CREATE UNIQUE INDEX "jobs_one_active_per_worker"
-  ON "jobs" ("worker_id")
-  WHERE "worker_id" IS NOT NULL
-    AND "status" IN ('MATCHED', 'NEGOTIATING', 'AGREED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'QUOTING', 'PAUSED_PARTS');
-
-ALTER TABLE "jobs" DROP CONSTRAINT "jobs_matched_needs_worker";
-ALTER TABLE "jobs" ADD CONSTRAINT "jobs_matched_needs_worker" CHECK (
-  "status" NOT IN ('MATCHED', 'NEGOTIATING', 'AGREED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS',
-                   'COMPLETED_BY_WORKER', 'CONFIRMED_BY_CUSTOMER', 'QUOTING', 'PAUSED_PARTS', 'QUOTE_REJECTED')
-  OR "worker_id" IS NOT NULL
-);
+-- The constraint rebuild that uses QUOTING/PAUSED_PARTS/QUOTE_REJECTED moved to its own
+-- migration (20261012000500_phase18b_active_job_constraints) — Postgres refuses to use a new
+-- enum value in the same transaction that added it ("unsafe use of new value ... New enum
+-- values must be committed before they can be used"), and `prisma migrate deploy` runs each
+-- migration file in one transaction. Found when this migration was first actually run against a
+-- real Postgres database (production), not caught earlier because this sandbox has never had
+-- Postgres to run migrations against at all.
