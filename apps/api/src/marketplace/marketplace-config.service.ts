@@ -20,6 +20,11 @@ export interface MarketplaceSettings {
   negotiation_idle_minutes: number;
   location_min_interval_seconds: number;
   arrival_code_max_tries: number;
+  /** D-091: the start/completion codes shown in-app, not the login OTP (auth.constants.ts's
+   * OTP_LENGTH/OTP_TTL_SECONDS) — a separate, shorter-lived pair since they're read aloud
+   * between two people standing together, not typed off a phone's own SMS inbox. */
+  job_code_length: number;
+  job_code_ttl_seconds: number;
 }
 
 export const DEFAULT_SETTINGS: MarketplaceSettings = {
@@ -40,6 +45,8 @@ export const DEFAULT_SETTINGS: MarketplaceSettings = {
   negotiation_idle_minutes: 30,
   location_min_interval_seconds: 4,
   arrival_code_max_tries: 5,
+  job_code_length: 6,
+  job_code_ttl_seconds: 900, // 15 minutes — longer than the login OTP since the Ranger may be mid-conversation
 };
 
 /** Reads settings from system_config, with safe defaults, cached briefly. */

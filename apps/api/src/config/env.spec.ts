@@ -106,4 +106,34 @@ describe('parseEnv', () => {
       /TESTING_MODE=true is not allowed when NODE_ENV=production/,
     );
   });
+
+  it('TESTING_MODE_PHONE_ALLOWLIST defaults to empty and parses a comma-separated list (D-091)', () => {
+    expect(parseEnv(baseEnv).TESTING_MODE_PHONE_ALLOWLIST).toEqual([]);
+    expect(
+      parseEnv({ ...baseEnv, TESTING_MODE_PHONE_ALLOWLIST: '+919800000001, +919800000002,' })
+        .TESTING_MODE_PHONE_ALLOWLIST,
+    ).toEqual(['+919800000001', '+919800000002']);
+  });
+
+  it('refuses a non-empty TESTING_MODE_PHONE_ALLOWLIST in production (D-091)', () => {
+    const prodEnv = {
+      ...baseEnv,
+      NODE_ENV: 'production',
+      SMS_MODE: 'live',
+      MSG91_AUTH_KEY: 'k',
+      MSG91_TEMPLATE_ID: 't',
+      PUSH_MODE: 'live',
+      FCM_SERVICE_ACCOUNT_JSON: '{}',
+      MAPS_MODE: 'osm',
+      NOMINATIM_USER_AGENT: 'haggler/1.0',
+      PAYMENTS_MODE: 'test',
+      RAZORPAY_KEY_ID: 'rzp_test_abc',
+      RAZORPAY_KEY_SECRET: 's',
+      RAZORPAY_WEBHOOK_SECRET: 'w',
+    };
+    expect(() => parseEnv(prodEnv)).not.toThrow();
+    expect(() =>
+      parseEnv({ ...prodEnv, TESTING_MODE_PHONE_ALLOWLIST: '+919800000001' }),
+    ).toThrow(/TESTING_MODE_PHONE_ALLOWLIST must be empty when NODE_ENV=production/);
+  });
 });

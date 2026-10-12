@@ -391,7 +391,16 @@ export class WalletService {
     // than the Ranger, a deliberate deviation from the master prompt's literal wording).
     const flag = await tx.systemConfig.findUnique({ where: { key: 'completion_otp_enabled' } });
     if (flag?.value === true) {
-      const code = String(randomInt(0, 10_000)).padStart(4, '0');
+      // D-091: same job_code_length/job_code_ttl_seconds MarketplaceConfig keys LifecycleService
+      // reads for the arrival code — read inline here too (same reasoning as the flag above: a
+      // cross-module MarketplaceConfig import for two numbers isn't worth the coupling).
+      const [lenCfg, ttlCfg] = await Promise.all([
+        tx.systemConfig.findUnique({ where: { key: 'job_code_length' } }),
+        tx.systemConfig.findUnique({ where: { key: 'job_code_ttl_seconds' } }),
+      ]);
+      const length = typeof lenCfg?.value === 'number' ? lenCfg.value : 6;
+      const ttlSeconds = typeof ttlCfg?.value === 'number' ? ttlCfg.value : 900;
+      const code = String(randomInt(0, 10 ** length)).padStart(length, '0');
       await tx.job.updateMany({
         where: { id: order.targetJobId },
         data: {
@@ -401,6 +410,7 @@ export class WalletService {
           ),
           completionCodeEnc: this.encryption.encrypt(code),
           completionCodeTries: 0,
+          completionCodeExpiresAt: new Date(Date.now() + ttlSeconds * 1000),
           paidPendingCodeAt: new Date(),
         },
       });

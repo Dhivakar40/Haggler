@@ -247,6 +247,14 @@ export class JobsController {
     return this.life.verifyArrival(u.id, jobId, body.code);
   }
 
+  @Post(':id/arrive/regenerate')
+  @HttpCode(200)
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Ranger: the start code expired or the customer lost it — send a new one' })
+  regenerateArrivalCode(@CurrentUser() u: AuthUser, @Param('id', id) jobId: string) {
+    return this.life.regenerateArrivalCode(u.id, jobId);
+  }
+
   @Post(':id/photos')
   @HttpCode(200)
   @Roles('WORKER')

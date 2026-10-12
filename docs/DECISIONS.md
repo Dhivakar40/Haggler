@@ -1815,3 +1815,49 @@ branches beyond what `job-state.spec.ts` already covers for these transitions). 
 customer-rejects-and-owes-a-visit-fee, Ranger-closes-as-parts-unavailable, cannot-pause-a-job-
 not-in-progress) — hand-traced against the real implementation, not run, same no-Postgres
 sandbox constraint as every e2e addition this project.
+
+## D-091: real OTP hardening — login allowlist, job-code expiry and regeneration
+
+The login OTP flow (`OtpService`, D-074) turned out to already be exactly what the master
+prompt's "real OTP flow" item asked for: server-generated random codes, hashed (never logged in
+plaintext outside the sandbox adapter's dev-only console line), 5-minute TTL, single-use,
+resend cooldown, per-phone/per-IP rate limits, a lockout after repeated wrong guesses, and a
+provider interface (`SmsProvider`) with a sandbox adapter and an MSG91 HTTP adapter gated behind
+`SMS_MODE=live` + its own required env vars, making no real calls until those are set. Nothing
+in that part needed building — only two gaps, both closed this round:
+
+**1. TESTING_MODE narrowed to an allowlist.** The fixed `123456` code used to match *any* phone
+number once `TESTING_MODE=true` — a real auth bypass, even though refused in production. It now
+also requires the phone to be on a new `TESTING_MODE_PHONE_ALLOWLIST` env var (comma-separated
+E.164 numbers); an empty allowlist means the fixed code matches nothing. Production refuses to
+boot if the allowlist is non-empty, the same way it already refused `TESTING_MODE=true` itself
+— so neither can be left set on a live build by accident. Email OTP fallback (also requested) is
+not built: there is no existing email-sending adapter in this codebase to hang it off, and
+bolting one on just for a rarely-used fallback felt like scope creep against everything else
+still open this round. Flagged, not forgotten.
+
+**2. Job start/completion codes gained expiry and a regenerate path.** These are a different
+thing from the login OTP — read aloud between two people standing together, not typed off an
+SMS — and until now never expired at all and were fixed at 4 digits. They are now 6 digits
+(`MarketplaceConfig.job_code_length`) with a 15-minute TTL (`job_code_ttl_seconds`, deliberately
+longer than the login OTP's 5 minutes — the Ranger may be mid-conversation with the customer),
+both admin-tunable the same way every other `MarketplaceConfig`/`FeeService` value is.
+`LifecycleService.regenerateArrivalCode()` (new `POST /v1/jobs/:id/arrive/regenerate`) lets the
+Ranger send a fresh one if the old one expired or the customer lost it; refused once the code
+has already been verified. The completion code (generated in `WalletService.creditJobPayment`
+once an ONLINE payment succeeds) gained the same expiry, read inline from `system_config` rather
+than importing `MarketplaceConfig` across module boundaries — the same pattern already used for
+reading `completion_otp_enabled` there. No regenerate path for the completion code this round
+(it is tied to a specific payment event, not a free-standing "send again" action; regenerating
+it sensibly needs a support-initiated flow that doesn't exist yet) — flagged.
+
+Migration `20261012010000_phase19_job_code_expiry`: two new nullable columns
+(`arrival_code_expires_at`, `completion_code_expires_at`) on `jobs`. Purely additive; a NULL
+expiry (every pre-migration row) is treated as "generated before this migration, never expire
+it retroactively," not as an error.
+
+API unit suite green: 220/220 (2 new: `env.spec.ts` covers the allowlist's default/parsing and
+its production refusal). `npx tsc --noEmit` clean (required regenerating the Prisma client
+after the schema change). Two new e2e tests added to `jobs.e2e-spec.ts` (expired code refused +
+successful regeneration; cannot regenerate once already verified) — hand-traced, not run, same
+sandbox constraint as every e2e addition this project.

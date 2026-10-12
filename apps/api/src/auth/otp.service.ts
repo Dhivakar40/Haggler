@@ -87,11 +87,17 @@ export class OtpService {
 
   /** Consumes the code on success. Throws OTP_INVALID for every failure (no hints for attackers). */
   async verify(phone: string, code: string): Promise<void> {
-    // QA/testing builds only (D-074): a fixed code that works for any phone number, so teammates
-    // testing a standalone APK don't need to read the real code off someone's server console. Only
-    // reachable when TESTING_MODE=true, which env.ts refuses outright in production — this branch
-    // is dead code there. Logged loudly every time it's used so it's never silently relied on.
-    if (this.env.env.TESTING_MODE && code === TESTING_MODE_FIXED_CODE) {
+    // QA/testing builds only (D-074, narrowed in D-091): a fixed code for phones on
+    // TESTING_MODE_PHONE_ALLOWLIST only, so teammates testing a standalone APK don't need to read
+    // the real code off someone's server console, without the fixed code working for every real
+    // phone number too. Only reachable when TESTING_MODE=true, which env.ts refuses outright in
+    // production (along with a non-empty allowlist) — this branch is dead code there. Logged
+    // loudly every time it's used so it's never silently relied on.
+    if (
+      this.env.env.TESTING_MODE &&
+      this.env.env.TESTING_MODE_PHONE_ALLOWLIST.includes(phone) &&
+      code === TESTING_MODE_FIXED_CODE
+    ) {
       this.logger.warn(`TESTING_MODE: fixed OTP accepted for ${phone}`);
       return;
     }

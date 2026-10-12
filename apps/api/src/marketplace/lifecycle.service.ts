@@ -98,7 +98,7 @@ export class LifecycleService {
         { code: 'NOT_AT_LOCATION', distanceM: distance },
       );
     }
-    const code = String(randomInt(0, 10_000)).padStart(4, '0');
+    const { code, expiresAt } = await this.newJobCode();
     await this.prisma.$transaction((tx) =>
       this.transitions.move(tx, {
         jobId,
@@ -111,12 +111,40 @@ export class LifecycleService {
           arrivalCodeHash: this.hashCode(jobId, code),
           arrivalCodeEnc: this.encryption.encrypt(code),
           arrivalCodeTries: 0,
+          arrivalCodeExpiresAt: expiresAt,
           arrivalVerifiedAt: null,
         },
         meta: { distanceM: distance },
       }),
     );
     return this.done(jobId, workerId);
+  }
+
+  /** D-091 (job-code hardening): a fresh code when the old one expired or the customer lost it.
+   * Only before it's been verified — once arrivalVerifiedAt is set there is nothing to regenerate. */
+  async regenerateArrivalCode(workerId: string, jobId: string) {
+    const job = await this.workerJob(workerId, jobId);
+    if (job.status !== 'ARRIVED')
+      throw conflict('There is no start code to regenerate right now.', { code: 'NOT_ARRIVED' });
+    if (job.arrivalVerifiedAt)
+      throw conflict('The start code has already been used.', { code: 'ALREADY_VERIFIED' });
+    const { code, expiresAt } = await this.newJobCode();
+    await this.prisma.job.update({
+      where: { id: jobId },
+      data: {
+        arrivalCodeHash: this.hashCode(jobId, code),
+        arrivalCodeEnc: this.encryption.encrypt(code),
+        arrivalCodeTries: 0,
+        arrivalCodeExpiresAt: expiresAt,
+      },
+    });
+    return this.done(jobId, workerId);
+  }
+
+  private async newJobCode(): Promise<{ code: string; expiresAt: Date }> {
+    const cfg = await this.cfg.get();
+    const code = String(randomInt(0, 10 ** cfg.job_code_length)).padStart(cfg.job_code_length, '0');
+    return { code, expiresAt: new Date(Date.now() + cfg.job_code_ttl_seconds * 1000) };
   }
 
   private hashCode(jobId: string, code: string): string {
@@ -148,6 +176,13 @@ export class LifecycleService {
         'Too many wrong codes. Ask the customer to check, or cancel the job.',
         { code: 'CODE_LOCKED' },
       );
+    }
+    // D-091: arrivalCodeExpiresAt is null for a code generated before this migration — treated
+    // as never-expiring rather than retroactively invalidated (see schema comment).
+    if (job.arrivalCodeExpiresAt && job.arrivalCodeExpiresAt.getTime() < Date.now()) {
+      throw unprocessable('That code has expired. Ask the Ranger to send a new one.', {
+        code: 'CODE_EXPIRED',
+      });
     }
     if (!job.arrivalCodeHash || !safeEqualHex(job.arrivalCodeHash, this.hashCode(jobId, code))) {
       // Atomic increment so parallel guesses cannot exceed the limit.
@@ -389,6 +424,12 @@ export class LifecycleService {
             'Too many wrong codes. Contact support.',
             { code: 'CODE_LOCKED' },
           );
+        }
+        // D-091: same null-means-pre-migration treatment as the arrival code above.
+        if (job.completionCodeExpiresAt && job.completionCodeExpiresAt.getTime() < Date.now()) {
+          throw unprocessable('That code has expired. Ask support to resend it.', {
+            code: 'CODE_EXPIRED',
+          });
         }
         if (!safeEqualHex(job.completionCodeHash, this.hashCompletionCode(jobId, completionCode))) {
           await this.prisma.job.update({

@@ -907,4 +907,50 @@ describe('job list', () => {
   });
 });
 
+describe('D-091: job start code expiry and regeneration', () => {
+  it('an expired start code is refused, and the Ranger can send a fresh one', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: northOf(200, area) });
+    const { jobId } = await m.match(c, r);
+    await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+    await m.ping(r, CENTER);
+    await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'SELFIE').then((x) => expect(x.status).toBe(200));
+    const staleCode = (await m.api.get(c, `/v1/jobs/${jobId}`)).body.arrivalCode as string;
+
+    // Force the code into the past — the TTL itself is covered by MarketplaceConfig's own
+    // default (job_code_ttl_seconds); this test is about the expiry check, not the clock.
+    await m.prisma.job.update({
+      where: { id: jobId },
+      data: { arrivalCodeExpiresAt: new Date(Date.now() - 1000) },
+    });
+    const expired = await m.api.post(r, `/v1/jobs/${jobId}/verify-arrival`, { code: staleCode });
+    expect(expired.status).toBe(422);
+    expect(expired.body.error.details.code).toBe('CODE_EXPIRED');
+
+    await m.api.post(r, `/v1/jobs/${jobId}/arrive/regenerate`).expect(200);
+    const freshCode = (await m.api.get(c, `/v1/jobs/${jobId}`)).body.arrivalCode as string;
+    expect(freshCode).not.toBe(staleCode);
+    await m.api.post(r, `/v1/jobs/${jobId}/verify-arrival`, { code: freshCode }).expect(200);
+  });
+
+  it('cannot regenerate once the start code has already been verified', async () => {
+    const area = newArea();
+    const c = await m.customer({ at: area });
+    const r = await m.ranger({ at: northOf(200, area) });
+    const { jobId } = await m.match(c, r);
+    await m.api.post(r, `/v1/jobs/${jobId}/en-route`).expect(200);
+    await m.ping(r, CENTER);
+    await m.api.post(r, `/v1/jobs/${jobId}/arrive`).expect(200);
+    await m.uploadJobPhoto(r, jobId, 'SELFIE').then((x) => expect(x.status).toBe(200));
+    const code = (await m.api.get(c, `/v1/jobs/${jobId}`)).body.arrivalCode as string;
+    await m.api.post(r, `/v1/jobs/${jobId}/verify-arrival`, { code }).expect(200);
+
+    const again = await m.api.post(r, `/v1/jobs/${jobId}/arrive/regenerate`);
+    expect(again.status).toBe(409);
+    expect(again.body.error.details.code).toBe('ALREADY_VERIFIED');
+  });
+});
+
 void (null as unknown as Customer | Ranger);

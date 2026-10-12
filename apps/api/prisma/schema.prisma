@@ -874,17 +874,23 @@ model Job {
   nextWaveAt             DateTime?      @map("next_wave_at") @db.Timestamptz(6)
   broadcastDeadline      DateTime?      @map("broadcast_deadline") @db.Timestamptz(6)
   genderPreferenceMet    Boolean?       @map("gender_preference_met")
-  /// 4-digit arrival code: hashed for checking, encrypted so the customer's app can show it.
+  /// Arrival code: hashed for checking, encrypted so the customer's app can show it. D-091:
+  /// length/TTL moved to MarketplaceConfig's job_code_length/job_code_ttl_seconds (was a fixed
+  /// 4-digit code with no expiry); arrivalCodeExpiresAt null means "generated before D-091",
+  /// treated as never-expiring for an in-flight job rather than retroactively invalidated.
   arrivalCodeHash        String?        @map("arrival_code_hash")
   arrivalCodeEnc         String?        @map("arrival_code_enc")
   arrivalCodeTries       Int            @default(0) @map("arrival_code_tries")
+  arrivalCodeExpiresAt   DateTime?      @map("arrival_code_expires_at") @db.Timestamptz(6)
   arrivalVerifiedAt      DateTime?      @map("arrival_verified_at") @db.Timestamptz(6)
   /// D-087 (Phase Flow-Final): the completion OTP, same hash/encrypt pattern as the arrival
   /// code above, generated once in-app payment succeeds — entering it is what actually closes
   /// the job, so the customer confirms they got what they paid for before the Ranger leaves.
+  /// D-091: gained the same expiry treatment as the arrival code.
   completionCodeHash     String?        @map("completion_code_hash")
   completionCodeEnc      String?        @map("completion_code_enc")
   completionCodeTries    Int            @default(0) @map("completion_code_tries")
+  completionCodeExpiresAt DateTime?     @map("completion_code_expires_at") @db.Timestamptz(6)
   completionVerifiedAt   DateTime?      @map("completion_verified_at") @db.Timestamptz(6)
   /// Set once payment succeeds but the customer has not yet shared/entered the completion code —
   /// read by a scheduled job that auto-releases the Ranger's earnings after a configurable
