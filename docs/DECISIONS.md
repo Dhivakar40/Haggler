@@ -2063,3 +2063,69 @@ three signals, the per-kind dedup, and the lookback-window boundary; 1 more new 
 since the signal logic itself is already unit-tested) and new assertions in `quote-flow.e2e-
 spec.ts`/`parts-pause.e2e-spec.ts`/`jobs.e2e-spec.ts` for the K3 fixes — all hand-traced, not
 run, same no-Postgres sandbox constraint as every e2e addition this project.
+
+## D-095: Sub-phase L2 (start) — mobile typecheck drift fixed, new status labels added
+
+This phase's own earlier schema changes (`JobDto` gained `pause`/`pauseSettlementPaise`/
+`itemHandovers`/`visitFeePaise`/`closeReason`/`completionCode`/`hasSelfie`; `QuoteDto` gained
+`items[]`/`servicePaise`/`feePaise`/`totalPaise`/etc.) had left the mobile app's own
+`npx tsc --noEmit` broken — `test-utils.tsx`'s `makeJob()` fixture and two test files' inline
+quote fixtures were never updated to the new required shape. Found while starting Sub-phase L
+and fixed: both now carry every field the current schemas require, with sensible defaults for
+the ones a given test doesn't care about (e.g. an old-style "other"-category quote fixture gets
+`servicePaise: null, items: [], aboveCeiling: false`, etc. — the pre-D-087 shape's natural
+equivalents).
+
+Separately, `JobTimeline` (and anywhere else reading `job.status.*`) had no translation key at
+all for `QUOTING`/`QUOTE_REJECTED`/`PAUSED_PARTS` — a job reaching any of those statuses would
+show the raw i18n key instead of a label. Added across all 5 shipped locales (en/hi/ta/kn/te).
+hi/ta are translations I have reasonable confidence in; kn/te are my best effort but worth a
+native speaker's review before shipping, same caution warranted for any translated string in
+this app, more so here since it's money/safety-adjacent text (a customer deciding whether to
+wait for a paused job, or seeing why a quote was declined).
+
+No new mobile screens were built this round — see the FINAL REPORT for what Sub-phase L still
+needs (a quote-builder screen, customer quote-review, the pause/settlement/handover flow,
+incident-report UI, selfie capture, completion-code entry — none of Sub-phase G/H/I/J/K's new
+backend capabilities have a mobile surface yet).
+
+Mobile suite green: 520/520 across 57 suites (no new tests — these are fixture/translation
+fixes, not new behaviour). `npx tsc --noEmit` clean across the mobile app for the first time
+since Sub-phase G started.
+
+## D-096: Phase Flow-Final's two risk-managed flags turned on, by explicit instruction
+
+D-088/D-089 defaulted `quote_flow_enabled` and `completion_otp_enabled` to **false**, reasoned
+at length in both entries: this sandbox has no Postgres, so flipping either one's default with
+no way to run the existing e2e suite against the consequence was a risk this project declined
+to take unilaterally. Given an explicit instruction to turn both on before the final APK "so
+the build I test contains the finished flow," accepting that same risk knowingly, both are now
+**true** in `DEFAULT_FEE_SETTINGS` (fee.service.ts) and in the seeded `system_config` row
+(seed.ts) — this is what a fresh deploy (and the final APK) actually gets.
+
+**What this does NOT mean**: that the ~15 pre-existing e2e files written against the pre-D-087
+auto-agree-at-match flow have been individually re-verified against the new default. Tracing
+`market-helpers.ts`'s `agree()`/`runToCompletion()` (what most of those files use to get a job
+to AGREED) shows they would break immediately under `quote_flow_enabled: true` — `agree()`
+explicitly throws if the job isn't already AGREED, and nothing drives MATCHED to AGREED any
+more without going through the quote flow. Rewriting every one of those files for the new flow
+is a distinctly bigger job than this round has room for, and doing it blind (no Postgres to
+confirm the rewrite is actually correct) would trade one unverifiable risk for another.
+
+**The resolution**: `test/harness.ts`'s `startHarness()` now pins both flags back to `false`
+in the test database immediately after seeding, for every e2e file — so the entire pre-existing
+suite keeps testing exactly the behaviour it always has, unchanged. The handful of files that
+specifically exercise the new flow (`quote-flow.e2e-spec.ts`, the completion-code describe
+block in `wallet.e2e-spec.ts`) already call `Market.enableQuoteFlow()`/`enableCompletionOtp()`
+themselves and are unaffected either way. This means: **the production default is the finished
+flow, as asked; the test suite's own behaviour is deliberately unchanged, not because the new
+default doesn't work, but because re-verifying ~15 files against it needs a machine that can
+actually run them** — see the FINAL REPORT's exact commands for doing that.
+
+API unit suite still green: 227/227 (these are config-default values; every unit test supplies
+its own explicit `FeeService`/config, none of them read `DEFAULT_FEE_SETTINGS`'s fallback
+directly). `npx tsc --noEmit` clean. No existing e2e file needed a single change — that is the
+point of the harness-level override — so there is nothing new to hand-trace here; the one
+thing genuinely unverified in this sandbox is whether the pre-existing suite, if someone
+disabled the harness override and ran it for real, would need updates. It would (per the
+`agree()` tracing above) — flagged honestly rather than left implicit.

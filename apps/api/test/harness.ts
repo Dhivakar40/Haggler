@@ -123,6 +123,29 @@ export async function startHarness(): Promise<Harness> {
   };
 
   const app = await createApp();
+
+  // D-095: the real seed (prisma/seed.ts) now ships quote_flow_enabled/completion_otp_enabled
+  // defaulting to true in production, per an explicit instruction to turn the finished Phase
+  // Flow-Final flow on by default. Every e2e file written before that flow existed assumes the
+  // OLD auto-agree-at-match behaviour (most of them, via market-helpers.ts's agree()/
+  // runToCompletion()) and was never individually rewritten for the new one — doing that for
+  // every pre-existing file is out of scope this round and unverifiable without a way to run
+  // the suite. Rather than silently leave the whole suite broken, the test harness pins both
+  // flags back to false right after seeding; the handful of files that specifically test the
+  // new flow already call Market.enableQuoteFlow()/enableCompletionOtp() themselves and are
+  // unaffected by this override.
+  {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    await prisma.systemConfig.updateMany({
+      where: { key: { in: ['quote_flow_enabled', 'completion_otp_enabled'] } },
+      data: { value: false },
+    });
+    await prisma.$disconnect();
+    const { FeeService } = await import('../src/marketplace/fee.service');
+    app.get(FeeService).refresh();
+  }
+
   return {
     app,
     databaseUrl,

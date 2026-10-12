@@ -118,15 +118,15 @@ const SYSTEM_CONFIG: { key: string; value: unknown; description: string }[] = [
   },
   {
     key: 'quote_flow_enabled',
-    value: false,
+    value: true,
     description:
-      "D-087: true routes a new match through the quote-first flow instead of D-080's auto-agree-at-the-listed-price. Defaults to false until someone with a real Postgres can run the full e2e suite with it on and confirm nothing regresses — see fee.service.ts's own comment.",
+      "D-087/D-095: routes a new match through the quote-first flow instead of D-080's auto-agree-at-the-listed-price. Flipped to true (was false) by explicit instruction once the flow was considered finished — see fee.service.ts's own comment and docs/DECISIONS.md D-095. The e2e test harness pins this back to false for files not rewritten for the new flow.",
   },
   {
     key: 'completion_otp_enabled',
-    value: false,
+    value: true,
     description:
-      "D-087 (H2/H3): true requires the server-generated completion code to confirm an ONLINE job instead of a bare confirm(). Defaults to false, same reasoning as quote_flow_enabled.",
+      'D-087/D-095 (H2/H3): requires the server-generated completion code to confirm an ONLINE job instead of a bare confirm(). Flipped to true alongside quote_flow_enabled, same reasoning and same test-harness override.',
   },
   {
     key: 'fraud_velocity_max_jobs',

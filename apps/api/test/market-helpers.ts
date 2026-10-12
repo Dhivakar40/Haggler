@@ -44,10 +44,11 @@ export class Market {
     return this.app.get(FeeService);
   }
 
-  /** D-087: flips the quote-first flow on for tests that specifically exercise it — every other
-   * test keeps the D-080 auto-agree-at-the-listed-price default (the flag's own default) so
-   * nothing already written here has to change. Call this in a `beforeAll`/`beforeEach`, not
-   * mid-test — accept() reads the flag at the moment a Ranger accepts. */
+  /** D-087/D-095: flips the quote-first flow on for tests that specifically exercise it. The
+   * flag's own production default is now true (D-095), but harness.ts pins it back to false for
+   * every e2e file right after seeding, so every OTHER test here still gets the D-080 auto-agree
+   * -at-the-listed-price behaviour unless it calls this itself. Call this in a `beforeAll`/
+   * `beforeEach`, not mid-test — accept() reads the flag at the moment a Ranger accepts. */
   async enableQuoteFlow(): Promise<void> {
     await this.prisma.systemConfig.upsert({
       where: { key: 'quote_flow_enabled' },

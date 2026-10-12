@@ -44,21 +44,23 @@ export interface FeeSettings {
   /** D-087 (I4): how many jobs a Ranger may have PAUSED_PARTS at once. */
   max_concurrent_paused_jobs_per_worker: number;
   /** D-087: true routes a new match through the quote-first flow (travel, diagnose, quote,
-   * accept/reject) instead of D-080's auto-agree-at-the-listed-price. Defaults to false — not
-   * because the new flow isn't finished, but because this sandbox has no Postgres to run the
-   * e2e suite against, so flipping every existing job's default behaviour with no way to
-   * verify the consequence is a risk this round declines to take. The new flow is fully built
-   * and has its own e2e coverage (run with the flag explicitly on); switching the default is a
-   * one-line config change for whoever can actually run the full suite against it. */
+   * accept/reject) instead of D-080's auto-agree-at-the-listed-price. D-095: flipped to true by
+   * explicit instruction, now that the flow is considered finished and ready to be the real
+   * default — this sandbox still has no Postgres of its own to run the full e2e suite against,
+   * so the test harness (test/harness.ts) pins this back to false for every e2e file that was
+   * never individually rewritten for the new flow, which is most of them; see that file's
+   * comment and docs/DECISIONS.md D-095 for the full reasoning and what still needs checking on
+   * a machine that can actually run the suite. */
   quote_flow_enabled: boolean;
   /** D-087 (H2/H3): once an ONLINE payment succeeds, require the server-generated completion
-   * code (Job.completionCodeHash) to confirm, instead of a bare confirm(). Same risk-managed
-   * default-false reasoning as quote_flow_enabled. DEVIATION from the master prompt's literal
-   * wording: the prompt says the Ranger enters the code the customer shares; this round has the
-   * CUSTOMER enter it instead (confirm() already belongs to the customer's auth path — giving
-   * the Ranger an equivalent entry point means either duplicating confirm()'s settlement logic
-   * in a second method or a riskier refactor of a transaction this project has never had a unit
-   * test for). Flagged honestly in DECISIONS.md D-089, not silently done differently. */
+   * code (Job.completionCodeHash) to confirm, instead of a bare confirm(). D-095: flipped to
+   * true alongside quote_flow_enabled, same reasoning and same test-harness override. DEVIATION
+   * from the master prompt's literal wording: the prompt says the Ranger enters the code the
+   * customer shares; this round has the CUSTOMER enter it instead (confirm() already belongs to
+   * the customer's auth path — giving the Ranger an equivalent entry point means either
+   * duplicating confirm()'s settlement logic in a second method or a riskier refactor of a
+   * transaction this project has never had a unit test for). Flagged honestly in DECISIONS.md
+   * D-089, not silently done differently. */
   completion_otp_enabled: boolean;
   /** D-093 (K1): a worker league promotion is flagged (never blocked — see FraudDetectionService)
    * if they confirmed this many or more jobs within fraud_velocity_window_hours. */
@@ -90,8 +92,8 @@ export const DEFAULT_FEE_SETTINGS: FeeSettings = {
   completion_otp_auto_release_hours: 24,
   max_parts_extensions: 2,
   max_concurrent_paused_jobs_per_worker: 2,
-  quote_flow_enabled: false,
-  completion_otp_enabled: false,
+  quote_flow_enabled: true,
+  completion_otp_enabled: true,
   fraud_velocity_max_jobs: 15,
   fraud_velocity_window_hours: 24,
   fraud_repeat_pair_max_count: 5,
