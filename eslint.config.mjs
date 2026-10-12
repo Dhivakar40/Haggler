@@ -45,4 +45,13 @@ export default tseslint.config(
     files: ['**/*.spec.ts', '**/*.spec.tsx', '**/test/**', '**/scripts/**', '**/prisma/seed.ts'],
     rules: { 'no-console': 'off' },
   },
+  {
+    // Plain Node CLI scripts (not part of the app's TS/ESM build) — allow require()/module
+    // globals and the Node runtime globals the recommended config doesn't know about.
+    files: ['**/scripts/**/*.js'],
+    languageOptions: {
+      globals: { require: 'readonly', module: 'readonly', __dirname: 'readonly', process: 'readonly', console: 'readonly' },
+    },
+    rules: { '@typescript-eslint/no-require-imports': 'off', 'no-undef': 'off' },
+  },
 );

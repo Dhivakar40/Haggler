@@ -13,7 +13,6 @@ import {
   ErrorState,
   LeagueBadge,
   LoadingState,
-  PriceTag,
   Screen,
   Text,
 } from '../../components';

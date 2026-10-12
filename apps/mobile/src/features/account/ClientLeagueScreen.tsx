@@ -2,15 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { getClientLeagueStatus } from '../../api/endpoints';
-import {
-  Card,
-  ErrorState,
-  LeagueBadge,
-  LoadingState,
-  Screen,
-  Skeleton,
-  Text,
-} from '../../components';
+import { Card, ErrorState, LeagueBadge, Screen, Skeleton, Text } from '../../components';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radii, spacing } from '../../theme/tokens';
 
