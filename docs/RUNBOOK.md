@@ -484,9 +484,12 @@ development only. To actually send SMS in production:
 4. **Set the env vars**: `SMS_MODE=live`, `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID` (the approved
    template's id) — `env.ts` refuses to boot in production with `SMS_MODE=sandbox`, and refuses
    `SMS_MODE=live` without both MSG91 vars set.
-5. **Remove `TESTING_MODE` and `TESTING_MODE_PHONE_ALLOWLIST`** from the production environment —
-   `env.ts` already refuses to boot in production if either is set, so this is a safety net, not
-   the only gate; don't rely on the refusal and leave them set anyway.
+5. **Remove `TESTING_MODE`** from the production environment — while it's `true`, the fixed code
+   `123456` works for *any* phone number (D-100: this was briefly restricted to an allowlisted
+   set of phones in D-091, reverted by request since a wide tester group can't practically be
+   kept in an env var — `TESTING_MODE` itself, not a per-phone list, is the only gate now).
+   `env.ts` already refuses to boot in production if it's set, so this is a safety net, not the
+   only one; don't rely on the refusal and leave it set anyway.
 6. **Test against a real phone** before trusting it — `Msg91SmsProvider` has never been exercised
    against the real MSG91 API in this project (no account existed to test against).
 

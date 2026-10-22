@@ -72,27 +72,15 @@ const envSchema = z
     S3_BUCKET_MEDIA: z.string().default('haggler-media'),
     S3_BUCKET_KYC: z.string().default('haggler-kyc'),
 
-    /** QA/testing builds only (D-074). When true, OTP verification also accepts a fixed
-     * "123456" code — but, as of D-091, ONLY for a phone number listed in
-     * TESTING_MODE_PHONE_ALLOWLIST below, not for any phone number any more. Never allowed when
-     * NODE_ENV=production (refused below, same pattern as the sandbox adapter modes). */
+    /** QA/testing builds only (D-074; briefly restricted to an allowlist in D-091, reverted in
+     * D-100 — a tester group too large to track in an env var needs this to work for any phone).
+     * When true, OTP verification also accepts a fixed "123456" code for any phone number. Never
+     * allowed when NODE_ENV=production (refused below, same pattern as the sandbox adapter
+     * modes) — that refusal is the actual safety net, not who's allowed to use the code. */
     TESTING_MODE: z
       .enum(['true', 'false'])
       .default('false')
       .transform((v) => v === 'true'),
-    /** D-091: comma-separated E.164 phone numbers (e.g. "+919800000001,+919800000002") the fixed
-     * test code is restricted to. Required for TESTING_MODE to do anything (an empty allowlist
-     * means the fixed code matches nothing); also refused in production, same as TESTING_MODE
-     * itself, so it can never be left set on a live build by accident. */
-    TESTING_MODE_PHONE_ALLOWLIST: z
-      .string()
-      .default('')
-      .transform((v) =>
-        v
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-      ),
 
     SMS_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
     KYC_PROVIDER: z.literal('manual_admin').default('manual_admin'),
@@ -162,20 +150,13 @@ const envSchema = z
           message: `${key}=sandbox is not allowed when NODE_ENV=production`,
         });
       }
-      // A fixed test OTP must never exist in production (D-074), nor the allowlist that scopes
-      // it (D-091) — either one left set on a live build is refused at boot, not just ignored.
+      // A fixed test OTP that works for any phone number must never exist in production
+      // (D-074) — refused at boot, not just ignored.
       if (env.TESTING_MODE) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['TESTING_MODE'],
           message: 'TESTING_MODE=true is not allowed when NODE_ENV=production',
-        });
-      }
-      if (env.TESTING_MODE_PHONE_ALLOWLIST.length > 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['TESTING_MODE_PHONE_ALLOWLIST'],
-          message: 'TESTING_MODE_PHONE_ALLOWLIST must be empty when NODE_ENV=production',
         });
       }
     }

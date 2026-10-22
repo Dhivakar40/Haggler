@@ -2129,3 +2129,27 @@ point of the harness-level override — so there is nothing new to hand-trace he
 thing genuinely unverified in this sandbox is whether the pre-existing suite, if someone
 disabled the harness override and ran it for real, would need updates. It would (per the
 `agree()` tracing above) — flagged honestly rather than left implicit.
+
+## D-100: TESTING_MODE_PHONE_ALLOWLIST reverted — it broke real tester access
+
+D-091 narrowed `TESTING_MODE`'s fixed `123456` code to only work for phones listed in a new
+`TESTING_MODE_PHONE_ALLOWLIST` env var, reasoning that the old "any phone" behavior was an
+unscoped auth bypass. That reasoning didn't account for how this project actually distributes
+test builds: a batch of outside testers install one APK and sign in with their own phones, and
+nobody could practically add each one's number to a Render env var (let alone keep it updated as
+testers change). The allowlist was never set on the production Render service, so the very first
+real attempt to use it — a tester trying to sign in — failed outright with no OTP received
+(`SMS_MODE=sandbox` in this environment, so there was never a real SMS as a fallback either) and
+no fixed code accepted either, since an empty allowlist matches nothing.
+
+Reverted by explicit instruction: `TESTING_MODE_PHONE_ALLOWLIST` is removed entirely (env.ts,
+otp.service.ts, main.ts's boot warning, the two unit tests that covered it) and `TESTING_MODE`'s
+fixed code again works for any phone number while the flag is true — the exact D-074 behavior,
+unchanged since before D-091. The actual safety boundary was always `TESTING_MODE` being refused
+outright when `NODE_ENV=production` (env.ts's superRefine), not which phones could use it inside
+a testing environment — D-091 added a second, redundant restriction on top of that boundary and
+it turned out to cost real usability without adding a safety margin anyone needed, since
+`TESTING_MODE` can't reach production regardless.
+
+API unit suite green: 225/225 (2 fewer than before — the two allowlist-specific tests in
+`env.spec.ts` were removed, nothing else changed shape). `npx tsc --noEmit` clean.
