@@ -15,7 +15,7 @@ const RESEND_SECONDS = 30;
 export function OtpScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { phone = '' } = useLocalSearchParams<{ phone: string }>();
+  const { phone = '', email } = useLocalSearchParams<{ phone: string; email?: string }>();
   const startSession = useSession((s) => s.startSession);
   const [code, setCode] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -54,7 +54,7 @@ export function OtpScreen() {
   async function resend() {
     setError(undefined);
     try {
-      await sendOtp(phone);
+      await sendOtp(phone, email);
       setCooldown(RESEND_SECONDS);
     } catch (err) {
       setError(errorMessage(err, t));
@@ -65,7 +65,11 @@ export function OtpScreen() {
     <Screen scroll>
       <View style={{ gap: spacing.md, marginTop: spacing.xl }}>
         <Text variant="title">{t('auth.otpTitle')}</Text>
-        <Text color="textMuted">{t('auth.otpSentTo', { phone: formatIndianPhone(phone) })}</Text>
+        <Text color="textMuted">
+          {email
+            ? t('auth.otpSentToEmail', { email })
+            : t('auth.otpSentTo', { phone: formatIndianPhone(phone) })}
+        </Text>
         <TextField
           testID="otp-input"
           label={t('auth.otpLabel')}

@@ -21,14 +21,14 @@ export class AuthController {
   @Throttle(STRICT)
   @ApiOperation({
     summary:
-      'Send a 6-digit code by SMS. Limits: 30 s between codes, 5/hour per phone, 20/hour per IP.',
+      'Send a 6-digit code by SMS, or by email instead if `email` is given (D-101 fallback). Limits: 30 s between codes, 5/hour per phone, 20/hour per IP.',
   })
   @ApiZodBody(otpSendSchema)
   send(
     @Body(new ZodPipe(otpSendSchema)) body: z.infer<typeof otpSendSchema>,
     @ClientIp() ip?: string,
   ) {
-    return this.auth.sendOtp(body.phone, ip);
+    return this.auth.sendOtp(body.phone, ip, body.email);
   }
 
   @Post('otp/verify')

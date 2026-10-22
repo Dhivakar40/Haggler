@@ -16,7 +16,12 @@ export const deviceIdSchema = z
   .string()
   .regex(/^[A-Za-z0-9_-]{8,64}$/, 'deviceId must be 8-64 chars: letters, digits, - or _');
 
-export const otpSendSchema = z.object({ phone: indianPhoneSchema });
+/** D-101: `email`, when given, delivers the code by email instead of SMS — the fallback channel
+ * for someone whose SMS never arrives. Still signing in with `phone`, not a second identity. */
+export const otpSendSchema = z.object({
+  phone: indianPhoneSchema,
+  email: z.string().trim().email().optional(),
+});
 export type OtpSendInput = z.infer<typeof otpSendSchema>;
 
 export const otpVerifySchema = z.object({

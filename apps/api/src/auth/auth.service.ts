@@ -20,8 +20,8 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  sendOtp(phone: string, ip: string | undefined) {
-    return this.otp.send(phone, ip);
+  sendOtp(phone: string, ip: string | undefined, email?: string) {
+    return this.otp.send(phone, ip, email);
   }
 
   /** Verifies the code, creates the account on first sign-in, binds the device and issues tokens. */

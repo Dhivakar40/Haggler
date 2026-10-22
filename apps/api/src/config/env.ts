@@ -83,6 +83,12 @@ const envSchema = z
       .transform((v) => v === 'true'),
 
     SMS_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+    /** D-101: email OTP fallback — for a tester whose SMS never arrives (SMS_MODE=sandbox), or
+     * any future sign-in path that prefers email. sandbox/live split like the other adapters,
+     * but — unlike them — sandbox is allowed in production too: nothing requires this channel,
+     * it only runs when a client explicitly asks for it, so "not offered" is a real choice, not
+     * a silently-faked core path. live needs SMTP_* below. */
+    EMAIL_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
     KYC_PROVIDER: z.literal('manual_admin').default('manual_admin'),
     PAYMENTS_MODE: z.enum(['sandbox', 'test']).default('sandbox'),
     CALLS_MODE: z.literal('disabled').default('disabled'),
@@ -91,6 +97,13 @@ const envSchema = z
 
     MSG91_AUTH_KEY: z.string().optional(),
     MSG91_TEMPLATE_ID: z.string().optional(),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().default(587),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    /** The "From" address OTP emails are sent as — most SMTP providers (Gmail included) require
+     * this to match (or be an alias of) the authenticated SMTP_USER account. */
+    SMTP_FROM: z.string().optional(),
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
@@ -114,6 +127,10 @@ const envSchema = z
     };
     need(env.SMS_MODE === 'live', 'MSG91_AUTH_KEY', 'when SMS_MODE=live');
     need(env.SMS_MODE === 'live', 'MSG91_TEMPLATE_ID', 'when SMS_MODE=live');
+    need(env.EMAIL_MODE === 'live', 'SMTP_HOST', 'when EMAIL_MODE=live');
+    need(env.EMAIL_MODE === 'live', 'SMTP_USER', 'when EMAIL_MODE=live');
+    need(env.EMAIL_MODE === 'live', 'SMTP_PASS', 'when EMAIL_MODE=live');
+    need(env.EMAIL_MODE === 'live', 'SMTP_FROM', 'when EMAIL_MODE=live');
     need(env.PAYMENTS_MODE === 'test', 'RAZORPAY_KEY_ID', 'when PAYMENTS_MODE=test');
     need(env.PAYMENTS_MODE === 'test', 'RAZORPAY_KEY_SECRET', 'when PAYMENTS_MODE=test');
     need(env.PAYMENTS_MODE === 'test', 'RAZORPAY_WEBHOOK_SECRET', 'when PAYMENTS_MODE=test');
@@ -138,7 +155,11 @@ const envSchema = z
       });
     }
 
-    // A sandbox adapter in production is a silent way to ship fakes.
+    // A sandbox adapter in production is a silent way to ship fakes. EMAIL_MODE is deliberately
+    // NOT in this list — unlike the others, nothing in this app requires the email channel; it
+    // only runs when a client explicitly asks for it (an OTP-send request with `email` set), so
+    // sandbox is a legitimate "we don't offer this fallback" choice in production, not a silent
+    // fake standing in for something every user encounters.
     if (env.NODE_ENV === 'production') {
       const sandboxed = (['SMS_MODE', 'PUSH_MODE', 'MAPS_MODE', 'PAYMENTS_MODE'] as const).filter(
         (k) => env[k] === 'sandbox',

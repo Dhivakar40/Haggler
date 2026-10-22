@@ -493,6 +493,44 @@ development only. To actually send SMS in production:
 6. **Test against a real phone** before trusting it — `Msg91SmsProvider` has never been exercised
    against the real MSG91 API in this project (no account existed to test against).
 
+## Email OTP fallback (D-101) — free, no registration needed
+
+A second delivery channel for the sign-in code, used when the person sending the OTP request
+includes an `email` field (the mobile app's "Send the code to my email instead" toggle on the
+phone screen, or any client calling `POST /v1/auth/otp/send` directly). Unlike SMS this needs no
+telecom DLT approval — just an SMTP account — so it's the fastest way to get a *real* code to a
+batch of testers when `SMS_MODE=sandbox` (no real SMS ever sent) is otherwise leaving them locked
+out with nothing but `TESTING_MODE`'s fixed code.
+
+**Free setup with Gmail** (takes a few minutes, no waiting on approval):
+
+1. Turn on 2-Step Verification on the Gmail account you want to send from (Google Account →
+   Security).
+2. Create an **App Password**: Google Account → Security → 2-Step Verification → App passwords →
+   generate one for "Mail". Copy the 16-character password it gives you — that's `SMTP_PASS`, not
+   your real Gmail password.
+3. Set these env vars on Render:
+   - `EMAIL_MODE=live`
+   - `SMTP_HOST=smtp.gmail.com`
+   - `SMTP_PORT=587`
+   - `SMTP_USER=` your Gmail address
+   - `SMTP_PASS=` the app password from step 2
+   - `SMTP_FROM=` the same Gmail address
+4. Render restarts automatically on an env var change — no redeploy needed.
+5. Gmail's free sending limit is generous for a tester group (500/day on a regular account) but
+   is a Google policy, not something this codebase enforces or tracks — if it's ever hit, Gmail
+   starts bouncing sends, which surfaces to the person as the generic "could not send the code"
+   error.
+
+Any other SMTP provider works the same way (set the four `SMTP_*` vars to that provider's
+values) — `SmtpEmailProvider` (`apps/api/src/adapters/email/email.provider.ts`) is plain
+`nodemailer`, not Gmail-specific. It has never been exercised against a real mailbox in this
+project (no SMTP account existed to test against), same caveat as `Msg91SmsProvider`.
+
+Leaving `EMAIL_MODE=sandbox` (the default) is fine if you don't want to offer this fallback at
+all — nothing calls it unless a client explicitly sends `email` in the OTP-send request, so the
+rest of the app is unaffected either way.
+
 **The completion-code auto-release job described in the master prompt does not exist yet.**
 `Job.paidPendingCodeAt` is set the moment an ONLINE payment succeeds (D-087/D-089), and
 `FeeService`'s `completion_otp_auto_release_hours` (default 24) is seeded and admin-editable, but

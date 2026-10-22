@@ -70,6 +70,10 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...baseEnv, SMS_MODE: 'live' })).toThrow(/MSG91_AUTH_KEY/);
   });
 
+  it('live email needs SMTP credentials (D-101)', () => {
+    expect(() => parseEnv({ ...baseEnv, EMAIL_MODE: 'live' })).toThrow(/SMTP_HOST/);
+  });
+
   it('osm maps need an identifying user agent', () => {
     expect(() => parseEnv({ ...baseEnv, MAPS_MODE: 'osm' })).toThrow(/NOMINATIM_USER_AGENT/);
   });
@@ -92,6 +96,11 @@ describe('parseEnv', () => {
       SMS_MODE: 'live',
       MSG91_AUTH_KEY: 'k',
       MSG91_TEMPLATE_ID: 't',
+      EMAIL_MODE: 'live',
+      SMTP_HOST: 'smtp.example.com',
+      SMTP_USER: 'u',
+      SMTP_PASS: 'p',
+      SMTP_FROM: 'noreply@example.com',
       PUSH_MODE: 'live',
       FCM_SERVICE_ACCOUNT_JSON: '{}',
       MAPS_MODE: 'osm',

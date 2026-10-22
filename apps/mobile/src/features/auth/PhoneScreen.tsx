@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { sendOtp } from '../../api/endpoints';
 import { Button, Screen, Text, TextField } from '../../components';
 import { errorMessage } from '../../lib/errors';
+import { isValidEmail } from '../../lib/email';
 import { normalizeIndianPhone } from '../../lib/phone';
 import { spacing } from '../../theme/tokens';
 
@@ -12,17 +13,24 @@ export function PhoneScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const [raw, setRaw] = useState('');
+  const [useEmail, setUseEmail] = useState(false);
+  const [email, setEmail] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     const phone = normalizeIndianPhone(raw);
     if (!phone) return setError(t('auth.phoneInvalid'));
+    const trimmedEmail = email.trim();
+    if (useEmail && !isValidEmail(trimmedEmail)) return setError(t('auth.emailInvalid'));
     setError(undefined);
     setBusy(true);
     try {
-      await sendOtp(phone);
-      router.push({ pathname: '/otp', params: { phone } });
+      await sendOtp(phone, useEmail ? trimmedEmail : undefined);
+      router.push({
+        pathname: '/otp',
+        params: useEmail ? { phone, email: trimmedEmail } : { phone },
+      });
     } catch (err) {
       setError(errorMessage(err, t));
     } finally {
@@ -48,13 +56,34 @@ export function PhoneScreen() {
           keyboardType="phone-pad"
           autoComplete="tel"
           maxLength={16}
-          error={error}
+          error={useEmail ? undefined : error}
         />
+        {useEmail ? (
+          <TextField
+            testID="email-input"
+            label={t('auth.emailLabel')}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoComplete="email"
+            autoCapitalize="none"
+            error={error}
+          />
+        ) : null}
         <Button
           testID="send-code"
           title={t('auth.sendCode')}
           onPress={() => void submit()}
           loading={busy}
+        />
+        <Button
+          testID="toggle-email"
+          variant="secondary"
+          title={useEmail ? t('auth.useSmsInstead') : t('auth.emailInstead')}
+          onPress={() => {
+            setError(undefined);
+            setUseEmail((v) => !v);
+          }}
         />
       </View>
     </Screen>

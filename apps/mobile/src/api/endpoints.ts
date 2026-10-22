@@ -24,11 +24,13 @@ import { apiRequest } from './client';
 
 /** Thin typed wrappers over the REST API. Every response is validated against a shared zod schema. */
 
-export const sendOtp = (phone: string) =>
+/** `email`, when given, delivers the code by email instead of SMS (D-101) — a fallback for
+ * someone whose SMS never arrives, not a second way to sign in. */
+export const sendOtp = (phone: string, email?: string) =>
   apiRequest('/v1/auth/otp/send', {
     method: 'POST',
     auth: false,
-    body: { phone },
+    body: email ? { phone, email } : { phone },
     schema: z.object({
       sent: z.boolean(),
       expiresInSeconds: z.number(),

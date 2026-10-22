@@ -2153,3 +2153,48 @@ it turned out to cost real usability without adding a safety margin anyone neede
 
 API unit suite green: 225/225 (2 fewer than before — the two allowlist-specific tests in
 `env.spec.ts` were removed, nothing else changed shape). `npx tsc --noEmit` clean.
+
+## D-101: email OTP fallback — free, no registration, opt-in delivery channel
+
+By request, after D-100's lockout: testers whose SMS never arrives (`SMS_MODE=sandbox` in the
+testing deployment, so no real SMS is ever sent) needed a real way to receive a code without
+relying on `TESTING_MODE`'s fixed code at all. Built the email channel the master prompt's
+original OTP spec already named as an optional fallback, deferred in D-091 for lack of a mail
+adapter — now built.
+
+**Architecture: a delivery-channel choice, not a second identity.** `POST /v1/auth/otp/send`
+gained an optional `email` field; when present, `OtpService.send()` routes the code through a new
+`EmailProvider` instead of `SmsProvider` — same `OtpAttempt` row, same hash, same `verify()`,
+same `phone` as the actual identity being proven. Nothing about sign-in, account creation, or the
+`User` model changed; this only changes how the code reaches the person. New `EmailModule`
+(`apps/api/src/adapters/email/email.provider.ts`) mirrors `SmsModule`'s exact shape:
+`SandboxEmailProvider` (in-memory outbox, console-logs in development only — the one place an
+OTP email is ever logged, same rule as SMS) and `SmtpEmailProvider` (plain `nodemailer`, any SMTP
+account). `EMAIL_MODE` env var picks between them, same `sandbox`/`live` pattern as every other
+adapter — **with one deliberate difference**: `EMAIL_MODE=sandbox` is allowed in production,
+unlike `SMS_MODE`/`PUSH_MODE`/`MAPS_MODE`/`PAYMENTS_MODE`. Those are refused there because a
+sandboxed one would silently fake a path every user hits; email OTP is opt-in per request, so
+leaving it unconfigured in production is a legitimate "we don't offer this fallback," not a
+silent fake.
+
+**Genuinely free**: unlike SMS (telecom DLT registration, per-message cost even at MSG91's
+cheapest), a Gmail account with an app password works immediately — no approval pipeline, no per-
+message charge, documented step by step in `docs/RUNBOOK.md`'s new "Email OTP fallback" section.
+`SmtpEmailProvider` is provider-agnostic (any SMTP account via the four `SMTP_*` env vars), Gmail
+is just the free, zero-setup-delay option being recommended.
+
+Mobile: `PhoneScreen` gained a "Send the code to my email instead" toggle (secondary button,
+reveals an email field) — `sendOtp(phone, email?)`. The chosen channel carries through to
+`OtpScreen` via a route param: `resend()` reuses whichever channel was originally used, and the
+"sent to" message shows the email instead of the phone when that's how it went out. Added across
+all 5 shipped locales (en/hi/ta/kn/te) — same native-speaker-review caveat as every other
+translated string in this app.
+
+API unit suite green: 228/228 (3 new: `otp.service.spec.ts` gained its first actual `OtpService`
+tests — previously only `generateOtp()`, a pure function, was covered — confirming `send()`
+calls the email provider when given an email and the SMS provider otherwise, with every guard
+check mocked to pass trivially; 1 more in `env.spec.ts` for `EMAIL_MODE=live` requiring SMTP
+vars). `npx tsc --noEmit` clean, both apps. Mobile suite green: 523/523 (3 new: the toggle
+sends through the email channel and carries it to the OTP screen; an invalid email is rejected
+client-side without a round trip; the OTP screen shows "Sent to <email>" and would resend through
+it). i18n key-parity test still green across all 5 locales.

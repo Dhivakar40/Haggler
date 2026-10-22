@@ -70,6 +70,41 @@ describe('PhoneScreen', () => {
     await renderWithProviders(<PhoneScreen />);
     expect(screen.getByText('உங்கள் மொபைல் எண்ணை உள்ளிடவும்')).toBeTruthy();
   });
+
+  it('(D-101) sends the code to email instead of SMS when toggled, and carries email to the OTP screen', async () => {
+    const { calls } = mockApi((c) =>
+      c.path === '/v1/auth/otp/send'
+        ? { body: { sent: true, expiresInSeconds: 300, resendAfterSeconds: 30 } }
+        : undefined,
+    );
+    await renderWithProviders(<PhoneScreen />);
+    await fireEvent.changeText(screen.getByTestId('phone-input'), '9876543210');
+    await fireEvent.press(screen.getByTestId('toggle-email'));
+    expect(screen.getByTestId('email-input')).toBeTruthy();
+    await fireEvent.changeText(screen.getByTestId('email-input'), 'tester@example.com');
+    await fireEvent.press(screen.getByTestId('send-code'));
+    await waitFor(() =>
+      expect(routerMock().push).toHaveBeenCalledWith({
+        pathname: '/otp',
+        params: { phone: '+919876543210', email: 'tester@example.com' },
+      }),
+    );
+    expect(calls[0]?.body).toMatchObject({
+      phone: '+919876543210',
+      email: 'tester@example.com',
+    });
+  });
+
+  it('(D-101) rejects an invalid email without calling the server', async () => {
+    const { calls } = mockApi(() => undefined);
+    await renderWithProviders(<PhoneScreen />);
+    await fireEvent.changeText(screen.getByTestId('phone-input'), '9876543210');
+    await fireEvent.press(screen.getByTestId('toggle-email'));
+    await fireEvent.changeText(screen.getByTestId('email-input'), 'not-an-email');
+    await fireEvent.press(screen.getByTestId('send-code'));
+    expect(await screen.findByText('Enter a valid email address.')).toBeTruthy();
+    expect(calls).toHaveLength(0);
+  });
 });
 
 describe('OtpScreen', () => {
@@ -149,6 +184,20 @@ describe('OtpScreen', () => {
     await renderWithProviders(<OtpScreen />);
     expect(screen.getByText(/Resend in \d+s/)).toBeTruthy();
     expect(screen.getByTestId('resend').props.accessibilityState).toMatchObject({ disabled: true });
+  });
+
+  it('(D-101) shows the email it was sent to, and resend reuses the email channel', async () => {
+    (useLocalSearchParams as jest.Mock).mockReturnValue({
+      phone: '+919876543210',
+      email: 'tester@example.com',
+    });
+    mockApi((c) =>
+      c.path === '/v1/auth/otp/send'
+        ? { body: { sent: true, expiresInSeconds: 300, resendAfterSeconds: 30 } }
+        : undefined,
+    );
+    await renderWithProviders(<OtpScreen />);
+    expect(screen.getByText('Sent to tester@example.com')).toBeTruthy();
   });
 });
 

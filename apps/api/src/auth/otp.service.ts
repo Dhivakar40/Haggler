@@ -5,6 +5,7 @@ import { CodedException, otpInvalid, RateLimitedException } from '../common/http
 import { EnvService } from '../config/env.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RateLimitService } from '../ratelimit/rate-limit.service';
+import { EMAIL_PROVIDER, type EmailProvider } from '../adapters/email/email.provider';
 import { SMS_PROVIDER, type SmsProvider } from '../adapters/sms/sms.provider';
 import { ERROR_CODES } from '@haggler/shared';
 import {
@@ -37,13 +38,18 @@ export class OtpService {
     private readonly limiter: RateLimitService,
     private readonly env: EnvService,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
+    @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider,
   ) {}
 
   private hashCode(phone: string, code: string): string {
     return hmacHex(this.env.env.JWT_ACCESS_SECRET, `otp:${phone}:${code}`);
   }
 
-  async send(phone: string, ip: string | undefined) {
+  /** D-101: `email`, when given, delivers the code by email instead of SMS — the code is still
+   * keyed to `phone` throughout (storage, hashing, verify()), exactly as without it. This is a
+   * delivery-channel choice only, never a second identity: signing in is still "prove you have
+   * this phone number," just proven by reading an email instead of a text. */
+  async send(phone: string, ip: string | undefined, email?: string) {
     await this.assertNotLockedOut(phone);
     await this.assertCooldown(phone);
     await this.assertSendQuota(phone, ip);
@@ -65,13 +71,19 @@ export class OtpService {
     });
 
     try {
-      await this.sms.sendOtp(phone, code, OTP_TTL_SECONDS / 60);
+      if (email) {
+        await this.email.sendOtp(email, code, OTP_TTL_SECONDS / 60);
+      } else {
+        await this.sms.sendOtp(phone, code, OTP_TTL_SECONDS / 60);
+      }
     } catch (err) {
       await this.prisma.otpAttempt.update({
         where: { id: row.id },
         data: { consumedAt: new Date() },
       });
-      this.logger.error(`SMS send failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(
+        `${email ? 'Email' : 'SMS'} send failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       throw new CodedException(
         HttpStatus.SERVICE_UNAVAILABLE,
         ERROR_CODES.INTERNAL,
