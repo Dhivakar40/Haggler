@@ -733,6 +733,7 @@ const ta: Translation = {
     noApplications: 'நீங்கள் இன்னும் எந்த வேலைக்கும் விண்ணப்பிக்கவில்லை.',
     anApplicant: 'ஒரு விண்ணப்பதாரர்',
     filledOf: '{{openings}} இல் {{filled}} நிரப்பப்பட்டது',
+    boosted: 'பூஸ்ட் செய்யப்பட்டது',
     applicantCount: '{{count}} விண்ணப்பதாரர்கள்',
     shortlist: 'சுருக்கப் பட்டியல்',
     reject: 'நிராகரி',

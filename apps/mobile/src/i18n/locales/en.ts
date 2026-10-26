@@ -719,6 +719,7 @@ const en = {
     noApplications: "You haven't applied to any jobs yet.",
     anApplicant: 'An applicant',
     filledOf: '{{filled}} of {{openings}} filled',
+    boosted: 'Boosted',
     applicantCount: '{{count}} applicant(s)',
     shortlist: 'Shortlist',
     reject: 'Reject',

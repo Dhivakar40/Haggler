@@ -726,6 +726,7 @@ const kn: Translation = {
     noApplications: 'ನೀವು ಇನ್ನೂ ಯಾವುದೇ ಕೆಲಸಕ್ಕೆ ಅರ್ಜಿ ಸಲ್ಲಿಸಿಲ್ಲ.',
     anApplicant: 'ಒಬ್ಬ ಅರ್ಜಿದಾರ',
     filledOf: '{{openings}} ರಲ್ಲಿ {{filled}} ಭರ್ತಿಯಾಗಿದೆ',
+    boosted: 'ಬೂಸ್ಟ್ ಮಾಡಲಾಗಿದೆ',
     applicantCount: '{{count}} ಅರ್ಜಿದಾರರು',
     shortlist: 'ಶಾರ್ಟ್‌ಲಿಸ್ಟ್',
     reject: 'ತಿರಸ್ಕರಿಸಿ',

@@ -93,6 +93,48 @@ describe('BrowseContractsScreen', () => {
     );
   });
 
+  it('(D-105) shows how many spots are filled, and flags it when only one is left', async () => {
+    mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: cats };
+      if (c.path.startsWith('/v1/contracts?'))
+        return {
+          body: { items: [listing({ openings: 3, filledCount: 2 })], nextCursor: null },
+        };
+      return undefined;
+    });
+    await renderWithProviders(<BrowseContractsScreen />);
+    const pill = await screen.findByTestId(
+      'browse-listing-aaaaaaaa-1111-4111-8111-111111111111-spots',
+    );
+    expect(pill).toHaveTextContent('2 of 3 filled');
+  });
+
+  it('(D-105) shows a Boosted badge only when the listing is actually boosted', async () => {
+    mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: cats };
+      if (c.path.startsWith('/v1/contracts?'))
+        return { body: { items: [listing({ isBoosted: true })], nextCursor: null } };
+      return undefined;
+    });
+    await renderWithProviders(<BrowseContractsScreen />);
+    expect(
+      await screen.findByTestId('browse-listing-aaaaaaaa-1111-4111-8111-111111111111-boosted'),
+    ).toHaveTextContent('Boosted');
+  });
+
+  it('(D-105) the pay amount is shown via the shared money formatter', async () => {
+    mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: cats };
+      if (c.path.startsWith('/v1/contracts?'))
+        return { body: { items: [listing({ payAmountPaise: 150000 })], nextCursor: null } };
+      return undefined;
+    });
+    await renderWithProviders(<BrowseContractsScreen />);
+    expect(
+      await screen.findByTestId('browse-listing-aaaaaaaa-1111-4111-8111-111111111111-pay'),
+    ).toHaveTextContent('₹1,500');
+  });
+
   it('tapping a listing navigates to its detail screen', async () => {
     mockApi((c) => {
       if (c.path === '/v1/categories') return { body: cats };

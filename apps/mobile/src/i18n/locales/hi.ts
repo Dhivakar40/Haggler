@@ -716,6 +716,7 @@ const hi: Translation = {
     noApplications: 'आपने अभी तक किसी नौकरी के लिए आवेदन नहीं किया है।',
     anApplicant: 'एक आवेदक',
     filledOf: '{{openings}} में से {{filled}} भरे गए',
+    boosted: 'बूस्टेड',
     applicantCount: '{{count}} आवेदक',
     shortlist: 'शॉर्टलिस्ट करें',
     reject: 'अस्वीकार करें',

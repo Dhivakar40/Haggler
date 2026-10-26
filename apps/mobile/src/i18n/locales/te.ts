@@ -727,6 +727,7 @@ const te: Translation = {
     noApplications: 'మీరు ఇంకా ఏ ఉద్యోగానికి దరఖాస్తు చేయలేదు.',
     anApplicant: 'ఒక దరఖాస్తుదారు',
     filledOf: '{{openings}} లో {{filled}} నిండాయి',
+    boosted: 'బూస్ట్ చేయబడింది',
     applicantCount: '{{count}} దరఖాస్తుదారులు',
     shortlist: 'షార్ట్‌లిస్ట్',
     reject: 'తిరస్కరించండి',
