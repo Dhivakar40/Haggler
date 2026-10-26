@@ -82,7 +82,10 @@ describe('StudentProfileScreen', () => {
     await renderWithProviders(<StudentProfileScreen />);
     await screen.findByTestId('student-institute');
 
-    await fireEvent.changeText(screen.getByTestId('student-course'), 'B.Tech Computer Science');
+    await fireEvent.changeText(
+      await screen.findByTestId('student-course'),
+      'B.Tech Computer Science',
+    );
     await fireEvent.press(screen.getByTestId('student-year-YEAR_3'));
     expect(screen.getByTestId('student-year-YEAR_3').props.accessibilityState.selected).toBe(
       true,

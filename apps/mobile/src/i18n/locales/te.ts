@@ -12,6 +12,7 @@ const te: Translation = {
   },
   home: {
     title: 'మీకు ఏ సహాయం కావాలి?',
+    titleNamed: 'నమస్తే {{name}}, మీకు ఏ సహాయం కావాలి?',
     subtitle: 'మీ దగ్గరలోని ధృవీకరించబడిన రేంజర్లు',
   },
   states: {
@@ -381,6 +382,7 @@ const te: Translation = {
   },
   work: {
     title: 'పని',
+    titleNamed: 'నమస్తే {{name}}, పనికి సిద్ధంగా ఉన్నారా?',
     offline: 'మీరు ఆఫ్‌లైన్‌లో ఉన్నారు',
     online: 'మీరు ఆన్‌లైన్‌లో ఉన్నారు',
     goOnline: 'ఆన్‌లైన్ అవ్వండి',

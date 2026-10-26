@@ -12,6 +12,7 @@ const kn: Translation = {
   },
   home: {
     title: 'ನಿಮಗೆ ಯಾವ ಸಹಾಯ ಬೇಕು?',
+    titleNamed: 'ನಮಸ್ಕಾರ {{name}}, ನಿಮಗೆ ಯಾವ ಸಹಾಯ ಬೇಕು?',
     subtitle: 'ನಿಮ್ಮ ಹತ್ತಿರದ ಪರಿಶೀಲಿತ ರೇಂಜರ್‌ಗಳು',
   },
   states: {
@@ -381,6 +382,7 @@ const kn: Translation = {
   },
   work: {
     title: 'ಕೆಲಸ',
+    titleNamed: 'ನಮಸ್ಕಾರ {{name}}, ಕೆಲಸಕ್ಕೆ ಸಿದ್ಧರಿದ್ದೀರಾ?',
     offline: 'ನೀವು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ',
     online: 'ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ',
     goOnline: 'ಆನ್‌ಲೈನ್ ಆಗಿ',

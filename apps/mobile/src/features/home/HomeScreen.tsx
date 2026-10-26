@@ -3,7 +3,9 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useCategories } from '../../api/hooks';
+import { useSession } from '../../auth/session';
 import { EmptyState, ErrorState, Screen, Skeleton, Text } from '../../components';
+import { firstName } from '../../lib/name';
 import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
 
@@ -17,11 +19,12 @@ export function HomeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { data, isLoading, isError, error, refetch } = useCategories();
+  const name = useSession((s) => firstName(s.user?.fullName));
 
   return (
     <Screen scroll>
       <View style={{ gap: spacing.xs }}>
-        <Text variant="title">{t('home.title')}</Text>
+        <Text variant="title">{name ? t('home.titleNamed', { name }) : t('home.title')}</Text>
         <Text color="textMuted">{t('home.subtitle')}</Text>
       </View>
 

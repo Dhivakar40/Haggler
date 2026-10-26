@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import i18n from '../i18n';
 import { useSettings } from '../store/settings';
-import { mockFetchOnce, renderWithProviders } from '../test-utils';
+import { mockFetchOnce, renderWithProviders, signInAs } from '../test-utils';
 import { HomeScreen } from './home/HomeScreen';
 import { SettingsScreen } from './settings/SettingsScreen';
 
@@ -36,6 +36,20 @@ describe('HomeScreen', () => {
     expect(await screen.findByText('Electrician')).toBeTruthy();
     expect(screen.getByText('Plumber')).toBeTruthy();
     expect(screen.getByText('Verified Rangers near you')).toBeTruthy();
+  });
+
+  it('(D-104) greets a signed-in user by their first name', async () => {
+    signInAs({ fullName: 'Asha Raman' });
+    mockFetchOnce({ '/v1/categories': { body: categories } });
+    await renderWithProviders(<HomeScreen />);
+    expect(await screen.findByText('Hi Asha, what do you need help with?')).toBeTruthy();
+  });
+
+  it('(D-104) falls back to the plain greeting when no name is on file', async () => {
+    signInAs({ fullName: null });
+    mockFetchOnce({ '/v1/categories': { body: categories } });
+    await renderWithProviders(<HomeScreen />);
+    expect(await screen.findByText('What do you need help with?')).toBeTruthy();
   });
 
   it('shows a skeleton while loading, gone once the categories arrive', async () => {

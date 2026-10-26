@@ -29,6 +29,7 @@ import {
 } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { isActive } from '../../lib/job-status';
+import { firstName } from '../../lib/name';
 import { formatRupees, parseRupeesToPaise } from '../../lib/money';
 import { ensureForegroundPermission } from '../../location/tracker';
 import { spacing } from '../../theme/tokens';
@@ -154,6 +155,7 @@ export function WorkScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const tier = useSession((s) => s.user?.workerKycTier ?? 0);
+  const name = useSession((s) => firstName(s.user?.fullName));
   const refreshMe = useSession((s) => s.refreshMe);
   // KYC approval happens on the admin side, asynchronously — the session's cached
   // workerKycTier only updates when we ask, so ask every time this tab gains focus (e.g. a
@@ -258,7 +260,7 @@ export function WorkScreen() {
 
   return (
     <Screen scroll>
-      <Text variant="title">{t('work.title')}</Text>
+      <Text variant="title">{name ? t('work.titleNamed', { name }) : t('work.title')}</Text>
       {/* Flat — not elevated. Going online/offline is a standing status, not a decision the page
           is asking the Ranger to make right now (contrast with IncomingCard above). */}
       <Card>

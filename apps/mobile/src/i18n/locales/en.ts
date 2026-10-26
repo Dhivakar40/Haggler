@@ -10,6 +10,7 @@ const en = {
   },
   home: {
     title: 'What do you need help with?',
+    titleNamed: 'Hi {{name}}, what do you need help with?',
     subtitle: 'Verified Rangers near you',
   },
   states: {
@@ -379,6 +380,7 @@ const en = {
   },
   work: {
     title: 'Work',
+    titleNamed: 'Hi {{name}}, ready to work?',
     offline: 'You are offline',
     online: 'You are online',
     goOnline: 'Go online',

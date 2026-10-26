@@ -6,6 +6,7 @@ const hi: Translation = {
   tabs: { home: 'सेवाएँ', account: 'खाता', settings: 'सेटिंग्स', activity: 'गतिविधि', work: 'काम' },
   home: {
     title: 'आपको किस काम में मदद चाहिए?',
+    titleNamed: 'नमस्ते {{name}}, आपको किस काम में मदद चाहिए?',
     subtitle: 'आपके पास सत्यापित रेंजर',
   },
   states: {
@@ -373,6 +374,7 @@ const hi: Translation = {
   },
   work: {
     title: 'काम',
+    titleNamed: 'नमस्ते {{name}}, काम के लिए तैयार हैं?',
     offline: 'आप ऑफ़लाइन हैं',
     online: 'आप ऑनलाइन हैं',
     goOnline: 'ऑनलाइन हों',

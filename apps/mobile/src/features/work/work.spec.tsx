@@ -132,6 +132,13 @@ describe('WorkScreen', () => {
     expect(await screen.findByTestId('toggle-online')).toBeTruthy();
   });
 
+  it('(D-104) greets the Ranger by their first name', async () => {
+    signInAs({ roles: ['CUSTOMER', 'WORKER'], workerKycTier: 2, fullName: 'Ravi Kumar' });
+    backend();
+    await renderWithProviders(<WorkScreen />);
+    expect(await screen.findByText('Hi Ravi, ready to work?')).toBeTruthy();
+  });
+
   it('starts offline; going online sends the real GPS position and then shows the waiting state', async () => {
     const { calls } = backend();
     await renderWithProviders(<WorkScreen />);
