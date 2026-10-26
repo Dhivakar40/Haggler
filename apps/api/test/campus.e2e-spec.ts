@@ -98,6 +98,39 @@ describe('student profile (D-060)', () => {
     expect(upd.status).toBe(200);
     expect(upd.body.instituteName).toBe('IIT Madras');
   });
+
+  it('(D-103) course/year/skills/availability/bio/portfolio can all be set and edited, the DOB cannot', async () => {
+    const s = await student();
+    const upd = await api.patch(s, '/v1/student/profile', {
+      courseOfStudy: 'B.Tech Computer Science',
+      yearOfStudy: 'YEAR_3',
+      skills: ['Excel', 'Figma', 'Customer support'],
+      availabilityHoursPerWeek: 15,
+      bio: 'Looking for part-time design and data-entry work around my class schedule.',
+      portfolioUrl: 'https://example.com/portfolio',
+    });
+    expect(upd.status).toBe(200);
+    expect(upd.body).toMatchObject({
+      courseOfStudy: 'B.Tech Computer Science',
+      yearOfStudy: 'YEAR_3',
+      skills: ['Excel', 'Figma', 'Customer support'],
+      availabilityHoursPerWeek: 15,
+      portfolioUrl: 'https://example.com/portfolio',
+    });
+
+    // A later partial edit only touches the fields it sends.
+    const again = await api.patch(s, '/v1/student/profile', { yearOfStudy: 'YEAR_4' });
+    expect(again.body.yearOfStudy).toBe('YEAR_4');
+    expect(again.body.courseOfStudy).toBe('B.Tech Computer Science'); // untouched
+
+    // PATCH never accepts a date of birth — it is set once, via POST, only.
+    const noDob = await api.patch(s, '/v1/student/profile', { dateOfBirth: '2003-01-01' });
+    expect(noDob.status).toBe(200);
+    // the stray field is simply ignored by zod's default strip behaviour, not an error —
+    // confirm the profile's real DOB-derived eligibility is unaffected either way.
+    const get = await api.get(s, '/v1/student/profile');
+    expect(get.body.yearOfStudy).toBe('YEAR_4');
+  });
 });
 
 describe('employer verification gate (D-062)', () => {

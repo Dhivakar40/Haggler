@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { StudentProfileDto, StudentProfileUpdate } from '@haggler/shared';
+import type {
+  StudentProfileDetailsUpdate,
+  StudentProfileDto,
+  StudentProfileUpdate,
+} from '@haggler/shared';
 import { EncryptionService } from '../common/crypto';
 import { conflict, notFound, unprocessable } from '../common/http-errors';
 import { ageInYears, isValidPastDate } from '../kyc/kyc.rules';
@@ -18,10 +22,30 @@ export class StudentProfileService {
     private readonly encryption: EncryptionService,
   ) {}
 
+  private toDto(sp: {
+    instituteName: string | null;
+    courseOfStudy: string | null;
+    yearOfStudy: string | null;
+    skills: string[];
+    availabilityHoursPerWeek: number | null;
+    bio: string | null;
+    portfolioUrl: string | null;
+  }): StudentProfileDto {
+    return {
+      instituteName: sp.instituteName,
+      courseOfStudy: sp.courseOfStudy,
+      yearOfStudy: sp.yearOfStudy as StudentProfileDto['yearOfStudy'],
+      skills: sp.skills,
+      availabilityHoursPerWeek: sp.availabilityHoursPerWeek,
+      bio: sp.bio,
+      portfolioUrl: sp.portfolioUrl,
+    };
+  }
+
   async get(userId: string): Promise<StudentProfileDto> {
     const sp = await this.prisma.studentProfile.findUnique({ where: { userId } });
     if (!sp) throw notFound('Student profile not found');
-    return { instituteName: sp.instituteName };
+    return this.toDto(sp);
   }
 
   async create(userId: string, input: StudentProfileUpdate): Promise<StudentProfileDto> {
@@ -44,19 +68,31 @@ export class StudentProfileService {
         instituteName: input.instituteName ?? null,
       },
     });
-    return { instituteName: sp.instituteName };
+    return this.toDto(sp);
   }
 
-  /** Only the institute name may be edited after creation; the DOB is set once (see class doc). */
-  async updateInstitute(
+  /** D-103: everything except the date of birth may be edited any time (see class doc for why
+   * the DOB alone is set once). Only fields actually present in `input` are touched, so a
+   * partial save (e.g. just adding a skill) never blanks out the rest. */
+  async updateDetails(
     userId: string,
-    instituteName: string | undefined,
+    input: StudentProfileDetailsUpdate,
   ): Promise<StudentProfileDto> {
     const sp = await this.prisma.studentProfile.update({
       where: { userId },
-      data: { instituteName: instituteName ?? null },
+      data: {
+        ...(input.instituteName !== undefined ? { instituteName: input.instituteName } : {}),
+        ...(input.courseOfStudy !== undefined ? { courseOfStudy: input.courseOfStudy } : {}),
+        ...(input.yearOfStudy !== undefined ? { yearOfStudy: input.yearOfStudy } : {}),
+        ...(input.skills !== undefined ? { skills: input.skills } : {}),
+        ...(input.availabilityHoursPerWeek !== undefined
+          ? { availabilityHoursPerWeek: input.availabilityHoursPerWeek }
+          : {}),
+        ...(input.bio !== undefined ? { bio: input.bio } : {}),
+        ...(input.portfolioUrl !== undefined ? { portfolioUrl: input.portfolioUrl } : {}),
+      },
     });
-    return { instituteName: sp.instituteName };
+    return this.toDto(sp);
   }
 
   /** Used by ApplicationsService: throws unless the account is an adult with a profile on file. */

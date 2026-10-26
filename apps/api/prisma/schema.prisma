@@ -1961,6 +1961,16 @@ model StudentProfile {
   /// AES-256-GCM ciphertext (EncryptionService), same pattern as WorkerProfile.dateOfBirthEnc.
   dateOfBirthEnc String   @map("date_of_birth_enc")
   instituteName  String?  @map("institute_name")
+  /// D-103: the professional/skills detail a student fills in once, editable any time after
+  /// (unlike dateOfBirthEnc above, which is set once for the 18+ anti-fraud reason documented
+  /// on StudentProfileService). All optional — a thin profile still works, this just makes a
+  /// complete one worth filling in.
+  courseOfStudy            String?  @map("course_of_study")
+  yearOfStudy              String?  @map("year_of_study")
+  skills                   String[] @default([])
+  availabilityHoursPerWeek Int?     @map("availability_hours_per_week")
+  bio                      String?
+  portfolioUrl             String?  @map("portfolio_url")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

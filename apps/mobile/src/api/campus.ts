@@ -9,6 +9,7 @@ import {
   type CreateCampusListingInput,
   myCampusApplicationPageSchema,
   paymentOrderStartSchema,
+  type StudentProfileDetailsUpdate,
   type StudentProfileDto,
   studentProfileSchema,
   type StudentProfileUpdate,
@@ -17,17 +18,13 @@ import {
 import { z } from 'zod';
 import { apiRequest } from './client';
 
-/** Student profile (D-060) */
+/** Student profile (D-060/D-103) */
 export const getStudentProfile = () =>
   apiRequest('/v1/student/profile', { schema: studentProfileSchema });
 export const createStudentProfile = (body: StudentProfileUpdate) =>
   apiRequest('/v1/student/profile', { method: 'POST', body, schema: studentProfileSchema });
-export const updateStudentInstitute = (instituteName: string | undefined) =>
-  apiRequest('/v1/student/profile', {
-    method: 'PATCH',
-    body: { instituteName },
-    schema: studentProfileSchema,
-  });
+export const updateStudentProfileDetails = (body: StudentProfileDetailsUpdate) =>
+  apiRequest('/v1/student/profile', { method: 'PATCH', body, schema: studentProfileSchema });
 
 export function useStudentProfile(enabled: boolean) {
   return useQuery<StudentProfileDto, unknown>({

@@ -11,6 +11,20 @@ import { contractApplicationStatusSchema, contractListingStatusSchema } from './
 const uuid = z.string().uuid();
 const dobSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 
+/** D-103: how far along a student is — free enough to cover diploma/postgraduate without a
+ * rigid enum, specific enough to show up as a small set of chips in the app. */
+export const YEARS_OF_STUDY = [
+  'YEAR_1',
+  'YEAR_2',
+  'YEAR_3',
+  'YEAR_4',
+  'POSTGRADUATE',
+  'GRADUATED',
+] as const;
+export const yearOfStudySchema = z.enum(YEARS_OF_STUDY);
+export type YearOfStudy = z.infer<typeof yearOfStudySchema>;
+export const MAX_STUDENT_SKILLS = 10;
+
 export const studentProfileUpdateSchema = z.object({
   /** Self-declared, hard-blocked in code if it computes to under 18 (D-060/D-063). Once a
    * profile exists this cannot be changed (see StudentProfileService) — it is set once. */
@@ -19,8 +33,28 @@ export const studentProfileUpdateSchema = z.object({
 });
 export type StudentProfileUpdate = z.infer<typeof studentProfileUpdateSchema>;
 
+/** D-103: the professional/skills detail, editable any time after the profile exists (unlike
+ * dateOfBirth above) — kept as its own schema so the immutable DOB can never accidentally be
+ * accepted on this path. */
+export const studentProfileDetailsSchema = z.object({
+  instituteName: z.string().trim().max(120).optional(),
+  courseOfStudy: z.string().trim().max(120).optional(),
+  yearOfStudy: yearOfStudySchema.optional(),
+  skills: z.array(z.string().trim().min(1).max(40)).max(MAX_STUDENT_SKILLS).optional(),
+  availabilityHoursPerWeek: z.number().int().min(1).max(80).optional(),
+  bio: z.string().trim().max(500).optional(),
+  portfolioUrl: z.string().trim().url().max(300).optional(),
+});
+export type StudentProfileDetailsUpdate = z.infer<typeof studentProfileDetailsSchema>;
+
 export const studentProfileSchema = z.object({
   instituteName: z.string().nullable(),
+  courseOfStudy: z.string().nullable(),
+  yearOfStudy: yearOfStudySchema.nullable(),
+  skills: z.array(z.string()),
+  availabilityHoursPerWeek: z.number().int().nullable(),
+  bio: z.string().nullable(),
+  portfolioUrl: z.string().nullable(),
 });
 export type StudentProfileDto = z.infer<typeof studentProfileSchema>;
 

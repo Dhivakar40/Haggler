@@ -4,6 +4,7 @@ import {
   applyToCampusSchema,
   campusDecisionSchema,
   createCampusListingSchema,
+  studentProfileDetailsSchema,
   studentProfileUpdateSchema,
   updateCampusListingSchema,
 } from '@haggler/shared';
@@ -23,8 +24,6 @@ const browseQuery = listQuery.extend({
   categorySlug: z.string().min(1).optional(),
   city: z.string().min(1).optional(),
 });
-/** Only the institute name is patchable after creation; the DOB is set once via POST. */
-const studentInstituteSchema = z.object({ instituteName: z.string().trim().max(120).optional() });
 
 @ApiTags('student')
 @ApiBearerAuth()
@@ -52,13 +51,17 @@ export class StudentProfileController {
   }
 
   @Patch()
-  @ApiOperation({ summary: 'Update my institute name (the date of birth cannot be changed here)' })
-  @ApiZodBody(studentInstituteSchema)
+  @ApiOperation({
+    summary:
+      'Update course/year/skills/availability/bio/portfolio/institute (the date of birth cannot be changed here)',
+  })
+  @ApiZodBody(studentProfileDetailsSchema)
   update(
     @CurrentUser() u: AuthUser,
-    @Body(new ZodPipe(studentInstituteSchema)) body: z.infer<typeof studentInstituteSchema>,
+    @Body(new ZodPipe(studentProfileDetailsSchema))
+    body: z.infer<typeof studentProfileDetailsSchema>,
   ) {
-    return this.students.updateInstitute(u.id, body.instituteName);
+    return this.students.updateDetails(u.id, body);
   }
 }
 
