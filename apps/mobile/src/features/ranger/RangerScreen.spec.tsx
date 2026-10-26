@@ -110,8 +110,16 @@ describe('RangerScreen', () => {
     expect(screen.getByTestId('tier-2-action')).toBeTruthy();
   });
 
-  it('lets a Ranger choose up to 5 categories and saves them', async () => {
-    const { calls } = backend({ tier: 0, checks: [] });
+  it('(D-102) the category editor is hidden until level 2 is verified — picking happens in the level-2 KYC screen now', async () => {
+    backend({ tier: 0, checks: [] });
+    await renderWithProviders(<RangerScreen />);
+    await screen.findByTestId('tier-1-status');
+    expect(screen.queryByTestId('cat-electrician')).toBeNull();
+    expect(screen.queryByText('What work do you do?')).toBeNull();
+  });
+
+  it('lets an already-verified Ranger edit their categories afterward', async () => {
+    const { calls } = backend({ tier: 2, checks: [check(1, 'APPROVED'), check(2, 'APPROVED')] });
     await renderWithProviders(<RangerScreen />);
     await screen.findByTestId('cat-electrician');
     for (const slug of ['electrician', 'plumber', 'cleaner', 'carpenter', 'painter', 'ac_repair'])
@@ -128,8 +136,8 @@ describe('RangerScreen', () => {
 
   it('pre-selects the categories already saved', async () => {
     backend(
-      { tier: 0, checks: [] },
-      { kycTier: 0, bio: null, experienceYears: null, categorySlugs: ['plumber'] },
+      { tier: 2, checks: [check(1, 'APPROVED'), check(2, 'APPROVED')] },
+      { kycTier: 2, bio: null, experienceYears: null, categorySlugs: ['plumber'] },
     );
     await renderWithProviders(<RangerScreen />);
     await waitFor(() =>

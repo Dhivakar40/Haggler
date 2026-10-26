@@ -4,6 +4,7 @@ import i18n from '../../i18n';
 import {
   iso,
   makeJob,
+  makeMe,
   mockApi,
   type MockCall,
   renderWithProviders,
@@ -114,6 +115,21 @@ describe('WorkScreen', () => {
     expect(screen.queryByTestId('toggle-online')).toBeNull();
     await fireEvent.press(screen.getByTestId('open-verification'));
     expect(routerMock().push).toHaveBeenCalledWith('/ranger');
+  });
+
+  it('(D-102) refreshes the session on focus, so a just-approved Ranger stops seeing the stale block', async () => {
+    // The session was cached before KYC approval (tier 1); the server now says tier 2 — the
+    // screen should pick that up on its own instead of needing a sign-out/sign-in.
+    signInAs({ roles: ['CUSTOMER', 'WORKER'], workerKycTier: 1 });
+    mockApi((c) => {
+      if (c.path === '/v1/me') return { body: makeMe({ roles: ['CUSTOMER', 'WORKER'], workerKycTier: 2 }) };
+      if (c.path === '/v1/worker/presence') return { body: { isOnline: false } };
+      if (c.path === '/v1/worker/incoming') return { body: [] };
+      if (c.path.startsWith('/v1/jobs')) return { body: { items: [], nextCursor: null } };
+    });
+    await renderWithProviders(<WorkScreen />);
+    await waitFor(() => expect(screen.queryByTestId('needs-verification')).toBeNull());
+    expect(await screen.findByTestId('toggle-online')).toBeTruthy();
   });
 
   it('starts offline; going online sends the real GPS position and then shows the waiting state', async () => {

@@ -38,7 +38,7 @@ export function ClientLeagueScreen() {
   if (status.isError || !status.data)
     return (
       <Screen>
-        <ErrorState onRetry={() => void status.refetch()} />
+        <ErrorState error={status.error} onRetry={() => void status.refetch()} />
       </Screen>
     );
 

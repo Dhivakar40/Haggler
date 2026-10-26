@@ -105,6 +105,30 @@ describe('PhoneScreen', () => {
     expect(await screen.findByText('Enter a valid email address.')).toBeTruthy();
     expect(calls).toHaveLength(0);
   });
+
+  it('(D-102) a phone-number error does not get attached to the email field when email mode is on', async () => {
+    const { calls } = mockApi(() => undefined);
+    await renderWithProviders(<PhoneScreen />);
+    await fireEvent.press(screen.getByTestId('toggle-email'));
+    await fireEvent.changeText(screen.getByTestId('email-input'), 'tester@example.com');
+    // Phone left empty — the exact bug report: filling only email showed the phone-invalid
+    // message underneath the email field instead of the phone field.
+    await fireEvent.press(screen.getByTestId('send-code'));
+    expect(await screen.findByText('Enter a valid 10-digit Indian mobile number.')).toBeTruthy();
+    expect(screen.queryByText('Enter a valid email address.')).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('(D-102) explains that the phone number is still needed once email mode is on', async () => {
+    mockApi(() => undefined);
+    await renderWithProviders(<PhoneScreen />);
+    await fireEvent.press(screen.getByTestId('toggle-email'));
+    expect(
+      await screen.findByText(
+        "We still need your mobile number for your account — we'll just send the code to your email instead.",
+      ),
+    ).toBeTruthy();
+  });
 });
 
 describe('OtpScreen', () => {

@@ -110,7 +110,9 @@ describe('JobScreen: shared behaviour', () => {
   it('shows an error state when the job cannot be loaded', async () => {
     mockApi(() => ({ status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } }));
     await renderWithProviders(<JobScreen />);
-    expect(await screen.findByText('Could not load this. Check your connection.')).toBeTruthy();
+    // D-102: ErrorState now shows what actually went wrong instead of always claiming a
+    // connection problem.
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
   });
 
   it('a customer whose request is still being broadcast is sent to the request screen', async () => {
@@ -853,7 +855,9 @@ describe('JobScreen: reviews and blocking (Phase 4)', () => {
     await renderWithProviders(<JobScreen />);
     await fireEvent.press(await screen.findByTestId('block-user'));
     await fireEvent.press(screen.getByTestId('block-dialog-confirm'));
-    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+    // D-102: errorMessage() now gives NOT_FOUND its own specific message instead of the generic
+    // fallback.
+    expect(await screen.findByText("That couldn't be found.")).toBeTruthy();
     expect(screen.getByTestId('block-user')).toBeTruthy();
   });
 });

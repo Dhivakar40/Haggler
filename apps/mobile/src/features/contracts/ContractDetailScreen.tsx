@@ -68,7 +68,7 @@ export function ContractDetailScreen() {
   if (listing.isError || !listing.data)
     return (
       <Screen>
-        <ErrorState onRetry={() => void listing.refetch()} />
+        <ErrorState error={listing.error} onRetry={() => void listing.refetch()} />
       </Screen>
     );
 

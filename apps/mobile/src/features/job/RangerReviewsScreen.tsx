@@ -9,7 +9,7 @@ import { spacing } from '../../theme/tokens';
 export function RangerReviewsScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, isLoading, isError, refetch } = useWorkerReviews(id);
+  const { data, isLoading, isError, error, refetch } = useWorkerReviews(id);
 
   if (isLoading)
     return (
@@ -20,7 +20,7 @@ export function RangerReviewsScreen() {
   if (isError || !data)
     return (
       <Screen>
-        <ErrorState onRetry={() => void refetch()} />
+        <ErrorState error={error} onRetry={() => void refetch()} />
       </Screen>
     );
 

@@ -1,16 +1,29 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
-import { type KycCheckDto, kycReferenceInputSchema, LEGAL_VERSION } from '@haggler/shared';
+import {
+  type KycCheckDto,
+  kycReferenceInputSchema,
+  LEGAL_VERSION,
+  MAX_WORKER_CATEGORIES,
+} from '@haggler/shared';
+import { useCategories } from '../../api/hooks';
 import { ApiError } from '../../api/client';
-import { grantConsent, startKyc, submitKyc } from '../../api/endpoints';
+import {
+  getWorkerProfile,
+  grantConsent,
+  startKyc,
+  submitKyc,
+  updateWorkerProfile,
+} from '../../api/endpoints';
 import { useSession } from '../../auth/session';
 import {
   Button,
   Card,
+  Chip,
   ErrorState,
   LoadingState,
   Screen,
@@ -35,9 +48,32 @@ export function KycScreen() {
 
   const [check, setCheck] = useState<KycCheckDto | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [loadError, setLoadError] = useState<unknown>();
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
+
+  // D-102: tier 2 ("ready to work") picks the categories the Ranger works in right here,
+  // instead of a separate screen the person has to find on their own first — the backend
+  // requires at least one category to submit tier 2 at all, so this makes the UI match that.
+  const categories = useCategories(tier === 2);
+  const profile = useQuery({
+    queryKey: ['worker-profile'],
+    queryFn: getWorkerProfile,
+    enabled: tier === 2,
+  });
+  const [picked, setPicked] = useState<string[]>([]);
+  useEffect(() => {
+    if (profile.data) setPicked(profile.data.categorySlugs);
+  }, [profile.data]);
+  const toggleCategory = (slug: string) =>
+    setPicked((cur) =>
+      cur.includes(slug)
+        ? cur.filter((s) => s !== slug)
+        : cur.length < MAX_WORKER_CATEGORIES
+          ? [...cur, slug]
+          : cur,
+    );
   const [ref, setRef] = useState({ name: '', phone: '', relationship: '' });
 
   const needsConsent = user?.missingConsents.includes('KYC_PROCESSING') ?? true;
@@ -47,8 +83,9 @@ export function KycScreen() {
     setLoadFailed(false);
     try {
       setCheck(await startKyc(tier));
-    } catch {
+    } catch (err) {
       setLoadFailed(true);
+      setLoadError(err);
     }
   }, [tier]);
 
@@ -117,13 +154,16 @@ export function KycScreen() {
         phone: normalizeIndianPhone(ref.phone) ?? '',
       });
       if (!parsed.success) return setMessage(t('contacts.invalid'));
+      if (picked.length === 0) return setMessage(t('kyc.needCategories'));
       reference = parsed.data;
     }
     setSubmitting(true);
     setMessage(undefined);
     try {
+      if (tier === 2) await updateWorkerProfile({ categorySlugs: picked });
       await submitKyc({ checkId: check.id, reference });
       await qc.invalidateQueries({ queryKey: KYC_STATUS_KEY });
+      await qc.invalidateQueries({ queryKey: ['worker-profile'] });
       router.back();
     } catch (err) {
       const missing =
@@ -153,7 +193,7 @@ export function KycScreen() {
   if (loadFailed)
     return (
       <Screen>
-        <ErrorState onRetry={() => void load()} />
+        <ErrorState error={loadError} onRetry={() => void load()} />
       </Screen>
     );
   if (!check)
@@ -221,6 +261,26 @@ export function KycScreen() {
           </Card>
         );
       })}
+
+      {tier === 2 && editable ? (
+        <Card>
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="heading">{t('ranger.categories')}</Text>
+            <Text color="textMuted">{t('ranger.categoriesHint')}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+              {categories.data?.map((c) => (
+                <Chip
+                  key={c.slug}
+                  testID={`cat-${c.slug}`}
+                  label={t(c.nameKey)}
+                  selected={picked.includes(c.slug)}
+                  onPress={() => toggleCategory(c.slug)}
+                />
+              ))}
+            </View>
+          </View>
+        </Card>
+      ) : null}
 
       {tier === 2 && editable ? (
         <Card>

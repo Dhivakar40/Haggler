@@ -15,15 +15,27 @@ export function PhoneScreen() {
   const [raw, setRaw] = useState('');
   const [useEmail, setUseEmail] = useState(false);
   const [email, setEmail] = useState('');
-  const [error, setError] = useState<string>();
+  const [phoneError, setPhoneError] = useState<string>();
+  const [emailError, setEmailError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    setPhoneError(undefined);
+    setEmailError(undefined);
     const phone = normalizeIndianPhone(raw);
-    if (!phone) return setError(t('auth.phoneInvalid'));
     const trimmedEmail = email.trim();
-    if (useEmail && !isValidEmail(trimmedEmail)) return setError(t('auth.emailInvalid'));
-    setError(undefined);
+    let hasError = false;
+    // The phone number is still the account's identity even when the code goes out by email —
+    // it's a delivery-channel choice, not a different way to sign in — so it's always required.
+    if (!phone) {
+      setPhoneError(t('auth.phoneInvalid'));
+      hasError = true;
+    }
+    if (useEmail && !isValidEmail(trimmedEmail)) {
+      setEmailError(t('auth.emailInvalid'));
+      hasError = true;
+    }
+    if (hasError || !phone) return;
     setBusy(true);
     try {
       await sendOtp(phone, useEmail ? trimmedEmail : undefined);
@@ -32,7 +44,7 @@ export function PhoneScreen() {
         params: useEmail ? { phone, email: trimmedEmail } : { phone },
       });
     } catch (err) {
-      setError(errorMessage(err, t));
+      setPhoneError(errorMessage(err, t));
     } finally {
       setBusy(false);
     }
@@ -56,19 +68,22 @@ export function PhoneScreen() {
           keyboardType="phone-pad"
           autoComplete="tel"
           maxLength={16}
-          error={useEmail ? undefined : error}
+          error={phoneError}
         />
         {useEmail ? (
-          <TextField
-            testID="email-input"
-            label={t('auth.emailLabel')}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoComplete="email"
-            autoCapitalize="none"
-            error={error}
-          />
+          <>
+            <Text color="textMuted">{t('auth.emailStillNeedsPhone')}</Text>
+            <TextField
+              testID="email-input"
+              label={t('auth.emailLabel')}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoComplete="email"
+              autoCapitalize="none"
+              error={emailError}
+            />
+          </>
         ) : null}
         <Button
           testID="send-code"
@@ -81,7 +96,8 @@ export function PhoneScreen() {
           variant="secondary"
           title={useEmail ? t('auth.useSmsInstead') : t('auth.emailInstead')}
           onPress={() => {
-            setError(undefined);
+            setPhoneError(undefined);
+            setEmailError(undefined);
             setUseEmail((v) => !v);
           }}
         />

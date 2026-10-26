@@ -28,7 +28,7 @@ export function MyApplicationsScreen() {
   if (applications.isError)
     return (
       <Screen>
-        <ErrorState onRetry={() => void applications.refetch()} />
+        <ErrorState error={applications.error} onRetry={() => void applications.refetch()} />
       </Screen>
     );
 

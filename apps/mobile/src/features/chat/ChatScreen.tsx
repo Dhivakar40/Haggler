@@ -98,7 +98,7 @@ export function ChatScreen() {
   if (thread.isError || !threadId)
     return (
       <Screen>
-        <ErrorState onRetry={() => void thread.refetch()} />
+        <ErrorState error={thread.error} onRetry={() => void thread.refetch()} />
       </Screen>
     );
 

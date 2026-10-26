@@ -65,6 +65,8 @@ const en = {
     yes: 'Yes',
     no: 'No',
     error: 'Something went wrong. Please try again.',
+    forbidden: "You don't have access to this.",
+    notFound: "That couldn't be found.",
   },
   auth: {
     tagline: 'Verified Rangers, fair prices.',
@@ -74,6 +76,7 @@ const en = {
     sendCode: 'Send code',
     phoneInvalid: 'Enter a valid 10-digit Indian mobile number.',
     emailInstead: 'Send the code to my email instead',
+    emailStillNeedsPhone: "We still need your mobile number for your account — we'll just send the code to your email instead.",
     useSmsInstead: 'Send the code by SMS instead',
     emailLabel: 'Email address',
     emailInvalid: 'Enter a valid email address.',

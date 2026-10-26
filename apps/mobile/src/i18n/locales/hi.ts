@@ -61,6 +61,8 @@ const hi: Translation = {
     yes: 'हाँ',
     no: 'नहीं',
     error: 'कुछ गड़बड़ हो गई। कृपया फिर कोशिश करें।',
+    forbidden: 'आपको इसकी अनुमति नहीं है।',
+    notFound: 'वह नहीं मिला।',
   },
   auth: {
     tagline: 'सत्यापित रेंजर, उचित दाम।',
@@ -70,6 +72,7 @@ const hi: Translation = {
     sendCode: 'कोड भेजें',
     phoneInvalid: 'सही 10 अंकों का भारतीय मोबाइल नंबर दर्ज करें।',
     emailInstead: 'इसके बजाय ईमेल पर कोड भेजें',
+    emailStillNeedsPhone: 'आपके खाते के लिए हमें अब भी आपका मोबाइल नंबर चाहिए — हम कोड बस आपके ईमेल पर भेज देंगे।',
     useSmsInstead: 'इसके बजाय SMS पर कोड भेजें',
     emailLabel: 'ईमेल पता',
     emailInvalid: 'एक सही ईमेल पता दर्ज करें।',

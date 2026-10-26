@@ -14,7 +14,7 @@ export function ActivityScreen() {
   const router = useRouter();
   const isRanger = useSession((s) => s.user?.roles.includes('WORKER') ?? false);
   const [role, setRole] = useState<'CUSTOMER' | 'WORKER'>('CUSTOMER');
-  const { data, isLoading, isError, refetch } = useJobs(role);
+  const { data, isLoading, isError, error, refetch } = useJobs(role);
 
   return (
     <Screen scroll>
@@ -36,7 +36,7 @@ export function ActivityScreen() {
         </View>
       ) : null}
       {isLoading && <LoadingState />}
-      {isError && <ErrorState onRetry={() => void refetch()} />}
+      {isError && <ErrorState error={error} onRetry={() => void refetch()} />}
       {data?.items.length === 0 && <EmptyState message={t('activity.empty')} />}
       {data?.items.map((j) => (
         <Card

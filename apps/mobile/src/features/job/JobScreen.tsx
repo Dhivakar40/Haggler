@@ -33,7 +33,7 @@ export function JobScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: job, isLoading, isError, refetch } = useJob(id);
+  const { data: job, isLoading, isError, error, refetch } = useJob(id);
   const action = useJobAction(id as string);
   const [blockBusy, setBlockBusy] = useState(false);
   const [blockError, setBlockError] = useState<string>();
@@ -55,7 +55,7 @@ export function JobScreen() {
   if (isError || !job)
     return (
       <Screen>
-        <ErrorState onRetry={() => void refetch()} />
+        <ErrorState error={error} onRetry={() => void refetch()} />
       </Screen>
     );
 

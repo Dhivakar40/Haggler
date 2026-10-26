@@ -16,7 +16,7 @@ export function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
-  const { data, isLoading, isError, refetch } = useCategories();
+  const { data, isLoading, isError, error, refetch } = useCategories();
 
   return (
     <Screen scroll>
@@ -35,7 +35,7 @@ export function HomeScreen() {
           ))}
         </View>
       ) : null}
-      {isError && <ErrorState onRetry={() => void refetch()} />}
+      {isError && <ErrorState error={error} onRetry={() => void refetch()} />}
       {data && data.length === 0 && <EmptyState />}
 
       <View style={styles.grid}>

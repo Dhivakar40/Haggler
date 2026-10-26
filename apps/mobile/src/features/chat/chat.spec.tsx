@@ -79,7 +79,9 @@ describe('ChatScreen', () => {
   it('shows an error state when the thread cannot be loaded', async () => {
     mockApi(() => ({ status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } }));
     await renderWithProviders(<ChatScreen />);
-    expect(await screen.findByText('Could not load this. Check your connection.')).toBeTruthy();
+    // D-102: ErrorState now shows what actually went wrong instead of always claiming a
+    // connection problem.
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
   });
 
   it('shows an empty state with no messages yet', async () => {

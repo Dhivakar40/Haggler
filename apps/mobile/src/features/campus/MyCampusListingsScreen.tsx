@@ -30,7 +30,7 @@ export function MyCampusListingsScreen() {
   if (listings.isError)
     return (
       <Screen>
-        <ErrorState onRetry={() => void listings.refetch()} />
+        <ErrorState error={listings.error} onRetry={() => void listings.refetch()} />
       </Screen>
     );
 

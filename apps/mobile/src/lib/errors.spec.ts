@@ -19,6 +19,16 @@ describe('errorMessage', () => {
     );
   });
 
+  it('(D-102) a 403 says access is missing, not that the connection failed', () => {
+    expect(errorMessage(new ApiError(403, 'FORBIDDEN', 'x'), t)).toBe(
+      "You don't have access to this.",
+    );
+  });
+
+  it('(D-102) a 404 says it could not be found, not that the connection failed', () => {
+    expect(errorMessage(new ApiError(404, 'NOT_FOUND', 'x'), t)).toBe("That couldn't be found.");
+  });
+
   it('a network failure (fetch TypeError) says to check the connection', () => {
     expect(errorMessage(new TypeError('Network request failed'), t)).toBe(
       'Could not load this. Check your connection.',

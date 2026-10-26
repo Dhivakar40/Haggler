@@ -28,11 +28,25 @@ const picker = ImagePicker as unknown as Record<string, jest.Mock>;
 const CHECK_ID = '33333333-3333-4333-8333-333333333333';
 const DOC_ID = '44444444-4444-4444-8444-444444444444';
 
-/** A tiny fake KYC backend: remembers which document types have been confirmed. */
-function backend(tier: 1 | 2, opts: { submit?: Handler } = {}) {
+const CATS = ['electrician', 'plumber'].map((slug, i) => ({
+  id: `00000000-0000-4000-8000-00000000000${i}`,
+  slug,
+  nameKey: `categories.${slug}`,
+  icon: 'flash',
+  requiresLicense: false,
+  inspectionChargePaise: null,
+}));
+
+/** A tiny fake KYC backend: remembers which document types have been confirmed. For tier 2 also
+ * serves /v1/categories and /v1/worker/profile (D-102: category picking now lives here). */
+function backend(
+  tier: 1 | 2,
+  opts: { submit?: Handler; categorySlugs?: string[] } = {},
+) {
   const uploaded = new Set<string>();
   const required = tier === 1 ? ['AADHAAR_FRONT', 'AADHAAR_BACK', 'SELFIE'] : ['ADDRESS_PROOF'];
   let lastType = '';
+  let savedCategories = opts.categorySlugs ?? [];
   const check = (status = 'DRAFT') => ({
     id: CHECK_ID,
     tier,
@@ -46,6 +60,18 @@ function backend(tier: 1 | 2, opts: { submit?: Handler } = {}) {
   const api = mockApi((c) => {
     if (c.path.startsWith('file:')) return { blobSize: 1234 };
     if (c.path === '/v1/kyc/start') return { body: check() };
+    if (c.path === '/v1/categories') return { body: CATS };
+    if (c.path === '/v1/worker/profile') {
+      if (c.method === 'PATCH') {
+        savedCategories = (c.body as { categorySlugs: string[] }).categorySlugs;
+        return {
+          body: { kycTier: 0, bio: null, experienceYears: null, categorySlugs: savedCategories },
+        };
+      }
+      return {
+        body: { kycTier: 0, bio: null, experienceYears: null, categorySlugs: savedCategories },
+      };
+    }
     if (c.path === '/v1/kyc/documents') {
       lastType = (c.body as { type: string }).type;
       return {
@@ -327,31 +353,61 @@ describe('tier 2: address proof + reference', () => {
     expect(calls.some((c) => c.path === '/v1/kyc/submit')).toBe(false);
   });
 
-  it('submits the reference with a normalised phone number', async () => {
+  it('submits the reference with a normalised phone number, after saving the chosen categories', async () => {
     const { calls } = await withProofUploaded();
+    await screen.findByTestId('cat-electrician');
+    await fireEvent.press(screen.getByTestId('cat-electrician'));
     await fireEvent.changeText(screen.getByTestId('ref-name'), 'Suresh Iyer');
     await fireEvent.changeText(screen.getByTestId('ref-phone'), '98450 12345');
     await fireEvent.changeText(screen.getByTestId('ref-relationship'), 'Former employer');
     await fireEvent.press(screen.getByTestId('kyc-submit'));
     await waitFor(() => expect(routerMock().back).toHaveBeenCalled());
+    const patch = calls.find((c) => c.path === '/v1/worker/profile' && c.method === 'PATCH');
+    expect(patch?.body).toEqual({ categorySlugs: ['electrician'] });
+    // The category save happens before the KYC submission, not after.
+    expect(calls.findIndex((c) => c.path === '/v1/worker/profile')).toBeLessThan(
+      calls.findIndex((c) => c.path === '/v1/kyc/submit'),
+    );
     expect(calls.find((c) => c.path === '/v1/kyc/submit')?.body).toEqual({
       checkId: CHECK_ID,
       reference: { name: 'Suresh Iyer', phone: '+919845012345', relationship: 'Former employer' },
     });
   });
 
-  it('tells the Ranger to choose their categories when the server says they are missing', async () => {
-    await withProofUploaded(() => ({
-      status: 422,
-      body: {
-        error: { code: 'UNPROCESSABLE', message: 'x', details: { missing: ['categories'] } },
-      },
-    }));
+  it('refuses to submit without choosing at least one category, client-side, with no round trip', async () => {
+    const { calls } = await withProofUploaded();
     await fireEvent.changeText(screen.getByTestId('ref-name'), 'Suresh Iyer');
     await fireEvent.changeText(screen.getByTestId('ref-phone'), '9845012345');
     await fireEvent.changeText(screen.getByTestId('ref-relationship'), 'Former employer');
     await fireEvent.press(screen.getByTestId('kyc-submit'));
     expect(await screen.findByText('Choose the work you do first.')).toBeTruthy();
     expect(routerMock().back).not.toHaveBeenCalled();
+    expect(calls.some((c) => c.path === '/v1/kyc/submit')).toBe(false);
+  });
+
+  it('tells the Ranger to choose their categories when the server still says they are missing', async () => {
+    await withProofUploaded(() => ({
+      status: 422,
+      body: {
+        error: { code: 'UNPROCESSABLE', message: 'x', details: { missing: ['categories'] } },
+      },
+    }));
+    await screen.findByTestId('cat-electrician');
+    await fireEvent.press(screen.getByTestId('cat-electrician'));
+    await fireEvent.changeText(screen.getByTestId('ref-name'), 'Suresh Iyer');
+    await fireEvent.changeText(screen.getByTestId('ref-phone'), '9845012345');
+    await fireEvent.changeText(screen.getByTestId('ref-relationship'), 'Former employer');
+    await fireEvent.press(screen.getByTestId('kyc-submit'));
+    expect(await screen.findByText('Choose the work you do first.')).toBeTruthy();
+    expect(routerMock().back).not.toHaveBeenCalled();
+  });
+
+  it('pre-selects categories already saved on the worker profile', async () => {
+    backend(2, { categorySlugs: ['plumber'] });
+    await renderWithProviders(<KycScreen />);
+    await waitFor(() =>
+      expect(screen.getByTestId('cat-plumber').props.accessibilityState.selected).toBe(true),
+    );
+    expect(screen.getByTestId('cat-electrician').props.accessibilityState.selected).toBe(false);
   });
 });

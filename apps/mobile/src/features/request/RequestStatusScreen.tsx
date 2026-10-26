@@ -41,7 +41,7 @@ export function RequestStatusScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: job, isLoading, isError, refetch } = useRequest(id);
+  const { data: job, isLoading, isError, error: loadError, refetch } = useRequest(id);
   const now = useNow(1000);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -66,7 +66,7 @@ export function RequestStatusScreen() {
   if (isError || !job)
     return (
       <Screen>
-        <ErrorState onRetry={() => void refetch()} />
+        <ErrorState error={loadError} onRetry={() => void refetch()} />
       </Screen>
     );
 

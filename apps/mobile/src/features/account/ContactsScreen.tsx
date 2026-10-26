@@ -23,7 +23,13 @@ const KEY = ['emergency-contacts'];
 export function ContactsScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: KEY, queryFn: listContacts });
+  const {
+    data,
+    isLoading,
+    isError,
+    error: loadError,
+    refetch,
+  } = useQuery({ queryKey: KEY, queryFn: listContacts });
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [relationship, setRelationship] = useState('');
@@ -61,7 +67,7 @@ export function ContactsScreen() {
     <Screen scroll>
       <Text color="textMuted">{t('contacts.intro')}</Text>
       {isLoading && <LoadingState />}
-      {isError && <ErrorState onRetry={() => void refetch()} />}
+      {isError && <ErrorState error={loadError} onRetry={() => void refetch()} />}
       {data?.length === 0 && <EmptyState message={t('contacts.empty')} />}
       {data?.map((c) => (
         <Card key={c.id} testID={`contact-${c.name}`}>

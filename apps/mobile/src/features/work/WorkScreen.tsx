@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { OTHER_CATEGORY_SLUG, type IncomingRequest } from '@haggler/shared';
@@ -154,6 +154,15 @@ export function WorkScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const tier = useSession((s) => s.user?.workerKycTier ?? 0);
+  const refreshMe = useSession((s) => s.refreshMe);
+  // KYC approval happens on the admin side, asynchronously — the session's cached
+  // workerKycTier only updates when we ask, so ask every time this tab gains focus (e.g. a
+  // Ranger who just got approved and switches back to the app sees it without signing out).
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMe();
+    }, [refreshMe]),
+  );
   const presence = usePresence(true);
   const online = presence.data?.isOnline === true;
   const incoming = useIncoming(online);

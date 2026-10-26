@@ -31,7 +31,10 @@ export function AddressesScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: KEY, queryFn: listAddresses });
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: KEY,
+    queryFn: listAddresses,
+  });
   const makeDefault = useMutation({
     mutationFn: setDefaultAddress,
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
@@ -50,7 +53,7 @@ export function AddressesScreen() {
         onPress={() => router.push('/address-new')}
       />
       {isLoading && <LoadingState />}
-      {isError && <ErrorState onRetry={() => void refetch()} />}
+      {isError && <ErrorState error={error} onRetry={() => void refetch()} />}
       {data?.length === 0 && <EmptyState message={t('addresses.empty')} />}
       {data?.map((a) => (
         <Card key={a.id} testID={`address-${a.label}`}>

@@ -17,6 +17,10 @@ export function errorMessage(err: unknown, t: TFunction): string {
         return t('auth.wait', { seconds: err.retryAfterSeconds ?? 60 });
       case 'ACCOUNT_UNAVAILABLE':
         return t('auth.accountDeleting');
+      case 'FORBIDDEN':
+        return t('common.forbidden');
+      case 'NOT_FOUND':
+        return t('common.notFound');
       case 'VALIDATION_FAILED':
         return t('common.error');
       default:

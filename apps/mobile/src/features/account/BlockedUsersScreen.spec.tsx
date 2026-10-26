@@ -85,6 +85,8 @@ describe('BlockedUsersScreen', () => {
   it('shows the error state and can retry', async () => {
     mockApi(() => ({ status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } }));
     await renderWithProviders(<BlockedUsersScreen />);
-    expect(await screen.findByText('Could not load this. Check your connection.')).toBeTruthy();
+    // D-102: ErrorState now shows what actually went wrong instead of always claiming a
+    // connection problem.
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
   });
 });

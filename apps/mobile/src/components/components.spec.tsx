@@ -1,5 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
+import { ApiError } from '../api/client';
 import { renderWithProviders } from '../test-utils';
 import { MIN_TOUCH_TARGET } from '../theme/tokens';
 import {
@@ -61,6 +62,18 @@ describe('ErrorState', () => {
     await renderWithProviders(<ErrorState onRetry={onRetry} />);
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalled();
+  });
+
+  it('shows a generic message with no error prop, same as before D-102', async () => {
+    await renderWithProviders(<ErrorState onRetry={() => {}} />);
+    expect(screen.getByText('Could not load this. Check your connection.')).toBeTruthy();
+  });
+
+  it('(D-102) shows the actual error instead of always claiming a connection problem', async () => {
+    await renderWithProviders(
+      <ErrorState onRetry={() => {}} error={new ApiError(403, 'FORBIDDEN', 'x')} />,
+    );
+    expect(screen.getByText("You don't have access to this.")).toBeTruthy();
   });
 });
 

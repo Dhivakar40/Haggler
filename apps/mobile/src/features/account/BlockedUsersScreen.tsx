@@ -11,7 +11,7 @@ import { spacing } from '../../theme/tokens';
 export function BlockedUsersScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { data, isLoading, isError, refetch } = useBlocks();
+  const { data, isLoading, isError, error: loadError, refetch } = useBlocks();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string>();
 
@@ -37,7 +37,7 @@ export function BlockedUsersScreen() {
   if (isError || !data)
     return (
       <Screen>
-        <ErrorState onRetry={() => void refetch()} />
+        <ErrorState error={loadError} onRetry={() => void refetch()} />
       </Screen>
     );
 

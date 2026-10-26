@@ -34,10 +34,14 @@ jest.mock('expo-notifications', () => ({
 
 // Navigation is exercised through a shared spy router.
 jest.mock('expo-router', () => {
+  const { useEffect } = require('react');
   const router = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
   return {
     __router: router,
     useRouter: () => router,
     useLocalSearchParams: jest.fn(() => ({})),
+    // Tests render a screen as if it's already focused — treat it like a plain effect that
+    // runs once on mount, same as the screen gaining focus for the first time.
+    useFocusEffect: (cb: () => void | (() => void)) => useEffect(cb, [cb]),
   };
 });

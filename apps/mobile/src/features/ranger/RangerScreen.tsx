@@ -123,7 +123,7 @@ export function RangerScreen() {
   if (status.isError || !status.data)
     return (
       <Screen>
-        <ErrorState onRetry={() => void status.refetch()} />
+        <ErrorState error={status.error} onRetry={() => void status.refetch()} />
       </Screen>
     );
 
@@ -137,33 +137,38 @@ export function RangerScreen() {
       <TierCard tier={1} check={latest(1)} verified={tier >= 1} locked={false} />
       <TierCard tier={2} check={latest(2)} verified={tier >= 2} locked={tier < 1} />
 
-      <View style={{ gap: spacing.sm }}>
-        <Text variant="heading">{t('ranger.categories')}</Text>
-        <Text color="textMuted">{t('ranger.categoriesHint')}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {categories.data?.map((c) => (
-            <Chip
-              key={c.slug}
-              testID={`cat-${c.slug}`}
-              label={t(c.nameKey)}
-              selected={picked.includes(c.slug)}
-              onPress={() => toggle(c.slug)}
-            />
-          ))}
+      {/* D-102: picking categories for the first time happens inside the level-2 submission
+       * itself (KycScreen) — this is only for editing the list afterward, so it's hidden until
+       * level 2 is actually verified instead of confusingly duplicating that step. */}
+      {tier >= 2 ? (
+        <View style={{ gap: spacing.sm }}>
+          <Text variant="heading">{t('ranger.categories')}</Text>
+          <Text color="textMuted">{t('ranger.categoriesHint')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+            {categories.data?.map((c) => (
+              <Chip
+                key={c.slug}
+                testID={`cat-${c.slug}`}
+                label={t(c.nameKey)}
+                selected={picked.includes(c.slug)}
+                onPress={() => toggle(c.slug)}
+              />
+            ))}
+          </View>
+          {error ? (
+            <Text color="danger" accessibilityRole="alert">
+              {error}
+            </Text>
+          ) : null}
+          <Button
+            testID="save-categories"
+            title={t('ranger.saveCategories')}
+            onPress={() => save.mutate()}
+            loading={save.isPending}
+            disabled={picked.length === 0}
+          />
         </View>
-        {error ? (
-          <Text color="danger" accessibilityRole="alert">
-            {error}
-          </Text>
-        ) : null}
-        <Button
-          testID="save-categories"
-          title={t('ranger.saveCategories')}
-          onPress={() => save.mutate()}
-          loading={save.isPending}
-          disabled={picked.length === 0}
-        />
-      </View>
+      ) : null}
     </Screen>
   );
 }

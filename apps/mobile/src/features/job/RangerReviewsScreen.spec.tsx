@@ -57,6 +57,14 @@ describe('RangerReviewsScreen', () => {
   it('shows the error state and can retry', async () => {
     mockApi(() => ({ status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } }));
     await renderWithProviders(<RangerReviewsScreen />);
-    expect(await screen.findByText('Could not load this. Check your connection.')).toBeTruthy();
+    // D-102: ErrorState now shows what actually went wrong instead of always claiming a
+    // connection problem — an INTERNAL error has no specific message, so it's this generic one.
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+  });
+
+  it('(D-102) shows a specific message for a 403 instead of the generic connection message', async () => {
+    mockApi(() => ({ status: 403, body: { error: { code: 'FORBIDDEN', message: 'x' } } }));
+    await renderWithProviders(<RangerReviewsScreen />);
+    expect(await screen.findByText("You don't have access to this.")).toBeTruthy();
   });
 });
