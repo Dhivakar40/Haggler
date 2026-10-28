@@ -40,8 +40,14 @@
       transaction for a second entry point was judged riskier than this swap (documented
       honestly in `docs/DECISIONS.md` D-089).
     - → `CONFIRMED_BY_CUSTOMER` (actor: Customer, System, or Worker).
-    - If nobody confirms, the job **auto-releases** to the Ranger after
-      `completion_otp_auto_release_hours: 24`, unless a dispute is open.
+    - A `completion_otp_auto_release_hours: 24` config value exists for an auto-release job (if
+      nobody confirms within 24h and no dispute is open), but **no code was found that actually
+      reads this value** — `grep -rln "completion_otp_auto_release_hours" apps/api/src` matches
+      only `fee.service.ts` itself (the definition). **This is a config knob with no consumer —
+      the auto-release does not actually happen today.** `docs/RUNBOOK.md`'s own "before launch"
+      checklist independently flags this exact gap ("confirm the completion-code auto-release job
+      described below actually exists (it does not yet)"). See `10-compliance-and-gaps.md`. A
+      withheld completion code can therefore currently strand a Ranger's payout indefinitely.
 11. Either party may raise a **dispute** at `IN_PROGRESS`, `COMPLETED_BY_WORKER`, or
     `CONFIRMED_BY_CUSTOMER` → `DISPUTED`, resolved by an admin to either `REFUNDED` or back to
     `CONFIRMED_BY_CUSTOMER`.
@@ -139,7 +145,7 @@ caches reads for 15 seconds, `fee.service.ts:115`).
 | Quote "extra" line cap | `quote_extra_cap_bps` | 1,000 bps = **10% of the quote's labour total** — the one free-text/undefined line a Ranger can add |
 | Visit fee bands (by distance travelled) | `visit_fee_bands` | 0 m: ₹99 · 5 km: ₹149 · 15 km: ₹199 — all three explicitly code-commented as **placeholder values** |
 | Ranger's cut of a charged visit fee | `visit_fee_worker_commission_bps` | 9,000 bps = **90%** (platform keeps 10%) |
-| Auto-release of earnings | `completion_otp_auto_release_hours` | 24 hours after payment, if nobody has confirmed and no dispute is open |
+| Auto-release of earnings | `completion_otp_auto_release_hours` | **Config value only (24h) — NOT BUILT.** No code consumes this value; see the correction above |
 | Parts-pause extension cap | `max_parts_extensions` | 2 per job |
 | Concurrent paused jobs | `max_concurrent_paused_jobs_per_worker` | 2 |
 | Cancellation-fee travel threshold | `cancel_fee_travel_m` | 1,000 m — a customer cancelling after the Ranger has travelled this far gets `cancellationFeeApplies: true` flagged (the fee itself is computed/charged downstream; the flag is set in `lifecycle.service.ts:559-561`) |
