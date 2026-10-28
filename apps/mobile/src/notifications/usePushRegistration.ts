@@ -8,11 +8,16 @@ import { registerForPushNotificationsAsync } from './push';
  * refusal (no permission, not a real device, Expo Go without a dev build) just means no push for
  * this session — the socket connection is the primary channel while the app is open (Phase 2), so
  * nothing else in the app depends on this succeeding.
+ *
+ * `enabled` is the user's "Push notifications" setting (Settings screen) — off means this device
+ * never registers, regardless of OS permission. Toggling it back on while already signed in is
+ * handled by the Settings screen itself, which registers immediately rather than waiting for a
+ * remount of this hook.
  */
-export function usePushRegistration(signedIn: boolean): void {
+export function usePushRegistration(signedIn: boolean, enabled: boolean): void {
   const registered = useRef(false);
   useEffect(() => {
-    if (!signedIn || registered.current) return;
+    if (!signedIn || !enabled || registered.current) return;
     registered.current = true;
     void (async () => {
       const token = await registerForPushNotificationsAsync();
@@ -20,5 +25,5 @@ export function usePushRegistration(signedIn: boolean): void {
       const deviceId = await getDeviceId();
       await registerPushToken({ deviceId, pushToken: token }).catch(() => undefined);
     })();
-  }, [signedIn]);
+  }, [signedIn, enabled]);
 }

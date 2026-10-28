@@ -236,7 +236,8 @@ export default function RootLayout() {
     Manrope_700Bold,
   });
   useLanguageSync();
-  usePushRegistration(status === 'signedIn');
+  const pushNotificationsEnabled = useSettings((s) => s.pushNotificationsEnabled);
+  usePushRegistration(status === 'signedIn', pushNotificationsEnabled);
   useLeagueUpChecks(status === 'signedIn');
 
   useEffect(() => {

@@ -15,6 +15,7 @@ import {
   type OnboardingInput,
   type ProfileUpdate,
   type RegisterPushTokenInput,
+  type UnregisterPushTokenInput,
   type WorkerProfileUpdate,
   clientLeagueStatusSchema,
   leagueStatusSchema,
@@ -61,6 +62,13 @@ export const updateProfile = (body: ProfileUpdate) =>
 export const registerPushToken = (body: RegisterPushTokenInput) =>
   apiRequest('/v1/me/push-token', {
     method: 'PATCH',
+    body,
+    schema: z.object({ ok: z.literal(true) }),
+  });
+
+export const unregisterPushToken = (body: UnregisterPushTokenInput) =>
+  apiRequest('/v1/me/push-token', {
+    method: 'DELETE',
     body,
     schema: z.object({ ok: z.literal(true) }),
   });

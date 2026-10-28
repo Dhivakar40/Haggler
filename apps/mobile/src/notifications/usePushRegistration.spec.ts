@@ -19,7 +19,7 @@ describe('usePushRegistration', () => {
 
   it('does nothing while signed out', async () => {
     const { calls } = mockApi(() => ({ status: 200, body: { ok: true } }));
-    renderHook(() => usePushRegistration(false));
+    renderHook(() => usePushRegistration(false, true));
     await Promise.resolve();
     expect(calls).toHaveLength(0);
   });
@@ -30,7 +30,7 @@ describe('usePushRegistration', () => {
         ? { status: 200, body: { ok: true } }
         : undefined,
     );
-    renderHook(() => usePushRegistration(true));
+    renderHook(() => usePushRegistration(true, true));
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
     expect(calls).toHaveLength(1);
@@ -43,7 +43,7 @@ describe('usePushRegistration', () => {
   it('never registers twice for the same mounted session', async () => {
     const { calls } = mockApi(() => ({ status: 200, body: { ok: true } }));
     const { rerender } = await renderHook(
-      ({ signedIn }: { signedIn: boolean }) => usePushRegistration(signedIn),
+      ({ signedIn }: { signedIn: boolean }) => usePushRegistration(signedIn, true),
       { initialProps: { signedIn: true } },
     );
     await rerender({ signedIn: true });
@@ -55,7 +55,15 @@ describe('usePushRegistration', () => {
   it('silently does nothing when no push token could be obtained', async () => {
     notif.getPermissionsAsync.mockResolvedValue({ status: 'denied' });
     const { calls } = mockApi(() => ({ status: 200, body: { ok: true } }));
-    renderHook(() => usePushRegistration(true));
+    renderHook(() => usePushRegistration(true, true));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does nothing when signed in but the user's push notifications setting is off", async () => {
+    const { calls } = mockApi(() => ({ status: 200, body: { ok: true } }));
+    renderHook(() => usePushRegistration(true, false));
+    await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
     expect(calls).toHaveLength(0);
   });

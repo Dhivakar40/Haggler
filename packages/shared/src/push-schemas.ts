@@ -6,3 +6,9 @@ export const registerPushTokenSchema = z.object({
   pushToken: z.string().min(1).max(512),
 });
 export type RegisterPushTokenInput = z.infer<typeof registerPushTokenSchema>;
+
+/** DELETE /me/push-token: clears this device's push token (user turned notifications off). */
+export const unregisterPushTokenSchema = z.object({
+  deviceId: z.string().min(1).max(200),
+});
+export type UnregisterPushTokenInput = z.infer<typeof unregisterPushTokenSchema>;

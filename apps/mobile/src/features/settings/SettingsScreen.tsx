@@ -1,9 +1,14 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '@haggler/shared';
-import { useServerStatus } from '../../api/hooks';
-import { Card, Chip, Screen, Text } from '../../components';
+import { registerPushToken, unregisterPushToken } from '../../api/endpoints';
+import { getDeviceId } from '../../auth/secure-storage';
+import { Button, Checkbox, Chip, Screen, Text } from '../../components';
 import { LANGUAGE_NATIVE_NAMES } from '../../i18n';
+import { registerForPushNotificationsAsync } from '../../notifications/push';
+import { showToast } from '../../store/toast-queue';
 import { type ThemeMode, useSettings } from '../../store/settings';
 import { spacing } from '../../theme/tokens';
 
@@ -11,8 +16,33 @@ const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
 
 export function SettingsScreen() {
   const { t } = useTranslation();
-  const { themeMode, language, setThemeMode, setLanguage } = useSettings();
-  const status = useServerStatus();
+  const { themeMode, language, pushNotificationsEnabled, setThemeMode, setLanguage } =
+    useSettings();
+  const setPushNotificationsEnabled = useSettings((s) => s.setPushNotificationsEnabled);
+  const qc = useQueryClient();
+  const [clearing, setClearing] = useState(false);
+
+  async function togglePush() {
+    const next = !pushNotificationsEnabled;
+    setPushNotificationsEnabled(next);
+    const deviceId = await getDeviceId();
+    if (next) {
+      const token = await registerForPushNotificationsAsync();
+      if (token) await registerPushToken({ deviceId, pushToken: token }).catch(() => undefined);
+    } else {
+      await unregisterPushToken({ deviceId }).catch(() => undefined);
+    }
+  }
+
+  async function clearCache() {
+    setClearing(true);
+    try {
+      qc.clear();
+      showToast(t('settings.cacheCleared'), 'success');
+    } finally {
+      setClearing(false);
+    }
+  }
 
   return (
     <Screen scroll>
@@ -55,23 +85,28 @@ export function SettingsScreen() {
       </View>
 
       <View style={{ gap: spacing.sm }}>
-        <Text variant="heading">{t('settings.environment')}</Text>
-        <Card>
-          {status.isLoading && <Text color="textMuted">{t('states.loading')}</Text>}
-          {status.isError && <Text color="danger">{t('settings.apiDown')}</Text>}
-          {status.data && (
-            <View style={{ gap: spacing.xs }} testID="server-status">
-              <Text color={status.data.status === 'ok' ? 'success' : 'warning'}>
-                {status.data.status === 'ok' ? t('settings.apiOk') : t('settings.apiDegraded')}
-              </Text>
-              {Object.entries(status.data.adapters).map(([name, mode]) => (
-                <Text key={name} variant="caption" color="textMuted">
-                  {t(`settings.adapters.${name}`)}: {t(`settings.mode.${mode}`)}
-                </Text>
-              ))}
-            </View>
-          )}
-        </Card>
+        <Text variant="heading">{t('settings.notifications')}</Text>
+        <Checkbox
+          testID="push-notifications-toggle"
+          label={t('settings.pushNotifications')}
+          checked={pushNotificationsEnabled}
+          onPress={() => void togglePush()}
+        />
+        <Text variant="caption" color="textMuted">
+          {t('settings.pushNotificationsHint')}
+        </Text>
+      </View>
+
+      <View style={{ gap: spacing.sm }}>
+        <Text variant="heading">{t('settings.storage')}</Text>
+        <Text color="textMuted">{t('settings.clearCacheHint')}</Text>
+        <Button
+          testID="clear-cache"
+          variant="secondary"
+          title={t('settings.clearCache')}
+          loading={clearing}
+          onPress={() => void clearCache()}
+        />
       </View>
     </Screen>
   );

@@ -103,6 +103,15 @@ export class UsersService {
     return { ok: true };
   }
 
+  /** User turned the "Push notifications" setting off on this device. */
+  async unregisterPushToken(userId: string, deviceId: string): Promise<{ ok: true }> {
+    await this.prisma.device.updateMany({
+      where: { userId, deviceId },
+      data: { pushToken: null },
+    });
+    return { ok: true };
+  }
+
   /** Adds a role. Adding WORKER (Ranger) also creates the Ranger profile. */
   async addRole(userId: string, role: 'CUSTOMER' | 'WORKER' | 'EMPLOYER' | 'STUDENT'): Promise<Me> {
     await this.prisma.$transaction(async (tx) => {

@@ -60,6 +60,29 @@ describe('push token registration', () => {
     const res = await m.api.patch(c, '/v1/me/push-token', { deviceId: c.deviceId, pushToken: '' });
     expect(res.status).toBe(400);
   });
+
+  it('clears a registered token when the user turns push notifications off (D-107)', async () => {
+    const c = await m.customer();
+    await m.api.patch(c, '/v1/me/push-token', { deviceId: c.deviceId, pushToken: 'token-off' });
+    const res = await m.api.del(c, '/v1/me/push-token', { deviceId: c.deviceId });
+    expect(res.status).toBe(200);
+    const device = await m.prisma.device.findUnique({
+      where: { userId_deviceId: { userId: c.userId, deviceId: c.deviceId } },
+    });
+    expect(device?.pushToken).toBeNull();
+  });
+
+  it("cannot clear someone else's device token by guessing its id", async () => {
+    const a = await m.customer();
+    const b = await m.customer();
+    await m.api.patch(b, '/v1/me/push-token', { deviceId: b.deviceId, pushToken: 'b-token' });
+    const res = await m.api.del(a, '/v1/me/push-token', { deviceId: b.deviceId });
+    expect(res.status).toBe(200);
+    const bDevice = await m.prisma.device.findUnique({
+      where: { userId_deviceId: { userId: b.userId, deviceId: b.deviceId } },
+    });
+    expect(bDevice?.pushToken).toBe('b-token');
+  });
 });
 
 describe('push notifications fire alongside realtime events', () => {

@@ -1,9 +1,15 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import i18n from '../i18n';
 import { useSettings } from '../store/settings';
-import { mockFetchOnce, renderWithProviders, signInAs } from '../test-utils';
+import { ToastHost } from '../components';
+import { mockApi, mockFetchOnce, renderWithProviders, signInAs } from '../test-utils';
 import { HomeScreen } from './home/HomeScreen';
 import { SettingsScreen } from './settings/SettingsScreen';
+
+// `isDevice` is a plain boolean export copied by value into the module namespace at import time
+// (see notifications/usePushRegistration.spec.ts), so it must be mocked here, not mutated later,
+// for the Settings "re-enable push" test below to see a real device.
+jest.mock('expo-device', () => ({ isDevice: true }));
 
 const categories = [
   {
@@ -101,21 +107,7 @@ describe('HomeScreen', () => {
 });
 
 describe('SettingsScreen', () => {
-  const ready = {
-    status: 'degraded',
-    checks: { postgres: 'up', redis: 'down' },
-    adapters: {
-      sms: 'sandbox',
-      kyc: 'sandbox',
-      payments: 'live',
-      calls: 'sandbox',
-      push: 'sandbox',
-      maps: 'sandbox',
-    },
-  };
-
   it('saves the chosen theme and language to the settings store', async () => {
-    mockFetchOnce({ '/health/ready': { body: ready } });
     await renderWithProviders(<SettingsScreen />);
     await fireEvent.press(screen.getByTestId('theme-dark'));
     expect(useSettings.getState().themeMode).toBe('dark');
@@ -123,20 +115,40 @@ describe('SettingsScreen', () => {
     expect(useSettings.getState().language).toBe('ta');
   });
 
-  it('is honest about degraded services and which adapters are live vs test mode', async () => {
-    mockFetchOnce({ '/health/ready': { body: ready } });
+  it('turning push notifications off unregisters this device, on registers it', async () => {
+    const Notifications = jest.requireMock('expo-notifications') as Record<string, jest.Mock>;
+    Notifications.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    const { calls } = mockApi(() => ({ status: 200, body: { ok: true } }));
     await renderWithProviders(<SettingsScreen />);
-    await waitFor(() => expect(screen.getByTestId('server-status')).toBeTruthy());
-    expect(screen.getByText('Connected (some services degraded)')).toBeTruthy();
-    expect(screen.getByText('Payments: live')).toBeTruthy();
-    expect(screen.getByText('SMS: test mode')).toBeTruthy();
+    const toggle = screen.getByTestId('push-notifications-toggle');
+    expect(toggle.props.accessibilityState.checked).toBe(true);
+
+    await fireEvent.press(toggle);
+    expect(useSettings.getState().pushNotificationsEnabled).toBe(false);
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'DELETE' && c.path === '/v1/me/push-token')).toBe(
+        true,
+      ),
+    );
+
+    await fireEvent.press(toggle);
+    expect(useSettings.getState().pushNotificationsEnabled).toBe(true);
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'PATCH' && c.path === '/v1/me/push-token')).toBe(
+        true,
+      ),
+    );
   });
 
-  it('says so when the server is unreachable', async () => {
-    (global as unknown as { fetch: unknown }).fetch = jest
-      .fn()
-      .mockRejectedValue(new Error('offline'));
-    await renderWithProviders(<SettingsScreen />);
-    expect(await screen.findByText('Cannot reach the server')).toBeTruthy();
+  it('clearing the cache shows a confirmation toast', async () => {
+    mockApi(() => ({ status: 200, body: { ok: true } }));
+    await renderWithProviders(
+      <>
+        <SettingsScreen />
+        <ToastHost />
+      </>,
+    );
+    await fireEvent.press(screen.getByTestId('clear-cache'));
+    expect(await screen.findByText('Cache cleared.')).toBeTruthy();
   });
 });

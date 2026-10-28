@@ -20,6 +20,7 @@ import {
   onboardingInputSchema,
   profileUpdateSchema,
   registerPushTokenSchema,
+  unregisterPushTokenSchema,
 } from '@haggler/shared';
 import { z } from 'zod';
 import { ApiZodBody, ClientIp, CurrentUser, type AuthUser } from '../common/decorators';
@@ -90,6 +91,16 @@ export class UsersController {
     @Body(new ZodPipe(registerPushTokenSchema)) body: z.infer<typeof registerPushTokenSchema>,
   ) {
     return this.users.registerPushToken(user.id, body);
+  }
+
+  @Delete('push-token')
+  @ApiOperation({ summary: 'Clear this device\'s push notification token (user turned it off)' })
+  @ApiZodBody(unregisterPushTokenSchema)
+  unregisterPushToken(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodPipe(unregisterPushTokenSchema)) body: z.infer<typeof unregisterPushTokenSchema>,
+  ) {
+    return this.users.unregisterPushToken(user.id, body.deviceId);
   }
 
   @Post('roles')

@@ -79,8 +79,9 @@ export class Api {
   patch(s: Session, path: string, body: object) {
     return this.http().patch(path).set(this.auth(s)).send(body);
   }
-  del(s: Session, path: string) {
-    return this.http().delete(path).set(this.auth(s));
+  del(s: Session, path: string, body?: object) {
+    const req = this.http().delete(path).set(this.auth(s));
+    return body ? req.send(body) : req;
   }
 
   async createAdmin(
