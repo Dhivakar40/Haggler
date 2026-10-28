@@ -3,29 +3,15 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
-import type { PaymentOrderStartDto, PlusPlanDto, TokenBundleDto } from '@haggler/shared';
+import type { PaymentOrderStartDto, PlusPlanDto } from '@haggler/shared';
 import {
-  createTopupOrder,
   sandboxPay,
   subscribePlus,
-  useBundles,
   useOrders,
   usePlusMembership,
   usePlusPlans,
-  useWallet,
-  walletKey,
 } from '../../api/wallet';
-import {
-  Button,
-  Card,
-  EmptyState,
-  ErrorState,
-  PriceTag,
-  Screen,
-  Skeleton,
-  StatusPill,
-  Text,
-} from '../../components';
+import { Button, Card, EmptyState, ErrorState, PriceTag, Screen, Skeleton, StatusPill, Text } from '../../components';
 import type { StatusTone } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatRupees } from '../../lib/money';
@@ -37,33 +23,23 @@ const ORDER_STATUS_TONE: Record<string, StatusTone> = {
   CANCELLED: 'negative',
 };
 
-/** Buy tokens or subscribe to Plus -> a payment order -> pay -> the relevant query refetches.
- * One order in flight at a time (D-069: Plus + rush + boost all share this same checkout flow). */
+/** D-106: the token balance/top-up UI is gone — tokens stopped being used for anything the day
+ * the platform fee replaced them (D-081), and leaving the purchase flow in the app kept inviting
+ * a question about a feature that no longer does anything. Nothing about the token system was
+ * deleted on the backend (existing balances are untouched, pending a product/finance decision on
+ * what to do with them — see docs/DECISIONS.md D-081/D-106), this is purely the dead storefront
+ * coming out of the app. What's left here — Haggler Plus and the purchase history behind it — is
+ * the one thing on this screen that's still a real, working feature. */
 export function WalletScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
-  const wallet = useWallet();
-  const bundles = useBundles();
   const orders = useOrders();
   const membership = usePlusMembership();
   const plans = usePlusPlans('CUSTOMER');
   const [order, setOrder] = useState<PaymentOrderStartDto | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string>();
-
-  async function buy(bundle: TokenBundleDto) {
-    setError(undefined);
-    setBusy(bundle.id);
-    try {
-      const o = await createTopupOrder({ bundleId: bundle.id });
-      setOrder(o);
-    } catch (err) {
-      setError(errorMessage(err, t));
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function subscribe(plan: PlusPlanDto) {
     setError(undefined);
@@ -85,7 +61,6 @@ export function WalletScreen() {
     try {
       await sandboxPay(order.orderId);
       setOrder(null);
-      await qc.invalidateQueries({ queryKey: walletKey });
       await qc.invalidateQueries({ queryKey: ['wallet', 'orders'] });
       await qc.invalidateQueries({ queryKey: ['plus', 'membership'] });
     } catch (err) {
@@ -95,16 +70,10 @@ export function WalletScreen() {
     }
   }
 
-  if (wallet.isLoading || bundles.isLoading)
+  if (membership.isLoading || plans.isLoading)
     return (
       <Screen>
         <View testID="wallet-skeleton" style={{ gap: spacing.lg }}>
-          <Card>
-            <View style={{ gap: spacing.sm, alignItems: 'center' }}>
-              <Skeleton width="50%" height={16} />
-              <Skeleton width="40%" height={48} />
-            </View>
-          </Card>
           <Card>
             <Skeleton width="70%" height={20} />
           </Card>
@@ -114,10 +83,16 @@ export function WalletScreen() {
         </View>
       </Screen>
     );
-  if (wallet.isError || !wallet.data)
+  if (membership.isError || plans.isError)
     return (
       <Screen>
-        <ErrorState onRetry={() => void wallet.refetch()} />
+        <ErrorState
+          error={membership.error ?? plans.error}
+          onRetry={() => {
+            void membership.refetch();
+            void plans.refetch();
+          }}
+        />
       </Screen>
     );
 
@@ -125,34 +100,13 @@ export function WalletScreen() {
     <Screen scroll>
       <Text variant="title">{t('wallet.title')}</Text>
 
-      <Card testID="wallet-balance">
-        <View style={{ gap: spacing.xs, alignItems: 'center' }}>
-          <Text color="textMuted">{t('wallet.balanceLabel')}</Text>
-          <Text variant="display" testID="balance-tokens">
-            {t('wallet.tokenCount', { count: wallet.data.balanceTokens })}
-          </Text>
-          {wallet.data.heldTokens > 0 ? (
-            <Text testID="held-tokens" color="textMuted">
-              {t('wallet.held', { count: wallet.data.heldTokens })}
-            </Text>
-          ) : null}
-        </View>
-      </Card>
-
       {order ? (
         // Elevated: a payment awaiting confirmation is the most consequential moment on this
-        // screen. Balance, plans and history below are informational and stay flat.
+        // screen. Plans and history below are informational and stay flat.
         <Card testID="checkout" elevated>
           <View style={{ gap: spacing.sm }}>
             <Text variant="heading">{t('wallet.checkoutTitle')}</Text>
-            <Text>
-              {order.purpose === 'PLUS_SUBSCRIPTION'
-                ? t('wallet.checkoutSummaryPlus', { amount: formatRupees(order.amountPaise) })
-                : t('wallet.checkoutSummary', {
-                    tokens: order.tokens ?? 0,
-                    amount: formatRupees(order.amountPaise),
-                  })}
-            </Text>
+            <Text>{t('wallet.checkoutSummaryPlus', { amount: formatRupees(order.amountPaise) })}</Text>
             {order.provider === 'sandbox' ? (
               <>
                 <Text color="textMuted">{t('wallet.sandboxNote')}</Text>
@@ -185,7 +139,6 @@ export function WalletScreen() {
       ) : null}
 
       <View style={{ gap: spacing.sm }}>
-        <Text variant="heading">{t('wallet.plusTitle')}</Text>
         {membership.data?.active ? (
           <Card testID="plus-active">
             <Text>{t('wallet.plusActive', { name: membership.data.planName })}</Text>
@@ -225,33 +178,6 @@ export function WalletScreen() {
             </Card>
           ))
         )}
-      </View>
-
-      <View style={{ gap: spacing.sm }}>
-        <Text variant="heading">{t('wallet.buyTokens')}</Text>
-        {(bundles.data ?? []).map((b) => (
-          <Card key={b.id} testID={`bundle-${b.slug}`}>
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: spacing.sm,
-              }}
-            >
-              <View style={{ gap: spacing.xs }}>
-                <Text variant="heading">{t('wallet.tokenCount', { count: b.tokens })}</Text>
-                <PriceTag paise={b.pricePaise} variant="muted" />
-              </View>
-              <Button
-                testID={`buy-${b.slug}`}
-                title={t('wallet.buy')}
-                loading={busy === b.id}
-                onPress={() => void buy(b)}
-              />
-            </View>
-          </Card>
-        ))}
       </View>
 
       <View style={{ gap: spacing.sm }}>

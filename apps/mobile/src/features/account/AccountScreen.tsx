@@ -221,7 +221,7 @@ export function AccountScreen() {
           ) : null}
           <ListRow
             testID="open-wallet"
-            icon="wallet-outline"
+            icon="star-outline"
             title={t('account.wallet')}
             onPress={go('/wallet')}
           />

@@ -9,43 +9,29 @@ import {
 } from '../../test-utils';
 import { WalletScreen } from './WalletScreen';
 
-const BUNDLES = [
+const PLANS = [
   {
     id: '11111111-aaaa-4aaa-8aaa-111111111111',
-    slug: 'starter-3',
-    name: '3 tokens',
-    tokens: 3,
-    pricePaise: 4900,
-  },
-  {
-    id: '22222222-bbbb-4bbb-8bbb-222222222222',
-    slug: 'value-10',
-    name: '10 tokens',
-    tokens: 10,
-    pricePaise: 14900,
+    slug: 'monthly',
+    name: 'Monthly',
+    audience: 'CUSTOMER',
+    pricePaise: 9900,
+    durationDays: 30,
+    tokenDiscountBps: 0,
   },
 ];
 
 // Schemas require real UUIDs for id fields; fabricate distinct-looking but valid ones.
 const uuidN = (n: number) => `${String(n).padStart(8, '0')}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
 
-/** A wallet backend: tracks balance/held and a growing order list, all via the real endpoint shapes. */
-function serve(over: { balanceTokens?: number; heldTokens?: number; membership?: unknown } = {}) {
-  let balanceTokens = over.balanceTokens ?? 0;
-  const heldTokens = over.heldTokens ?? 0;
-  const ledger: {
-    id: string;
-    type: string;
-    tokensDelta: number;
-    jobId: null;
-    note: null;
-    createdAt: string;
-  }[] = [];
+/** D-106: the token balance/top-up endpoints are gone from this screen — it only reads Plus
+ * membership/plans and order history now. */
+function serve(over: { membership?: unknown; plans?: unknown[] } = {}) {
   const orders: {
     id: string;
     purpose: string;
     itemName: string;
-    tokens: number;
+    tokens: number | null;
     amountPaise: number;
     status: string;
     createdAt: string;
@@ -53,24 +39,22 @@ function serve(over: { balanceTokens?: number; heldTokens?: number; membership?:
   }[] = [];
   let n = 0;
   const api = mockApi((c: MockCall) => {
-    if (c.method === 'GET' && c.path === '/v1/wallet')
-      return { body: { balanceTokens, heldTokens, recentLedger: ledger } };
-    if (c.method === 'GET' && c.path === '/v1/wallet/bundles') return { body: BUNDLES };
     if (c.method === 'GET' && c.path.startsWith('/v1/wallet/orders'))
       return { body: { items: orders, nextCursor: null } };
-    if (c.method === 'GET' && c.path.startsWith('/v1/plus/plans')) return { body: [] };
+    if (c.method === 'GET' && c.path.startsWith('/v1/plus/plans'))
+      return { body: over.plans ?? PLANS };
     if (c.method === 'GET' && c.path === '/v1/plus/membership')
       return { body: over.membership ?? null };
-    if (c.method === 'POST' && c.path === '/v1/wallet/topup') {
-      const bundle = BUNDLES.find((b) => b.id === (c.body as { bundleId: string }).bundleId)!;
+    if (c.method === 'POST' && c.path === '/v1/wallet/plus/subscribe') {
+      const plan = PLANS.find((p) => p.id === (c.body as { planId: string }).planId)!;
       n += 1;
       const orderId = uuidN(n);
       orders.unshift({
         id: orderId,
-        purpose: 'TOKEN_TOPUP',
-        itemName: bundle.name,
-        tokens: bundle.tokens,
-        amountPaise: bundle.pricePaise,
+        purpose: 'PLUS_SUBSCRIPTION',
+        itemName: plan.name,
+        tokens: null,
+        amountPaise: plan.pricePaise,
         status: 'CREATED',
         createdAt: new Date().toISOString(),
         paidAt: null,
@@ -79,11 +63,11 @@ function serve(over: { balanceTokens?: number; heldTokens?: number; membership?:
         status: 201,
         body: {
           orderId,
-          purpose: 'TOKEN_TOPUP',
+          purpose: 'PLUS_SUBSCRIPTION',
           provider: 'sandbox',
           providerOrderId: `order_sandbox_${n}`,
-          amountPaise: bundle.pricePaise,
-          tokens: bundle.tokens,
+          amountPaise: plan.pricePaise,
+          tokens: null,
           keyId: null,
         },
       };
@@ -93,15 +77,6 @@ function serve(over: { balanceTokens?: number; heldTokens?: number; membership?:
       const order = orders.find((o) => o.id === payMatch[1])!;
       order.status = 'PAID';
       order.paidAt = new Date().toISOString();
-      balanceTokens += order.tokens;
-      ledger.unshift({
-        id: uuidN(1000 + n),
-        type: 'PURCHASE',
-        tokensDelta: order.tokens,
-        jobId: null,
-        note: null,
-        createdAt: new Date().toISOString(),
-      });
       return { body: { ok: true } };
     }
     return undefined;
@@ -115,84 +90,74 @@ beforeEach(async () => {
   signInAs();
 });
 
-describe('WalletScreen', () => {
-  it('shows the balance and, when nothing is held, no reservation note', async () => {
-    serve({ balanceTokens: 7 });
-    await renderWithProviders(<WalletScreen />);
-    expect(await screen.findByTestId('balance-tokens')).toHaveTextContent('7 tokens');
-    expect(screen.queryByTestId('held-tokens')).toBeNull();
-  });
-
-  it('shows held tokens when some are reserved for open jobs', async () => {
-    serve({ balanceTokens: 4, heldTokens: 2 });
-    await renderWithProviders(<WalletScreen />);
-    expect(await screen.findByTestId('held-tokens')).toHaveTextContent(
-      '2 tokens reserved for open jobs',
-    );
-  });
-
-  it('singular wording for exactly one token', async () => {
-    serve({ balanceTokens: 1, heldTokens: 1 });
-    await renderWithProviders(<WalletScreen />);
-    expect(await screen.findByTestId('balance-tokens')).toHaveTextContent('1 token');
-    expect(screen.getByTestId('held-tokens')).toHaveTextContent('1 token reserved for an open job');
-  });
-
-  it('lists the available bundles with price', async () => {
+describe('WalletScreen (D-106: Haggler Plus only, token UI removed)', () => {
+  it('lists the available Plus plans with price', async () => {
     serve();
     await renderWithProviders(<WalletScreen />);
-    expect(await screen.findByTestId('bundle-starter-3')).toHaveTextContent('₹49', {
+    expect(await screen.findByTestId('plus-plan-monthly')).toHaveTextContent('₹99', {
       exact: false,
     });
-    expect(screen.getByTestId('bundle-value-10')).toHaveTextContent('₹149', { exact: false });
   });
 
-  it('buying opens a sandbox checkout card with the right summary', async () => {
+  it('shows active membership instead of plans when already subscribed', async () => {
+    serve({
+      membership: {
+        planSlug: 'monthly',
+        planName: 'Monthly',
+        audience: 'CUSTOMER',
+        tokenDiscountBps: 0,
+        active: true,
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    });
+    await renderWithProviders(<WalletScreen />);
+    expect(await screen.findByTestId('plus-active')).toHaveTextContent('Monthly is active', {
+      exact: false,
+    });
+    expect(screen.queryByTestId('plus-plan-monthly')).toBeNull();
+  });
+
+  it('subscribing opens a sandbox checkout card with the right summary', async () => {
     serve();
     await renderWithProviders(<WalletScreen />);
-    await fireEvent.press(await screen.findByTestId('buy-starter-3'));
+    await fireEvent.press(await screen.findByTestId('subscribe-monthly'));
     const checkout = await screen.findByTestId('checkout');
-    expect(checkout).toHaveTextContent('3 tokens for ₹49', { exact: false });
+    expect(checkout).toHaveTextContent('Haggler Plus for ₹99', { exact: false });
     expect(screen.getByTestId('sandbox-pay')).toBeTruthy();
     expect(screen.queryByTestId('razorpay-pending')).toBeNull();
   });
 
-  it('paying in sandbox credits the wallet, closes checkout, and refreshes history', async () => {
+  it('paying in sandbox closes checkout and refreshes history', async () => {
     serve();
     await renderWithProviders(<WalletScreen />);
-    await fireEvent.press(await screen.findByTestId('buy-value-10'));
+    await fireEvent.press(await screen.findByTestId('subscribe-monthly'));
     await screen.findByTestId('checkout');
     await fireEvent.press(screen.getByTestId('sandbox-pay'));
     await waitFor(() => expect(screen.queryByTestId('checkout')).toBeNull());
-    expect(await screen.findByTestId('balance-tokens')).toHaveTextContent('10 tokens');
     expect(await screen.findByTestId(/^order-/)).toBeTruthy();
   });
 
   it('cancelling checkout dismisses it without paying', async () => {
     serve();
     await renderWithProviders(<WalletScreen />);
-    await fireEvent.press(await screen.findByTestId('buy-starter-3'));
+    await fireEvent.press(await screen.findByTestId('subscribe-monthly'));
     await screen.findByTestId('checkout');
     await fireEvent.press(screen.getByText('Cancel'));
     expect(screen.queryByTestId('checkout')).toBeNull();
-    expect(screen.getByTestId('balance-tokens')).toHaveTextContent('0 tokens');
   });
 
-  it('a failed top-up request shows an error and no checkout card', async () => {
+  it('a failed subscribe request shows an error and no checkout card', async () => {
     mockApi((c) => {
-      if (c.method === 'GET' && c.path === '/v1/wallet')
-        return { body: { balanceTokens: 0, heldTokens: 0, recentLedger: [] } };
-      if (c.method === 'GET' && c.path === '/v1/wallet/bundles') return { body: BUNDLES };
       if (c.method === 'GET' && c.path.startsWith('/v1/wallet/orders'))
         return { body: { items: [], nextCursor: null } };
-      if (c.method === 'GET' && c.path.startsWith('/v1/plus/plans')) return { body: [] };
+      if (c.method === 'GET' && c.path.startsWith('/v1/plus/plans')) return { body: PLANS };
       if (c.method === 'GET' && c.path === '/v1/plus/membership') return { body: null };
-      if (c.method === 'POST' && c.path === '/v1/wallet/topup')
+      if (c.method === 'POST' && c.path === '/v1/wallet/plus/subscribe')
         return { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } };
       return undefined;
     });
     await renderWithProviders(<WalletScreen />);
-    await fireEvent.press(await screen.findByTestId('buy-starter-3'));
+    await fireEvent.press(await screen.findByTestId('subscribe-monthly'));
     expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(screen.queryByTestId('checkout')).toBeNull();
   });
@@ -203,14 +168,14 @@ describe('WalletScreen', () => {
     expect(await screen.findByText('No purchases yet.')).toBeTruthy();
   });
 
-  it('an error loading the wallet shows the error state', async () => {
+  it('an error loading Plus membership shows the error state, not a generic connection claim', async () => {
     mockApi((c) =>
-      c.path === '/v1/wallet'
+      c.path === '/v1/plus/membership'
         ? { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } }
         : { body: [] },
     );
     await renderWithProviders(<WalletScreen />);
-    expect(await screen.findByText('Could not load this. Check your connection.')).toBeTruthy();
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
   });
 
   it('going back uses the router', async () => {
@@ -222,8 +187,8 @@ describe('WalletScreen', () => {
 
   it('is translated (Telugu)', async () => {
     await i18n.changeLanguage('te');
-    serve({ balanceTokens: 3 });
+    serve();
     await renderWithProviders(<WalletScreen />);
-    expect(await screen.findByText('వాలెట్')).toBeTruthy();
+    expect(await screen.findByText('హాగ్లర్ ప్లస్')).toBeTruthy();
   });
 });
