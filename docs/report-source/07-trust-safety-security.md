@@ -76,12 +76,18 @@ comment's wording that's stale/inaccurate relative to it, not the behaviour itse
   possible even at the DB layer) — see `04-data-model.md`.
 - **`TESTING_MODE`**: a fixed OTP code accepted for **any** phone number when `true` (D-100 — an
   earlier phone-number allowlist, D-091, was tried and fully reverted after it broke real tester
-  access with no fallback). **`env.ts:176-180` explicitly refuses to boot with
-  `TESTING_MODE=true` when `NODE_ENV=production`** — so on a correctly configured production
-  deployment this bypass cannot exist. Whether `NODE_ENV` is actually set to `production` on the
-  live `haggler-f` Render service was **not verified this session** (only `DATABASE_URL` was read);
-  this is worth confirming directly, since a misconfigured `NODE_ENV` would be the one way this
-  guard fails silently.
+  access with no fallback). `env.ts:176-180` refuses to boot with `TESTING_MODE=true` when
+  `NODE_ENV=production`. **This guard is deliberately not in effect on the live `haggler-f`
+  deployment**: `docs/RUNBOOK.md:326-329` states explicitly that `NODE_ENV` is left at its default,
+  `development`, specifically so `TESTING_MODE=true` can keep working there — "a 'hosted but
+  still a test environment' deploy is `development` by this schema's own definition, not a new
+  value." So the live, publicly-reachable `haggler-f` backend that the current APK points at is,
+  by design, running with `NODE_ENV=development` and (per the same doc) `TESTING_MODE=true` —
+  meaning **the fixed-code OTP bypass is live and reachable by anyone who knows it today**, not a
+  theoretical risk gated by a production flag. Whether this is acceptable depends entirely on
+  whether `haggler-f` is understood to be a real production backend or a shared test/staging
+  environment that merely happens to be the one real testers and the shipped APK use — that
+  product decision is outside this dossier's scope, but the current technical fact is unambiguous.
 
 ## Edge-case table
 
