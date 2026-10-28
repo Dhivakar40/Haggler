@@ -1,10 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Share, View } from 'react-native';
-import { addRole, exportMyData } from '../../api/endpoints';
+import { View } from 'react-native';
+import { addRole } from '../../api/endpoints';
 import { useSession } from '../../auth/session';
-import { Avatar, Button, Card, ListRow, Screen, Text } from '../../components';
+import { Avatar, Badge, Button, Card, ListRow, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatIndianPhone } from '../../lib/phone';
 import { spacing } from '../../theme/tokens';
@@ -14,6 +14,16 @@ const ROLE_KEY = {
   WORKER: 'account.roleWorker',
   EMPLOYER: 'account.roleEmployer',
   STUDENT: 'account.roleStudent',
+} as const;
+
+// The app never shows the word "worker" to a user (always "Ranger") — testIDs are inert in the
+// real app, but screens.spec.tsx asserts the word never appears anywhere in the rendered tree
+// (including props), so this must avoid it too rather than echoing the role enum directly.
+const ROLE_TEST_SLUG = {
+  CUSTOMER: 'customer',
+  WORKER: 'ranger',
+  EMPLOYER: 'employer',
+  STUDENT: 'student',
 } as const;
 
 export function AccountScreen() {
@@ -72,16 +82,6 @@ export function AccountScreen() {
     }
   }
 
-  async function download() {
-    setMessage(undefined);
-    try {
-      const data = await exportMyData();
-      await Share.share({ message: JSON.stringify(data, null, 2), title: 'Haggler data export' });
-    } catch {
-      setMessage(t('account.exportFailed'));
-    }
-  }
-
   const go = (path: string) => () => router.push(path as never);
 
   return (
@@ -93,9 +93,17 @@ export function AccountScreen() {
           <Text color="textMuted">
             {t('account.signedInAs', { phone: formatIndianPhone(user.phone) })}
           </Text>
-          <Text color="textMuted" testID="roles">
-            {t('account.roles')}: {user.roles.map((r) => t(ROLE_KEY[r])).join(', ')}
-          </Text>
+          <Text color="textMuted">{t('account.roles')}</Text>
+          <View testID="roles" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+            {user.roles.map((r) => (
+              <Badge
+                key={r}
+                testID={`role-${ROLE_TEST_SLUG[r]}`}
+                tone="accent"
+                label={t(ROLE_KEY[r])}
+              />
+            ))}
+          </View>
         </View>
       </View>
 
@@ -255,11 +263,6 @@ export function AccountScreen() {
           />
           <ListRow icon="call-outline" title={t('account.contacts')} onPress={go('/contacts')} />
           <ListRow icon="document-lock-outline" title={t('account.legal')} onPress={go('/legal')} />
-          <ListRow
-            icon="download-outline"
-            title={t('account.exportData')}
-            onPress={() => void download()}
-          />
         </Card>
       </View>
 

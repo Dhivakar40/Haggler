@@ -717,7 +717,7 @@ describe('data rights: export, deletion, purge', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/tokenHash|codeHash|passwordHash/);
   });
 
-  it('deletion: sessions end at once, sign-in is refused, then the purge anonymises the account', async () => {
+  it('deletion (D-108): account stays fully usable for 48h, then the purge anonymises it', async () => {
     const s = await api.signIn();
     await api.post(s, '/v1/me/roles', { role: 'WORKER' });
     await api.post(s, '/v1/me/addresses', {
@@ -737,21 +737,16 @@ describe('data rights: export, deletion, purge', () => {
 
     const del = await api.del(s, '/v1/me').expect(202);
     expect(del.body.status).toBe('DELETION_PENDING');
-    const days = (new Date(del.body.scheduledFor).getTime() - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(29.9);
-    expect(days).toBeLessThan(30.1);
+    const hours = (new Date(del.body.scheduledFor).getTime() - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(47.9);
+    expect(hours).toBeLessThan(48.1);
 
-    await api.get(s, '/v1/me').expect(401); // access token stops working immediately
-    await api.del(s, '/v1/me').expect(401); // and so a second request is refused by the guard
-    await api
-      .http()
-      .post('/v1/auth/refresh')
-      .send({ refreshToken: s.refreshToken, deviceId: s.deviceId })
-      .expect(401);
-
+    // Still fully usable: the existing session keeps working, and the account can sign in again.
+    const me = await api.get(s, '/v1/me').expect(200);
+    expect(me.body.deletionScheduledFor).toBe(del.body.scheduledFor);
     await api.ageOtps(s.phone);
     await api.sendOtp(s.phone);
-    const blocked = await api
+    const signedInAgain = await api
       .http()
       .post('/v1/auth/otp/verify')
       .set('X-Forwarded-For', newIp())
@@ -761,18 +756,26 @@ describe('data rights: export, deletion, purge', () => {
         deviceId: s.deviceId,
         platform: 'android',
       });
-    expect(blocked.status).toBe(403);
-    expect(blocked.body.error.code).toBe('ACCOUNT_UNAVAILABLE');
+    expect(signedInAgain.status).toBe(200);
 
     // Not due yet: purge does nothing.
     const { AccountLifecycleService } = await import('../src/users/account-lifecycle.service');
     const lifecycle = h.app.get(AccountLifecycleService);
     expect(await lifecycle.purgeDueDeletions()).toBeGreaterThanOrEqual(0);
     expect((await api.prisma().user.findUniqueOrThrow({ where: { id: s.userId } })).status).toBe(
-      'DELETION_PENDING',
+      'ACTIVE',
     );
 
-    // Time passes: the grace period ends.
+    // Tapping the banner's cancel action clears it.
+    const cancelled = await api.post(s, '/v1/me/cancel-deletion').expect(201);
+    expect(cancelled.body.status).toBe('ACTIVE');
+    expect(
+      (await api.prisma().user.findUniqueOrThrow({ where: { id: s.userId } }))
+        .deletionScheduledFor,
+    ).toBeNull();
+
+    // Request again, and this time let the grace period actually elapse.
+    await api.del(s, '/v1/me').expect(202);
     await api.prisma().user.update({
       where: { id: s.userId },
       data: { deletionScheduledFor: new Date(Date.now() - 1000) },
@@ -797,10 +800,14 @@ describe('data rights: export, deletion, purge', () => {
     const audit = await api.prisma().auditLog.findMany({
       where: {
         entityId: s.userId,
-        action: { in: ['account.deletion_requested', 'account.purged'] },
+        action: {
+          in: ['account.deletion_requested', 'account.deletion_cancelled', 'account.purged'],
+        },
       },
     });
     expect(audit.map((a) => a.action).sort()).toEqual([
+      'account.deletion_cancelled',
+      'account.deletion_requested',
       'account.deletion_requested',
       'account.purged',
     ]);

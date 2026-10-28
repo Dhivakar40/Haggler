@@ -8,7 +8,7 @@
 
 | #   | Item                                                                          | Engineering status                                                                                                               | Counsel |
 | --- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| 1   | DPDP: explicit consent, purpose limitation, retention, deletion + export      | **Built (Phase 1)**: consent screen, versioned consent records, export, 30-day deletion                                          | ☐       |
+| 1   | DPDP: explicit consent, purpose limitation, retention, deletion + export      | **Built (Phase 1, D-108)**: consent screen, versioned consent records, export, 48-hour cancellable deletion grace period        | ☐       |
 | 2   | Aadhaar: never store the full number; masked copy only                        | **Partly**: see "Aadhaar handling" below. Relies on users uploading the masked copy                                              | ☐       |
 | 3   | Independent-contractor Terms of Service for Rangers                           | Placeholder screens only; Contract labour and Campus (Phases 6-7) have no separate ToS yet                                       | ☐       |
 | 4   | Terms of Service, Privacy Policy, Refund Policy text                          | Placeholder text, marked in the app "needs counsel review"                                                                       | ☐       |

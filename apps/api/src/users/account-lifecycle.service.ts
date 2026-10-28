@@ -98,12 +98,15 @@ export class AccountLifecycleService {
   }
 
   /**
-   * Anonymises accounts whose 30-day grace period has ended. Idempotent and safe to re-run.
-   * Removes personal data and stored files; keeps the (identifier-free) audit trail.
+   * Anonymises accounts whose 48-hour grace period (D-108) has ended. The account stays ACTIVE
+   * the whole time it's pending (see `UsersService.requestDeletion`), so this matches on
+   * `deletionScheduledFor` alone, not `status` — excluding only accounts already purged.
+   * Idempotent and safe to re-run. Removes personal data and stored files; keeps the
+   * (identifier-free) audit trail.
    */
   async purgeDueDeletions(now = new Date()): Promise<number> {
     const due = await this.prisma.user.findMany({
-      where: { status: 'DELETION_PENDING', deletionScheduledFor: { lte: now } },
+      where: { status: { not: 'DELETED' }, deletionScheduledFor: { lte: now } },
       select: { id: true, phone: true },
     });
     for (const u of due) await this.purgeOne(u.id, u.phone);

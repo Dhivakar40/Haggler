@@ -1,6 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
-import { Share } from 'react-native';
 import i18n from '../../i18n';
 import { useSession } from '../../auth/session';
 import {
@@ -40,7 +39,9 @@ describe('AccountScreen', () => {
     await renderWithProviders(<AccountScreen />);
     expect(screen.getByText('Asha Raman')).toBeTruthy();
     expect(screen.getByText('Signed in as +91 98765 43210')).toBeTruthy();
-    expect(screen.getByTestId('roles')).toHaveTextContent('Your roles: Customer');
+    expect(screen.getByText('Your roles')).toBeTruthy();
+    expect(screen.getByTestId('roles')).toHaveTextContent('Customer');
+    expect(screen.queryByTestId('role-ranger')).toBeNull();
     expect(screen.getByTestId('become-ranger')).toBeTruthy();
     expect(everyText()).not.toContain('worker');
   });
@@ -74,7 +75,8 @@ describe('AccountScreen', () => {
     signInAs({ roles: ['CUSTOMER', 'WORKER'] });
     mockApi(() => undefined);
     await renderWithProviders(<AccountScreen />);
-    expect(screen.getByTestId('roles')).toHaveTextContent('Your roles: Customer, Ranger');
+    expect(screen.getByTestId('role-customer')).toHaveTextContent('Customer');
+    expect(screen.getByTestId('role-ranger')).toHaveTextContent('Ranger');
     expect(screen.queryByTestId('become-ranger')).toBeNull();
     await fireEvent.press(screen.getByTestId('ranger-verification'));
     expect(routerMock().push).toHaveBeenCalledWith('/ranger');
@@ -170,27 +172,9 @@ describe('AccountScreen', () => {
     signInAs({ roles: ['CUSTOMER', 'WORKER'] });
     mockApi(() => undefined);
     await renderWithProviders(<AccountScreen />);
-    expect(screen.getByTestId('roles')).toHaveTextContent(
-      'உங்கள் பங்குகள்: வாடிக்கையாளர், ரேஞ்சர்',
-    );
-  });
-
-  it('exports my data and opens the share sheet with the JSON', async () => {
-    mockApi((c) => (c.path === '/v1/me/export' ? { body: { account: { id: 'x' } } } : undefined));
-    const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
-    await renderWithProviders(<AccountScreen />);
-    await fireEvent.press(screen.getByText('Download my data'));
-    await waitFor(() => expect(share).toHaveBeenCalled());
-    expect(JSON.parse((share.mock.calls[0]?.[0] as { message: string }).message)).toEqual({
-      account: { id: 'x' },
-    });
-  });
-
-  it('a failed export says so', async () => {
-    mockApi(() => ({ status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } }));
-    await renderWithProviders(<AccountScreen />);
-    await fireEvent.press(screen.getByText('Download my data'));
-    expect(await screen.findByText('Could not export your data.')).toBeTruthy();
+    expect(screen.getByText('உங்கள் பங்குகள்')).toBeTruthy();
+    expect(screen.getByTestId('role-customer')).toHaveTextContent('வாடிக்கையாளர்');
+    expect(screen.getByTestId('role-ranger')).toHaveTextContent('ரேஞ்சர்');
   });
 
   it('signing out clears the session', async () => {
@@ -437,19 +421,26 @@ describe('emergency contacts', () => {
 });
 
 describe('DeleteAccountScreen', () => {
-  it('requests deletion, then signs this phone out', async () => {
-    secureStore().set('haggler.refresh', 'refresh-token-number-0-xxxxxxxx');
-    const { calls } = mockApi((c) =>
-      c.path === '/v1/me' ? { status: 202, body: { status: 'DELETION_PENDING' } } : { status: 204 },
-    );
+  it('requests deletion but stays signed in — the account is usable for the grace period', async () => {
+    const scheduledFor = new Date(Date.now() + 48 * 3_600_000).toISOString();
+    const { calls } = mockApi((c) => {
+      if (c.method === 'DELETE' && c.path === '/v1/me')
+        return { status: 202, body: { status: 'DELETION_PENDING', scheduledFor } };
+      if (c.method === 'GET' && c.path === '/v1/me')
+        return { body: makeMe({ deletionScheduledFor: scheduledFor }) };
+      return undefined;
+    });
     await renderWithProviders(<DeleteAccountScreen />);
     expect(
-      screen.getByText('Your account will be locked now and permanently erased after 30 days.'),
+      screen.getByText(
+        'You can keep using the app as usual for the next 48 hours. After that, your account is permanently erased. You can cancel any time before then.',
+      ),
     ).toBeTruthy();
     await fireEvent.press(screen.getByTestId('confirm-delete'));
-    await waitFor(() => expect(useSession.getState().status).toBe('signedOut'));
-    expect(calls[0]).toMatchObject({ method: 'DELETE', path: '/v1/me' });
-    expect(secureStore().size).toBe(0);
+    await waitFor(() => expect(routerMock().back).toHaveBeenCalled());
+    expect(calls.some((c) => c.method === 'DELETE' && c.path === '/v1/me')).toBe(true);
+    expect(useSession.getState().status).toBe('signedIn');
+    expect(useSession.getState().user?.deletionScheduledFor).toBe(scheduledFor);
   });
 
   it('"Keep my account" does nothing destructive', async () => {

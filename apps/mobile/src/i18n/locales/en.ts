@@ -136,8 +136,6 @@ const en = {
     becomeRanger: 'Become a Ranger',
     becomeRangerDesc: 'Offer your skills and earn. You will need to get verified.',
     legal: 'Legal and policies',
-    exportData: 'Download my data',
-    exportFailed: 'Could not export your data.',
     deleteAccount: 'Delete my account',
     signOut: 'Sign out',
   },
@@ -654,9 +652,13 @@ const en = {
   },
   deleteAccount: {
     title: 'Delete my account',
-    warning: 'Your account will be locked now and permanently erased after 30 days.',
+    warning:
+      'You can keep using the app as usual for the next 48 hours. After that, your account ' +
+      'is permanently erased. You can cancel any time before then.',
     confirm: 'Delete my account',
     keep: 'Keep my account',
+    scheduledBanner: 'This account is scheduled for deletion soon. Tap here to cancel.',
+    cancelledToast: 'Account deletion cancelled.',
   },
   employer: {
     becomeEmployer: 'Become an employer',

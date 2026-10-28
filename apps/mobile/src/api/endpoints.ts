@@ -89,6 +89,12 @@ export const requestDeletion = () =>
     schema: z.object({ status: z.string() }).passthrough(),
   });
 
+export const cancelDeletion = () =>
+  apiRequest('/v1/me/cancel-deletion', {
+    method: 'POST',
+    schema: z.object({ status: z.string() }),
+  });
+
 export const exportMyData = () => apiRequest('/v1/me/export', { schema: z.record(z.unknown()) });
 
 export const listAddresses = () =>

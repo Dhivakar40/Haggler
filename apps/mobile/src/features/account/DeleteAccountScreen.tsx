@@ -9,7 +9,7 @@ import { errorMessage } from '../../lib/errors';
 export function DeleteAccountScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const signOut = useSession((s) => s.signOut);
+  const refreshMe = useSession((s) => s.refreshMe);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -18,9 +18,13 @@ export function DeleteAccountScreen() {
     setError(undefined);
     try {
       await requestDeletion();
-      await signOut(); // the server already ended every session; clear this phone too
+      // D-108: the account stays usable for the 48-hour grace period, so there's nothing to sign
+      // out of — just pick up the new deletionScheduledFor so the top banner appears.
+      await refreshMe();
+      router.back();
     } catch (err) {
       setError(errorMessage(err, t));
+    } finally {
       setBusy(false);
     }
   }

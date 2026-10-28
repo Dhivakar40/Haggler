@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSession } from '../auth/session';
 import { LeagueUpModal, ToastHost } from '../components';
+import { DeletionBanner } from '../features/account/DeletionBanner';
 import { TrackerHost } from '../features/work/TrackerHost';
 import { checkLeagueUp } from '../lib/league-up-check';
 import { defineBackgroundTask } from '../location/tracker';
@@ -264,6 +265,7 @@ export default function RootLayout() {
             <ThemeProvider>
               <ThemedStatusBar />
               <TrackerHost />
+              <DeletionBanner />
               <Navigator />
               <LeagueUpModal />
               <ToastHost />

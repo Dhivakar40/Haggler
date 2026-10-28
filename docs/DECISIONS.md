@@ -2198,3 +2198,39 @@ vars). `npx tsc --noEmit` clean, both apps. Mobile suite green: 523/523 (3 new: 
 sends through the email channel and carries it to the OTP screen; an invalid email is rejected
 client-side without a round trip; the OTP screen shows "Sent to <email>" and would resend through
 it). i18n key-parity test still green across all 5 locales.
+
+## D-108: deletion grace period cut to 48 hours, and the account stays usable the whole time
+
+D-024's deletion flow revoked every session the moment `DELETE /me` was called and refused sign-in
+for the full 30-day grace period — by explicit product instruction, that's backwards: someone who
+asks to delete their account should still be able to use it normally until it's actually gone, with
+an easy way to change their mind, and 30 days is a long time to hold that door open.
+
+**The fix needed no new status, no new guard.** Every access check in the app
+(`auth.guards.ts`, `token.service.ts`, `auth.service.ts`'s sign-in check, `realtime.gateway.ts`)
+already gated purely on `user.status === 'ACTIVE'`. `UsersService.requestDeletion()` used to flip
+status to `DELETION_PENDING` and revoke all refresh tokens; now it leaves `status` untouched and
+only sets `deletionScheduledFor` (now + `DELETION_GRACE_HOURS`, 48). Leaving status alone is what
+makes "full access for 48 hours" true everywhere at once, instead of auditing and loosening four
+separate guards. `deletionScheduledFor` alone is the pending-deletion signal: `AccountLifecycleService
+.purgeDueDeletions()` now matches on it directly (`status != 'DELETED'`, not `=== 'DELETION_PENDING'`)
+since nothing sets that status from this flow anymore; a new `UsersService.cancelDeletion()` /
+`POST /me/cancel-deletion` just nulls it back out.
+
+**Mobile**: `Me` (api-schemas.ts) gained `deletionScheduledFor`; a new `DeletionBanner`
+(`features/account/DeletionBanner.tsx`), mounted once in `_layout.tsx` above the whole
+`Navigator`, shows whenever the signed-in user has one set and disappears the moment it's
+cleared. Tapping it cancels outright — no confirmation dialog, since requesting deletion again
+is always one tap away if it was pressed by mistake. `DeleteAccountScreen` no longer signs out
+after requesting deletion (there is nothing to sign out of); it refreshes `me` and goes back,
+letting the banner appear naturally.
+
+API unit suite unaffected (228/228 — this flow is only covered end-to-end). `auth.e2e-spec.ts`'s
+deletion test rewritten for the new behavior (stays signed in, re-signs-in successfully, cancels,
+requests again, lets the grace period elapse, purge still anonymises correctly) — not run in this
+session (no local Docker daemon for the Testcontainers Postgres/Redis the integration suite needs),
+so this is typechecked and reasoned through but not executed here. `npx tsc --noEmit` clean, both
+apps. Mobile suite green: 544/544. i18n key-parity green across all 5 locales. Also in this pass:
+removed the "Download my data" entry point from `AccountScreen` (the `GET /me/export` endpoint
+itself is untouched, same "stop calling it, never delete it" reasoning as D-106's wallet); replaced
+the comma-separated "Your roles: Customer, Ranger" line with individual `Badge` tags.

@@ -11,16 +11,18 @@ import { conflict, notFound, unprocessable } from '../common/http-errors';
 import { EncryptionService } from '../common/crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { TokenService } from '../auth/token.service';
 
-export const DELETION_GRACE_DAYS = 30;
+/**
+ * D-108: 48 hours, not days — the account stays fully usable the whole time (see below), so a
+ * short window is enough to mean "changed my mind," while still giving a real chance to cancel.
+ */
+export const DELETION_GRACE_HOURS = 48;
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly tokens: TokenService,
     private readonly encryption: EncryptionService,
   ) {}
 
@@ -50,6 +52,7 @@ export class UsersService {
       status: user.status,
       missingConsents: CONSENT_PURPOSES.filter((p) => !granted.has(p)),
       workerKycTier: user.workerProfile?.kycTier ?? null,
+      deletionScheduledFor: user.deletionScheduledFor?.toISOString() ?? null,
     };
   }
 
@@ -188,26 +191,27 @@ export class UsersService {
     });
   }
 
-  /** DPDP erasure request: sessions end now; data is anonymised after a grace period (D-024). */
+  /**
+   * DPDP erasure request (D-108): the account stays ACTIVE and fully usable — every other guard
+   * in the app only ever checks `status === 'ACTIVE'`, so leaving that column alone is what makes
+   * "keep using the app for 48 hours" true everywhere for free. `deletionScheduledFor` alone is
+   * the pending-deletion signal: the Settings banner shows while it's set, `cancelDeletion` clears
+   * it, and `purgeDueDeletions` erases the account once it's in the past.
+   */
   async requestDeletion(userId: string, ip: string | undefined) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw notFound('User not found');
-    if (user.status === 'DELETION_PENDING') {
+    if (user.deletionScheduledFor) {
       return { status: 'DELETION_PENDING' as const, scheduledFor: user.deletionScheduledFor };
     }
     if (user.status !== 'ACTIVE') throw conflict('This account cannot be deleted right now.');
     const now = new Date();
-    const scheduledFor = new Date(now.getTime() + DELETION_GRACE_DAYS * 86_400_000);
+    const scheduledFor = new Date(now.getTime() + DELETION_GRACE_HOURS * 3_600_000);
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
-        data: {
-          status: 'DELETION_PENDING',
-          deletionRequestedAt: now,
-          deletionScheduledFor: scheduledFor,
-        },
+        data: { deletionRequestedAt: now, deletionScheduledFor: scheduledFor },
       });
-      await this.tokens.revokeAllForUser(userId, tx);
       await this.audit.record(
         {
           actorType: 'USER',
@@ -222,5 +226,30 @@ export class UsersService {
       );
     });
     return { status: 'DELETION_PENDING' as const, scheduledFor };
+  }
+
+  /** Cancels a pending deletion requested via `requestDeletion` — tapping the Settings banner. */
+  async cancelDeletion(userId: string, ip: string | undefined): Promise<{ status: 'ACTIVE' }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw notFound('User not found');
+    if (!user.deletionScheduledFor) throw conflict('No deletion is scheduled for this account.');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { deletionRequestedAt: null, deletionScheduledFor: null },
+      });
+      await this.audit.record(
+        {
+          actorType: 'USER',
+          actorId: userId,
+          action: 'account.deletion_cancelled',
+          entityType: 'user',
+          entityId: userId,
+          ip,
+        },
+        tx,
+      );
+    });
+    return { status: 'ACTIVE' };
   }
 }

@@ -103,6 +103,7 @@ export const makeMe = (over: Partial<Me> = {}): Me => ({
   status: 'ACTIVE',
   missingConsents: [],
   workerKycTier: null,
+  deletionScheduledFor: null,
   ...over,
 });
 

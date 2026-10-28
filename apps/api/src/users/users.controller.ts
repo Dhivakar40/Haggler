@@ -155,10 +155,17 @@ export class UsersController {
   @HttpCode(202)
   @ApiOperation({
     summary:
-      'Request account deletion. Sessions end now; data is erased after a 30-day grace period.',
+      'Request account deletion. The account stays fully usable for a 48-hour grace period, ' +
+      'cancellable via POST /me/cancel-deletion, after which it is erased.',
   })
   delete(@CurrentUser() user: AuthUser, @ClientIp() ip?: string) {
     return this.users.requestDeletion(user.id, ip);
+  }
+
+  @Post('cancel-deletion')
+  @ApiOperation({ summary: 'Cancel a pending account deletion within its grace period' })
+  cancelDeletion(@CurrentUser() user: AuthUser, @ClientIp() ip?: string) {
+    return this.users.cancelDeletion(user.id, ip);
   }
 
   // ---- addresses -----------------------------------------------------------------------

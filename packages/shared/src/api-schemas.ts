@@ -74,6 +74,9 @@ export const meSchema = z.object({
   /** Consent purposes the user has not yet granted at the current legal version. */
   missingConsents: z.array(z.enum(CONSENT_PURPOSES)),
   workerKycTier: z.number().int().nullable(),
+  /** D-108: set while the account is within its deletion grace period; null otherwise. The
+   * account stays fully usable until this time — see requestDeletionSchema/cancel-deletion. */
+  deletionScheduledFor: z.string().nullable(),
 });
 export type Me = z.infer<typeof meSchema>;
 
