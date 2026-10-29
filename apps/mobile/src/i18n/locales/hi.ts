@@ -413,6 +413,12 @@ const hi: Translation = {
   work: {
     title: 'काम',
     titleNamed: 'नमस्ते {{name}}, काम के लिए तैयार हैं?',
+    dashboardTitle: 'रेंजर डैशबोर्ड',
+    statTotal: 'कुल काम',
+    statOngoing: 'जारी',
+    statCompleted: 'पूर्ण',
+    statCancelled: 'रद्द',
+    budgetRange: 'ग्राहक बजट: {{min}} - {{max}}',
     offline: 'आप ऑफ़लाइन हैं',
     online: 'आप ऑनलाइन हैं',
     goOnline: 'ऑनलाइन हों',

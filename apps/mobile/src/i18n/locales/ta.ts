@@ -427,6 +427,12 @@ const ta: Translation = {
   work: {
     title: 'வேலை',
     titleNamed: 'வணக்கம் {{name}}, வேலைக்குத் தயாரா?',
+    dashboardTitle: 'ரேஞ்சர் டாஷ்போர்டு',
+    statTotal: 'மொத்த வேலைகள்',
+    statOngoing: 'நடந்துகொண்டிருக்கிறது',
+    statCompleted: 'முடிந்தது',
+    statCancelled: 'ரத்து செய்யப்பட்டது',
+    budgetRange: 'வாடிக்கையாளர் பட்ஜெட்: {{min}} - {{max}}',
     offline: 'நீங்கள் ஆஃப்லைனில் உள்ளீர்கள்',
     online: 'நீங்கள் ஆன்லைனில் உள்ளீர்கள்',
     goOnline: 'ஆன்லைன் செல்',

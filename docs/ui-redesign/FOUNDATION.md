@@ -133,6 +133,19 @@ what the categories/items actually are (rule 1). Per-tile decorative tints with 
 meaning (just cycling by grid position) are a cheap way to get an image's "colourful grid" look
 onto real homogeneous data without inventing per-item metadata that doesn't exist.
 
+## Restyling a screen with heavy existing test coverage, additively (`WorkScreen.tsx`, D-115)
+
+When a page already has many tests covering real, load-bearing behaviour (not just visual
+assertions), don't rewrite its render tree — wrap. Keep the exact existing JSX for the default/
+primary state as a literal, untouched block inside a new conditional (here, a `tab === 'new'`
+branch holding the screen's entire pre-existing body unchanged), so the original tests — which
+never interact with the new UI — keep exercising exactly the same render path they always did.
+Add new views as sibling conditional branches built from data the screen already fetches. If a
+test asserted on a string that a new, always-visible piece of chrome now also contains (here: a
+section heading's text became ambiguous with a new tab's label using the same word), fix the test
+to assert on what it actually meant to check (a container's presence) rather than deleting or
+loosening the assertion — the original intent must still be verified by something.
+
 ## Elements with no backing feature
 
 The design images are AI-generated and occasionally show something the app doesn't do (an extra

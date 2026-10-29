@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { OTHER_CATEGORY_SLUG, type IncomingRequest } from '@haggler/shared';
 import {
   acceptRequest,
@@ -18,6 +18,7 @@ import {
 } from '../../api/market';
 import { useSession } from '../../auth/session';
 import {
+  Avatar,
   Button,
   Card,
   Chip,
@@ -35,6 +36,8 @@ import { formatRupees, parseRupeesToPaise } from '../../lib/money';
 import { ensureForegroundPermission } from '../../location/tracker';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radii, spacing } from '../../theme/tokens';
+
+type DashboardTab = 'new' | 'ongoing' | 'completed';
 
 const distanceLabel = (m: number): string =>
   m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
@@ -118,6 +121,12 @@ function IncomingCard({
                     {t('work.inspectionCharge')}
                   </Text>
                 ) : null}
+                <Text variant="caption" color="textMuted">
+                  {t('work.budgetRange', {
+                    min: formatRupees(item.band.minPaise),
+                    max: formatRupees(item.band.maxPaise),
+                  })}
+                </Text>
               </>
             )}
           </View>
@@ -212,6 +221,8 @@ export function WorkScreen() {
   const { colors } = useTheme();
   const tier = useSession((s) => s.user?.workerKycTier ?? 0);
   const name = useSession((s) => firstName(s.user?.fullName));
+  const avatarName = useSession((s) => s.user?.fullName ?? null);
+  const photoUrl = useSession((s) => s.user?.photoUrl ?? null);
   const refreshMe = useSession((s) => s.refreshMe);
   // KYC approval happens on the admin side, asynchronously — the session's cached
   // workerKycTier only updates when we ask, so ask every time this tab gains focus (e.g. a
@@ -234,6 +245,16 @@ export function WorkScreen() {
   const visibleIncoming = incoming.data?.filter(
     (item) => categoryFilter === 'ALL' || item.categorySlug === categoryFilter,
   );
+
+  // D-115: the dashboard tabs below are purely a second way to browse jobs already fetched by
+  // `jobs` (useJobs('WORKER')) — the "new" tab's content is untouched from before this tab bar
+  // existed (same activeJob/incoming blocks, same conditions), so none of the existing behaviour
+  // around it (e.g. an active job hiding new requests) changes just because tabs were added.
+  const [tab, setTab] = useState<DashboardTab>('new');
+  const allJobs = jobs.data?.items ?? [];
+  const ongoingJobs = allJobs.filter((j) => isActive(j.status));
+  const completedJobs = allJobs.filter((j) => j.status === 'CONFIRMED_BY_CUSTOMER');
+  const cancelledCount = allJobs.filter((j) => j.status === 'CANCELLED').length;
 
   async function toggle() {
     setError(undefined);
@@ -331,12 +352,81 @@ export function WorkScreen() {
 
   return (
     <Screen scroll>
+      <View style={styles.topBar}>
+        <Text variant="heading" color="primary">
+          {t('app.name')}
+        </Text>
+        <View style={styles.topBarActions}>
+          <Pressable
+            testID="work-notifications"
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.notifications')}
+            onPress={() => router.push('/settings')}
+            style={[styles.iconButton, { backgroundColor: colors.surfaceAlt }]}
+            hitSlop={8}
+          >
+            <Ionicons name="notifications-outline" size={20} color={colors.text} />
+          </Pressable>
+          <Pressable
+            testID="work-account"
+            accessibilityRole="button"
+            accessibilityLabel={t('account.title')}
+            onPress={() => router.push('/account')}
+            hitSlop={8}
+          >
+            <Avatar name={avatarName} photoUrl={photoUrl} size={36} />
+          </Pressable>
+        </View>
+      </View>
+
       <View style={styles.screenHeader}>
         <View style={[styles.headerIcon, { backgroundColor: colors.surfaceAlt }]}>
           <Ionicons name="briefcase-outline" size={25} color={colors.primary} />
         </View>
         <View style={styles.headerText}>
-          <Text variant="title">{name ? t('work.titleNamed', { name }) : t('work.title')}</Text>
+          <Text variant="title">{t('work.dashboardTitle')}</Text>
+          <Text color="textMuted">
+            {name ? t('work.titleNamed', { name }) : t('work.title')}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.statIcon, { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons name="clipboard-outline" size={20} color={colors.primary} />
+          </View>
+          <Text variant="heading">{allJobs.length}</Text>
+          <Text variant="caption" color="textMuted">
+            {t('work.statTotal')}
+          </Text>
+        </View>
+        <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.statIcon, { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons name="time-outline" size={20} color={colors.warning} />
+          </View>
+          <Text variant="heading">{ongoingJobs.length}</Text>
+          <Text variant="caption" color="textMuted">
+            {t('work.statOngoing')}
+          </Text>
+        </View>
+        <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.statIcon, { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons name="checkmark-circle-outline" size={20} color={colors.success} />
+          </View>
+          <Text variant="heading">{completedJobs.length}</Text>
+          <Text variant="caption" color="textMuted">
+            {t('work.statCompleted')}
+          </Text>
+        </View>
+        <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.statIcon, { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
+          </View>
+          <Text variant="heading">{cancelledCount}</Text>
+          <Text variant="caption" color="textMuted">
+            {t('work.statCancelled')}
+          </Text>
         </View>
       </View>
 
@@ -398,92 +488,203 @@ export function WorkScreen() {
         </Card>
       ) : null}
 
-      {activeJob ? (
-        <Card testID="active-job" elevated style={styles.activeJobCard}>
-          <View style={styles.activeJobContent}>
-            <View style={styles.sectionHeadingRow}>
-              <View style={[styles.smallIcon, { backgroundColor: colors.surfaceAlt }]}>
-                <Ionicons name="construct-outline" size={22} color={colors.primary} />
-              </View>
-              <View style={styles.headerText}>
-                <Text variant="heading">{t('work.activeJob')}</Text>
-                <Text variant="caption" color="textMuted">
-                  {t(`categories.${activeJob.categorySlug}`)} ·{' '}
-                  {t(`job.status.${activeJob.status}`)}
-                </Text>
-              </View>
-            </View>
-            <Button
-              testID="open-active-job"
-              title={t('work.openJob')}
-              onPress={() => router.push({ pathname: '/job/[id]', params: { id: activeJob.id } })}
-            />
-          </View>
-        </Card>
-      ) : null}
-
-      {online && !activeJob ? (
-        <View style={styles.incomingSection}>
-          <View style={styles.sectionHeadingRow}>
-            <View style={styles.headerText}>
-              <Text variant="heading">{t('work.incoming')}</Text>
-              <Text variant="caption" color="textMuted">
-                {incoming.data?.length ?? 0}
-              </Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: colors.surfaceAlt }]}>
-              <View style={[styles.presenceDot, { backgroundColor: colors.success }]} />
-              <Text variant="caption" color="success">
-                {t('work.online')}
-              </Text>
-            </View>
-          </View>
-
+      <View style={styles.tabRow}>
+        <Pressable
+          testID="dashboard-tab-new"
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'new' }}
+          onPress={() => setTab('new')}
+          style={[styles.tab, tab === 'new' && { backgroundColor: colors.primary }]}
+        >
           {incoming.data && incoming.data.length > 0 ? (
-            <View style={styles.filterRow}>
-              <Chip
-                testID="filter-all"
-                label={t('work.filterAll')}
-                selected={categoryFilter === 'ALL'}
-                onPress={() => setCategoryFilter('ALL')}
-              />
-              <Chip
-                testID="filter-other"
-                label={t('work.filterOther')}
-                selected={categoryFilter === OTHER_CATEGORY_SLUG}
-                onPress={() => setCategoryFilter(OTHER_CATEGORY_SLUG)}
-              />
+            <View style={[styles.tabBadge, { backgroundColor: colors.danger }]}>
+              <Text variant="caption" style={{ color: colors.onDanger }}>
+                {incoming.data.length}
+              </Text>
             </View>
           ) : null}
+          <Text
+            variant="label"
+            style={{ color: tab === 'new' ? colors.onPrimary : colors.text }}
+            numberOfLines={1}
+          >
+            {t('work.incoming')}
+          </Text>
+        </Pressable>
+        <Pressable
+          testID="dashboard-tab-ongoing"
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'ongoing' }}
+          onPress={() => setTab('ongoing')}
+          style={[styles.tab, tab === 'ongoing' && { backgroundColor: colors.primary }]}
+        >
+          <Text style={{ color: tab === 'ongoing' ? colors.onPrimary : colors.text }}>
+            {t('work.statOngoing')} {ongoingJobs.length}
+          </Text>
+        </Pressable>
+        <Pressable
+          testID="dashboard-tab-completed"
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'completed' }}
+          onPress={() => setTab('completed')}
+          style={[styles.tab, tab === 'completed' && { backgroundColor: colors.primary }]}
+        >
+          <Text style={{ color: tab === 'completed' ? colors.onPrimary : colors.text }}>
+            {t('work.statCompleted')} {completedJobs.length}
+          </Text>
+        </Pressable>
+      </View>
 
-          {incoming.isLoading ? (
-            <View testID="incoming-skeleton" style={styles.loadingList}>
-              {[0, 1].map((i) => (
-                <Card key={i} elevated>
-                  <View style={styles.loadingContent}>
-                    <Skeleton width="50%" height={20} />
-                    <Skeleton width="90%" height={16} />
-                    <Skeleton width="40%" height={14} />
+      {tab === 'new' ? (
+        <>
+          {activeJob ? (
+            <Card testID="active-job" elevated style={styles.activeJobCard}>
+              <View style={styles.activeJobContent}>
+                <View style={styles.sectionHeadingRow}>
+                  <View style={[styles.smallIcon, { backgroundColor: colors.surfaceAlt }]}>
+                    <Ionicons name="construct-outline" size={22} color={colors.primary} />
                   </View>
-                </Card>
+                  <View style={styles.headerText}>
+                    <Text variant="heading">{t('work.activeJob')}</Text>
+                    <Text variant="caption" color="textMuted">
+                      {t(`categories.${activeJob.categorySlug}`)} ·{' '}
+                      {t(`job.status.${activeJob.status}`)}
+                    </Text>
+                  </View>
+                </View>
+                <Button
+                  testID="open-active-job"
+                  title={t('work.openJob')}
+                  onPress={() =>
+                    router.push({ pathname: '/job/[id]', params: { id: activeJob.id } })
+                  }
+                />
+              </View>
+            </Card>
+          ) : null}
+
+          {online && !activeJob ? (
+            <View style={styles.incomingSection} testID="incoming-section">
+              <View style={styles.sectionHeadingRow}>
+                <View style={styles.headerText}>
+                  <Text variant="heading">{t('work.incoming')}</Text>
+                  <Text variant="caption" color="textMuted">
+                    {incoming.data?.length ?? 0}
+                  </Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: colors.surfaceAlt }]}>
+                  <View style={[styles.presenceDot, { backgroundColor: colors.success }]} />
+                  <Text variant="caption" color="success">
+                    {t('work.online')}
+                  </Text>
+                </View>
+              </View>
+
+              {incoming.data && incoming.data.length > 0 ? (
+                <View style={styles.filterRow}>
+                  <Chip
+                    testID="filter-all"
+                    label={t('work.filterAll')}
+                    selected={categoryFilter === 'ALL'}
+                    onPress={() => setCategoryFilter('ALL')}
+                  />
+                  <Chip
+                    testID="filter-other"
+                    label={t('work.filterOther')}
+                    selected={categoryFilter === OTHER_CATEGORY_SLUG}
+                    onPress={() => setCategoryFilter(OTHER_CATEGORY_SLUG)}
+                  />
+                </View>
+              ) : null}
+
+              {incoming.isLoading ? (
+                <View testID="incoming-skeleton" style={styles.loadingList}>
+                  {[0, 1].map((i) => (
+                    <Card key={i} elevated>
+                      <View style={styles.loadingContent}>
+                        <Skeleton width="50%" height={20} />
+                        <Skeleton width="90%" height={16} />
+                        <Skeleton width="40%" height={14} />
+                      </View>
+                    </Card>
+                  ))}
+                </View>
+              ) : null}
+
+              {incoming.data && incoming.data.length === 0 ? (
+                <EmptyState message={t('work.waiting')} />
+              ) : null}
+
+              {visibleIncoming?.map((item) => (
+                <IncomingCard
+                  key={item.requestId}
+                  item={item}
+                  busy={busyId === item.requestId}
+                  onAccept={() => void accept(item)}
+                  onDecline={() => void decline(item)}
+                  onQuote={(amountPaise) => void quote(item, amountPaise)}
+                />
               ))}
             </View>
           ) : null}
+        </>
+      ) : null}
 
-          {incoming.data && incoming.data.length === 0 ? (
-            <EmptyState message={t('work.waiting')} />
-          ) : null}
+      {tab === 'ongoing' ? (
+        <View style={styles.incomingSection} testID="dashboard-ongoing-list">
+          {ongoingJobs.length === 0 ? (
+            <EmptyState />
+          ) : (
+            ongoingJobs.map((job) => (
+              <Card
+                key={job.id}
+                testID={`ongoing-job-${job.id}`}
+                onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })}
+              >
+                <View style={styles.sectionHeadingRow}>
+                  <View style={[styles.smallIcon, { backgroundColor: colors.surfaceAlt }]}>
+                    <Ionicons name="construct-outline" size={22} color={colors.primary} />
+                  </View>
+                  <View style={styles.headerText}>
+                    <Text variant="heading">{t(`categories.${job.categorySlug}`)}</Text>
+                    <Text variant="caption" color="textMuted">
+                      {t(`job.status.${job.status}`)}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            ))
+          )}
+        </View>
+      ) : null}
 
-          {visibleIncoming?.map((item) => (
-            <IncomingCard
-              key={item.requestId}
-              item={item}
-              busy={busyId === item.requestId}
-              onAccept={() => void accept(item)}
-              onDecline={() => void decline(item)}
-              onQuote={(amountPaise) => void quote(item, amountPaise)}
-            />
-          ))}
+      {tab === 'completed' ? (
+        <View style={styles.incomingSection} testID="dashboard-completed-list">
+          {completedJobs.length === 0 ? (
+            <EmptyState />
+          ) : (
+            completedJobs.map((job) => (
+              <Card
+                key={job.id}
+                testID={`completed-job-${job.id}`}
+                onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })}
+              >
+                <View style={styles.sectionHeadingRow}>
+                  <View style={[styles.smallIcon, { backgroundColor: colors.surfaceAlt }]}>
+                    <Ionicons name="checkmark-circle-outline" size={22} color={colors.success} />
+                  </View>
+                  <View style={styles.headerText}>
+                    <Text variant="heading">{t(`categories.${job.categorySlug}`)}</Text>
+                    {job.agreedPricePaise !== null ? (
+                      <Text variant="caption" color="textMuted">
+                        {formatRupees(job.agreedPricePaise)}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              </Card>
+            ))
+          )}
         </View>
       ) : null}
     </Screen>
@@ -619,4 +820,61 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   actionButton: { flex: 1, minWidth: 130 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  topBarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.sm,
+  },
+  statTile: {
+    width: '23.5%',
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: spacing.sm,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radii.pill,
+  },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
 });

@@ -423,6 +423,12 @@ const kn: Translation = {
   work: {
     title: 'ಕೆಲಸ',
     titleNamed: 'ನಮಸ್ಕಾರ {{name}}, ಕೆಲಸಕ್ಕೆ ಸಿದ್ಧರಿದ್ದೀರಾ?',
+    dashboardTitle: 'ರೇಂಜರ್ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್',
+    statTotal: 'ಒಟ್ಟು ಕೆಲಸಗಳು',
+    statOngoing: 'ನಡೆಯುತ್ತಿರುವ',
+    statCompleted: 'ಪೂರ್ಣಗೊಂಡಿದೆ',
+    statCancelled: 'ರದ್ದುಗೊಂಡಿದೆ',
+    budgetRange: 'ಗ್ರಾಹಕರ ಬಜೆಟ್: {{min}} - {{max}}',
     offline: 'ನೀವು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ',
     online: 'ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ',
     goOnline: 'ಆನ್‌ಲೈನ್ ಆಗಿ',

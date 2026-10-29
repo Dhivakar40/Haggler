@@ -423,6 +423,12 @@ const te: Translation = {
   work: {
     title: 'పని',
     titleNamed: 'నమస్తే {{name}}, పనికి సిద్ధంగా ఉన్నారా?',
+    dashboardTitle: 'రేంజర్ డాష్‌బోర్డ్',
+    statTotal: 'మొత్తం పనులు',
+    statOngoing: 'జరుగుతున్నవి',
+    statCompleted: 'పూర్తయినవి',
+    statCancelled: 'రద్దు చేయబడింది',
+    budgetRange: 'కస్టమర్ బడ్జెట్: {{min}} - {{max}}',
     offline: 'మీరు ఆఫ్‌లైన్‌లో ఉన్నారు',
     online: 'మీరు ఆన్‌లైన్‌లో ఉన్నారు',
     goOnline: 'ఆన్‌లైన్ అవ్వండి',

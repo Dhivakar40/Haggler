@@ -421,6 +421,12 @@ const en = {
   work: {
     title: 'Work',
     titleNamed: 'Hi {{name}}, ready to work?',
+    dashboardTitle: 'Ranger Dashboard',
+    statTotal: 'Total Jobs',
+    statOngoing: 'Ongoing',
+    statCompleted: 'Completed',
+    statCancelled: 'Cancelled',
+    budgetRange: 'Customer budget: {{min}} - {{max}}',
     offline: 'You are offline',
     online: 'You are online',
     goOnline: 'Go online',

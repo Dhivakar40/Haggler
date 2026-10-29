@@ -13,6 +13,7 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
 | Onboarding step 2 — Address (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/AddressesScreens.tsx`, `features/account/useAddressLocation.ts` (new), `api/endpoints.ts`, `i18n/locales/*.ts` | Done — real functionality, not a reskin (explicit instruction). See D-112 in `docs/DECISIONS.md`. Also added "Edit address" (was missing on mobile even though the backend already supported it) and onboarding now creates a real default address used everywhere else. |
 | Onboarding step 3 — Preferences (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `store/settings.ts`, `notifications/push.ts`, `features/settings/SettingsScreen.tsx`, `i18n/locales/*.ts` | Done — the last onboarding step. Fixed a real bug along the way: push notifications were being auto-requested at sign-in regardless of any toggle; now, like location, the OS prompt only fires when the person explicitly switches the preference on. See D-113 in `docs/DECISIONS.md`. Preferred service categories use the real catalog (`useCategories()`), kept device-local since no feature uses them yet. |
 | Home (`HomeScreen`) | `features/home/HomeScreen.tsx`, `features/home/CategoryTile.tsx` (new), `features/home/AllCategoriesScreen.tsx` (new), `app/categories.tsx` (new), `app/_layout.tsx`, `i18n/locales/*.ts` | Done — the biggest feature-existence gap so far. Search, hero carousel and the category grid are real (search filters real data; categories are the live catalog restyled, capped at 8 with a working "See All"). "Popular Services" uses explicit, loudly-commented mock data (photos/prices/ratings) per the product owner's instruction, but its cards still open a real request for a real category. Notification bell links to Settings (no in-app inbox exists). See D-114 in `docs/DECISIONS.md`. |
+| Work / Ranger dashboard (`WorkScreen`) | `features/work/WorkScreen.tsx`, `i18n/locales/*.ts` | Done — additive only. New stats row and Ongoing/Completed tabs are real data from the same `useJobs('WORKER')` query the page already used; the default "New Requests" tab reproduces the pre-existing behaviour exactly (all 22 prior tests pass unmodified). Bell links to Settings (no inbox), avatar opens `/account`. See D-115 in `docs/DECISIONS.md`. |
 
 ## Not implemented, needs a decision
 
@@ -64,6 +65,12 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
   endpoints only support structured filters, never free-text). Home's search bar is real but
   client-side only — it filters the already-loaded categories and mock popular-service cards by
   name. See D-114.
+- **City selector** (Work/Ranger dashboard): no feature lets a Ranger pick an operating city.
+  Omitted rather than guessing one from their saved addresses. See D-115.
+- **"View Details" / posted-time label** (Work, incoming request cards): no detail route separate
+  from what the card already shows in full, and no `postedAt` timestamp exists on an incoming
+  request. Both omitted; the existing response-deadline countdown was kept instead of a fabricated
+  "posted X hours ago" label. See D-115.
 
 ## Assets needed
 

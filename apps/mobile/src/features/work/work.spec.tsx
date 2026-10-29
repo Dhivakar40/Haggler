@@ -144,7 +144,9 @@ describe('WorkScreen', () => {
     const { calls } = backend();
     await renderWithProviders(<WorkScreen />);
     expect(await screen.findByTestId('presence-label')).toHaveTextContent('You are offline');
-    expect(screen.queryByText('New requests')).toBeNull();
+    // "New requests" still exists as a tab label (D-115, always visible navigation chrome) — the
+    // incoming section with its own content (skeleton/list/empty-state) is what's gated on online.
+    expect(screen.queryByTestId('incoming-section')).toBeNull();
     await fireEvent.press(screen.getByTestId('toggle-online'));
     await waitFor(() =>
       expect(screen.getByTestId('presence-label')).toHaveTextContent('You are online'),
@@ -369,6 +371,67 @@ describe('WorkScreen', () => {
       pathname: '/job/[id]',
       params: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
     });
+  });
+
+  const J1 = '11111111-1111-4111-8111-111111111111';
+  const J2 = '22222222-2222-4222-8222-222222222222';
+  const J3 = '33333333-3333-4333-8333-333333333333';
+  const J4 = '44444444-4444-4444-8444-444444444444';
+
+  it('(D-115) the dashboard stats and tab counts come from the real job list', async () => {
+    backend({
+      jobs: [
+        makeJob({ id: J1, viewerRole: 'WORKER', status: 'EN_ROUTE', categorySlug: 'plumber' }),
+        makeJob({ id: J2, viewerRole: 'WORKER', status: 'IN_PROGRESS', categorySlug: 'electrician' }),
+        makeJob({
+          id: J3,
+          viewerRole: 'WORKER',
+          status: 'CONFIRMED_BY_CUSTOMER',
+          categorySlug: 'cleaner',
+          agreedPricePaise: 50000,
+        }),
+        makeJob({ id: J4, viewerRole: 'WORKER', status: 'CANCELLED', categorySlug: 'painter' }),
+      ],
+    });
+    await renderWithProviders(<WorkScreen />);
+    expect(await screen.findByText('4')).toBeTruthy(); // Total Jobs
+    expect(screen.getByText('2')).toBeTruthy(); // Ongoing count stat tile
+    expect(screen.getByText(/Ongoing\s*2/)).toBeTruthy(); // same count on the tab label
+    expect(screen.getByText(/Completed\s*1/)).toBeTruthy(); // completed count on the tab label
+  });
+
+  it('(D-115) the Ongoing tab lists every active-status job, the Completed tab every confirmed one', async () => {
+    backend({
+      jobs: [
+        makeJob({ id: J1, viewerRole: 'WORKER', status: 'EN_ROUTE', categorySlug: 'plumber' }),
+        makeJob({
+          id: J3,
+          viewerRole: 'WORKER',
+          status: 'CONFIRMED_BY_CUSTOMER',
+          categorySlug: 'cleaner',
+          agreedPricePaise: 50000,
+        }),
+      ],
+    });
+    await renderWithProviders(<WorkScreen />);
+    await fireEvent.press(await screen.findByTestId('dashboard-tab-ongoing'));
+    expect(await screen.findByTestId(`ongoing-job-${J1}`)).toBeTruthy();
+    expect(screen.queryByTestId(`completed-job-${J3}`)).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('dashboard-tab-completed'));
+    expect(await screen.findByTestId(`completed-job-${J3}`)).toBeTruthy();
+    expect(screen.getByText('₹500')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId(`completed-job-${J3}`));
+    expect(routerMock().push).toHaveBeenCalledWith({ pathname: '/job/[id]', params: { id: J3 } });
+  });
+
+  it('(D-115) the bell opens Settings, the avatar opens Account (no in-app inbox exists)', async () => {
+    backend();
+    await renderWithProviders(<WorkScreen />);
+    await fireEvent.press(await screen.findByTestId('work-notifications'));
+    expect(routerMock().push).toHaveBeenCalledWith('/settings');
+    await fireEvent.press(screen.getByTestId('work-account'));
+    expect(routerMock().push).toHaveBeenCalledWith('/account');
   });
 
   it('is translated (Kannada)', async () => {

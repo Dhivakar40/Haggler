@@ -2455,3 +2455,47 @@ destination, a popular card's real navigation + its heart's local-only toggle, a
 backend or shared-package changes — everything real here (categories, navigation) already existed;
 everything that doesn't exist is either omitted, redirected to a real destination, or explicitly
 marked mock per instruction.
+
+## D-115: Work (Ranger dashboard) rebuilt — real stats and tabs, additive not destructive
+
+`WorkScreen.tsx` already carried a lot of tested, load-bearing functionality (online/offline
+presence, incoming-request accept/decline/quote, an active-job card, a KYC-tier gate) across 22
+existing tests — this page's job was to add the design image's dashboard chrome around that,
+without touching a single existing behaviour. Everything new is computed from data the screen
+already fetches; nothing new was invented:
+
+- **Stats row** (Total/Ongoing/Completed/Cancelled): real counts from `useJobs('WORKER')`, the
+  same query the "active job" card already used — `isActive()` (existing `lib/job-status.ts`) for
+  Ongoing, `CONFIRMED_BY_CUSTOMER` for Completed, `CANCELLED` for Cancelled. No new query.
+- **Tab bar** ("New Requests" / "Ongoing N" / "Completed N"): the "New Requests" tab's content is
+  the *exact* pre-existing JSX (the active-job card and the incoming-requests section, byte-for-
+  byte, just now inside `{tab === 'new' && ...}`) — every one of the 22 original tests still
+  passes unmodified, because the default tab reproduces exactly what rendered unconditionally
+  before. "Ongoing" and "Completed" are new, genuinely real lists built from the same `useJobs`
+  data, each row tapping through to the real `/job/[id]`. One existing test needed a small,
+  honest fix: it checked `queryByText('New requests')` to confirm the incoming section was hidden
+  while offline, but that exact string is now also the (always-visible) tab label — changed the
+  assertion to check the incoming section's own container instead, which still correctly verifies
+  the thing the test actually cared about.
+- **Top bar** (brand, bell, avatar): the bell has no in-app inbox to open (same situation as
+  Home, D-114) — links to Settings' real push toggle. The avatar is the real `Avatar` component
+  with the signed-in Ranger's actual name/photo, opening `/account`.
+- **Price "Customer budget" range**: the image shows only a min-max range; the existing fixed
+  listed price (`listedPricePaise`, what a Ranger actually gets if they accept) stays as the
+  primary figure — dropping it would remove real, tested information a Ranger needs. The band's
+  real `minPaise`/`maxPaise` (already fetched, just not previously displayed) was added as a
+  second line instead of replacing anything.
+- **"X hours ago" / "View Details"**: no `postedAt` timestamp exists on an incoming request, and a
+  request has no detail route separate from what the existing card already shows in full — both
+  omitted (rule 3b) rather than inventing a timestamp or an empty destination. The existing
+  deadline countdown (a Ranger's real time-to-respond, more operationally important than a
+  "posted ago" label) was kept as-is.
+- **City selector**: no feature lets a Ranger pick an operating city — omitted rather than
+  querying their addresses to guess one.
+- **Personalised greeting**: kept (same reasoning as D-114's Home header) — paired with the
+  image's static "Ranger Dashboard" label as a heading above it, rather than replaced by it.
+
+Mobile suite 569/569 (3 new: stats/tab counts come from the real job list, the Ongoing/Completed
+tabs list the right jobs and navigate correctly, the bell/avatar open their real destinations).
+Typecheck clean, lint clean, i18n parity clean. No backend or shared-package changes — this page
+needed none.
