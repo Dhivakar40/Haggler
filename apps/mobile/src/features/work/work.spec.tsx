@@ -122,7 +122,8 @@ describe('WorkScreen', () => {
     // screen should pick that up on its own instead of needing a sign-out/sign-in.
     signInAs({ roles: ['CUSTOMER', 'WORKER'], workerKycTier: 1 });
     mockApi((c) => {
-      if (c.path === '/v1/me') return { body: makeMe({ roles: ['CUSTOMER', 'WORKER'], workerKycTier: 2 }) };
+      if (c.path === '/v1/me')
+        return { body: makeMe({ roles: ['CUSTOMER', 'WORKER'], workerKycTier: 2 }) };
       if (c.path === '/v1/worker/presence') return { body: { isOnline: false } };
       if (c.path === '/v1/worker/incoming') return { body: [] };
       if (c.path.startsWith('/v1/jobs')) return { body: { items: [], nextCursor: null } };
@@ -207,7 +208,8 @@ describe('WorkScreen', () => {
     expect(card).toBeTruthy();
     expect(screen.getByText('Electrician')).toBeTruthy();
     expect(screen.getByText('Ceiling fan sparks when switched on')).toBeTruthy();
-    expect(screen.getByText('840 m away · Chennai 600042')).toBeTruthy();
+    expect(screen.getByText('840 m away')).toBeTruthy();
+    expect(screen.getByText('Chennai 600042')).toBeTruthy();
     expect(screen.getByTestId(`band-${REQ1}`)).toHaveTextContent('₹349');
     expect(screen.getByText('2 photos · Voice note')).toBeTruthy();
     expect(screen.getByTestId(`countdown-${REQ1}`).props.children).toMatch(/^2:[0-9]{2}$/);
@@ -231,9 +233,7 @@ describe('WorkScreen', () => {
     await renderWithProviders(<WorkScreen />);
     await screen.findByTestId(`incoming-${REQ1}`);
     expect(screen.getByTestId(`incoming-${REQ2}`)).toBeTruthy();
-    expect(screen.getByTestId(`band-${REQ2}`)).toHaveTextContent(
-      'No price guide — quote directly',
-    );
+    expect(screen.getByTestId(`band-${REQ2}`)).toHaveTextContent('No price guide — quote directly');
     expect(screen.getByTestId(`quote-amount-${REQ2}`)).toBeTruthy();
     expect(screen.queryByTestId(`accept-${REQ2}`)).toBeNull(); // no direct accept for "other"
     // The electrician request still shows its real fixed price, unaffected.
@@ -267,9 +267,9 @@ describe('WorkScreen', () => {
     await fireEvent.changeText(await screen.findByTestId(`quote-amount-${REQ2}`), '500');
     await fireEvent.press(screen.getByTestId(`send-quote-${REQ2}`));
     await waitFor(() =>
-      expect(
-        calls.some((c) => c.method === 'POST' && c.path === `/v1/jobs/${JOB2}/quotes`),
-      ).toBe(true),
+      expect(calls.some((c) => c.method === 'POST' && c.path === `/v1/jobs/${JOB2}/quotes`)).toBe(
+        true,
+      ),
     );
     expect(calls.find((c) => c.path === `/v1/jobs/${JOB2}/quotes`)?.body).toEqual({
       amountPaise: 50000,
@@ -279,7 +279,7 @@ describe('WorkScreen', () => {
   it('formats long distances in km', async () => {
     backend({ online: true, incoming: [incoming({ distanceM: 3450 })] });
     await renderWithProviders(<WorkScreen />);
-    expect(await screen.findByText('3.5 km away · Chennai 600042')).toBeTruthy();
+    expect(await screen.findByText('3.5 km away')).toBeTruthy();
   });
 
   it('accepting opens the job', async () => {
@@ -375,7 +375,9 @@ describe('WorkScreen', () => {
     await i18n.changeLanguage('kn');
     backend();
     await renderWithProviders(<WorkScreen />);
-    expect(await screen.findByText('ನೀವು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ')).toBeTruthy();
+    expect(await screen.findByTestId('presence-label')).toHaveTextContent(
+      'ನೀವು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ',
+    );
   });
 });
 
