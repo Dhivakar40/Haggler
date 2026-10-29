@@ -34,7 +34,12 @@ export function TextField({ label, error, prefix, testID, ...input }: TextFieldP
           { backgroundColor: colors.surface, borderColor: error ? colors.danger : colors.border },
         ]}
       >
-        {prefix ? <Text color="textMuted">{prefix}</Text> : null}
+        {prefix ? (
+          <>
+            <Text color="textMuted">{prefix}</Text>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          </>
+        ) : null}
         <TextInput
           testID={testID}
           accessibilityLabel={label}
@@ -57,11 +62,12 @@ const styles = StyleSheet.create({
   box: {
     minHeight: MIN_TOUCH_TARGET,
     borderWidth: 1.5,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
   input: { flex: 1, fontSize: 16, paddingVertical: spacing.sm },
+  divider: { width: 1, alignSelf: 'stretch', marginVertical: spacing.sm },
 });

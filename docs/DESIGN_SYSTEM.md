@@ -112,3 +112,37 @@ established conventions for any future screen in this style:
 This port only touched `apps/mobile/src/app/(tabs)/_layout.tsx` and
 `features/{home,activity,settings,work,account}`; `theme/tokens.ts`, `ThemeProvider.tsx`,
 `components/*`, and `apps/admin` were untouched by the original redesign and remain untouched here.
+
+## D-110: redesign from design images (branch `ui/redesign-from-images`), foundation page — sign-in
+
+Rebuilding the app from a set of AI-generated design images, one page at a time (UI only, zero
+behaviour change — see `docs/ui-redesign/PAGES.md`). The first image (sign-in / `PhoneScreen.tsx`)
+set the app-wide foundation:
+
+- **Buttons are now pills** (`Button`'s base `borderRadius` moved from `radii.md` to `radii.pill`),
+  and `TextField`'s input box moved the same way, with its `prefix` (e.g. `+91`, `₹`) now separated
+  from the input by a thin vertical divider. Both changes are shape-only and apply app-wide
+  automatically through the shared components — no screen other than the ones explicitly redesigned
+  was touched.
+- **`Button` gained two additive, backward-compatible props**: an optional leading/trailing
+  `icon` (`@expo/vector-icons` glyph, decorative only — `title` stays the accessible label) and a
+  new `soft` variant (`colors.surfaceAlt` fill, no border) for a secondary action that should read
+  as "the other obvious choice," not an outline/ghost action (that's still what `secondary` is for).
+  Existing `primary` / `secondary` / `danger` callers are unaffected.
+- **No new illustration assets.** The source image includes a hand-drawn character illustration;
+  per the task's asset rule, that wasn't fabricated from code. The hero section instead uses an
+  icon mark (`construct-outline` on a `colors.primary` square) and three icon+text value-prop lines,
+  built entirely from existing tokens/icons.
+- **The phone-number country prefix is static, not a tappable selector.** The design image shows a
+  flag + chevron (implying a country picker), but the app only ever supports India (`+91`,
+  enforced by `normalizeIndianPhone`) — per the task's rule against shipping controls with no
+  feature behind them, this renders as plain `+91` text, not a dropdown.
+- **Terms of Service / Privacy Policy are not tappable from this screen.** The image shows them as
+  links; `legal/index` and `legal/[doc]` are gated `Stack.Protected guard={signedIn}` in
+  `app/_layout.tsx`, so they aren't reachable before sign-in today. Changing that guard is a routing
+  change, out of scope for a UI-only pass — the disclaimer line renders as static text instead. Flagged
+  in `docs/ui-redesign/PAGES.md` as a decision needed if pre-auth legal pages are wanted.
+- **WhatsApp fallback → email fallback.** The image's secondary "Continue with WhatsApp" button
+  has no backing feature (the app has no WhatsApp integration); per explicit instruction this slot
+  was pointed at the existing email-OTP-fallback toggle (`auth.emailInstead` / `toggle-email`)
+  instead, styled as the new `soft` button with a `mail-outline` icon.

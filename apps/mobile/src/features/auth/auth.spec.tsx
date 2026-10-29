@@ -68,7 +68,7 @@ describe('PhoneScreen', () => {
     await i18n.changeLanguage('ta');
     mockApi(() => undefined);
     await renderWithProviders(<PhoneScreen />);
-    expect(screen.getByText('உங்கள் மொபைல் எண்ணை உள்ளிடவும்')).toBeTruthy();
+    expect(screen.getByText('Haggler-க்கு வரவேற்கிறோம்')).toBeTruthy();
   });
 
   it('(D-101) sends the code to email instead of SMS when toggled, and carries email to the OTP screen', async () => {
