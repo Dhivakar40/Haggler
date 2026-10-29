@@ -12,6 +12,7 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
 | Onboarding step 1 — Profile (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/PersonalDetailsFields.tsx`, `packages/shared/src/api-schemas.ts`, `apps/api/src/users/users.service.ts`, `i18n/locales/*.ts` | Done — see D-111 in `docs/DECISIONS.md` for the confirmed scope decisions. |
 | Onboarding step 2 — Address (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/AddressesScreens.tsx`, `features/account/useAddressLocation.ts` (new), `api/endpoints.ts`, `i18n/locales/*.ts` | Done — real functionality, not a reskin (explicit instruction). See D-112 in `docs/DECISIONS.md`. Also added "Edit address" (was missing on mobile even though the backend already supported it) and onboarding now creates a real default address used everywhere else. |
 | Onboarding step 3 — Preferences (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `store/settings.ts`, `notifications/push.ts`, `features/settings/SettingsScreen.tsx`, `i18n/locales/*.ts` | Done — the last onboarding step. Fixed a real bug along the way: push notifications were being auto-requested at sign-in regardless of any toggle; now, like location, the OS prompt only fires when the person explicitly switches the preference on. See D-113 in `docs/DECISIONS.md`. Preferred service categories use the real catalog (`useCategories()`), kept device-local since no feature uses them yet. |
+| Home (`HomeScreen`) | `features/home/HomeScreen.tsx`, `features/home/CategoryTile.tsx` (new), `features/home/AllCategoriesScreen.tsx` (new), `app/categories.tsx` (new), `app/_layout.tsx`, `i18n/locales/*.ts` | Done — the biggest feature-existence gap so far. Search, hero carousel and the category grid are real (search filters real data; categories are the live catalog restyled, capped at 8 with a working "See All"). "Popular Services" uses explicit, loudly-commented mock data (photos/prices/ratings) per the product owner's instruction, but its cards still open a real request for a real category. Notification bell links to Settings (no in-app inbox exists). See D-114 in `docs/DECISIONS.md`. |
 
 ## Not implemented, needs a decision
 
@@ -48,6 +49,21 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
   (`useSettings().preferredCategorySlugs`) — confirmed with the product owner, since no feature
   reads this yet. If a real use for it appears later, it would need a new user-record field and a
   migration to sync it server-side (today it stays on the device that set it). See D-113.
+- **"Popular Services"** (Home): explicit mock data per the product owner — three cards
+  (`MOCK_POPULAR_SERVICES` in `HomeScreen.tsx`) with placeholder photos (tinted icon tiles — no
+  real photography exists or can be fetched), price ranges and ratings. Real pipeline would need:
+  a named sub-service catalog (today only broad categories + a single price per category/city-tier
+  exist), photo storage, a "popularity" ranking source, and per-category or per-sub-service rating
+  aggregation (today ratings only exist per-Ranger). Favourites/heart is a local-only, unpersisted
+  toggle — no favorites feature exists anywhere to persist it to. See D-114.
+- **In-app notification inbox** (Home's bell icon): doesn't exist — push is delivery-only, no
+  persisted list, no unread count. Bell links to Settings' real push toggle instead. Building a
+  real inbox would need a notifications-list endpoint and an unread-count concept, neither of
+  which exist today. See D-114.
+- **Free-text search** (Home): the design implies a real search backend; none exists (listing
+  endpoints only support structured filters, never free-text). Home's search bar is real but
+  client-side only — it filters the already-loaded categories and mock popular-service cards by
+  name. See D-114.
 
 ## Assets needed
 

@@ -2,7 +2,8 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import i18n from '../i18n';
 import { useSettings } from '../store/settings';
 import { ToastHost } from '../components';
-import { mockApi, mockFetchOnce, renderWithProviders, signInAs } from '../test-utils';
+import { mockApi, mockFetchOnce, renderWithProviders, routerMock, signInAs } from '../test-utils';
+import { AllCategoriesScreen } from './home/AllCategoriesScreen';
 import { HomeScreen } from './home/HomeScreen';
 import { SettingsScreen } from './settings/SettingsScreen';
 
@@ -110,6 +111,51 @@ describe('HomeScreen', () => {
     await renderWithProviders(<HomeScreen />);
     expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
   });
+
+  it('(D-114) searching filters both categories and popular services by name', async () => {
+    mockFetchOnce({ '/v1/categories': { body: categories } });
+    await renderWithProviders(<HomeScreen />);
+    await screen.findByText('Electrician');
+    expect(screen.getByText('Room Cleaning')).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByTestId('home-search'), 'clean');
+    expect(screen.queryByText('Electrician')).toBeNull();
+    expect(screen.getByText('Room Cleaning')).toBeTruthy();
+  });
+
+  it('(D-114) "See All" opens the full category list', async () => {
+    mockFetchOnce({ '/v1/categories': { body: categories } });
+    await renderWithProviders(<HomeScreen />);
+    await screen.findByText('Electrician');
+    await fireEvent.press(screen.getByTestId('home-see-all-categories'));
+    expect(routerMock().push).toHaveBeenCalledWith('/categories');
+  });
+
+  it('(D-114) the notification bell opens Settings (no in-app inbox exists)', async () => {
+    mockFetchOnce({ '/v1/categories': { body: categories } });
+    await renderWithProviders(<HomeScreen />);
+    await screen.findByText('Electrician');
+    await fireEvent.press(screen.getByTestId('home-notifications'));
+    expect(routerMock().push).toHaveBeenCalledWith('/settings');
+  });
+
+  it('(D-114) a popular-service card opens a real request for its real category; the heart is a local-only toggle', async () => {
+    mockFetchOnce({ '/v1/categories': { body: categories } });
+    await renderWithProviders(<HomeScreen />);
+    const card = await screen.findByTestId('popular-service-mock-ac-installation');
+    expect(card).toBeTruthy();
+
+    const like = screen.getByTestId('popular-like-mock-ac-installation');
+    expect(like.props.accessibilityState.selected).toBe(false);
+    await fireEvent.press(like);
+    expect(like.props.accessibilityState.selected).toBe(true);
+
+    await fireEvent.press(card);
+    expect(routerMock().push).toHaveBeenCalledWith({
+      pathname: '/request/new',
+      params: { category: 'ac_repair' },
+    });
+  });
 });
 
 describe('SettingsScreen', () => {
@@ -156,5 +202,25 @@ describe('SettingsScreen', () => {
     );
     await fireEvent.press(screen.getByTestId('clear-cache'));
     expect(await screen.findByText('Cache cleared.')).toBeTruthy();
+  });
+});
+
+describe('AllCategoriesScreen (D-114, Home "See All")', () => {
+  it('shows every real category, unlimited', async () => {
+    const many = [...categories, { ...categories[0], id: '99999999-9999-4999-8999-999999999999', slug: 'cleaner2', nameKey: 'categories.cleaner' }];
+    mockFetchOnce({ '/v1/categories': { body: many } });
+    await renderWithProviders(<AllCategoriesScreen />);
+    expect(await screen.findByText('Electrician')).toBeTruthy();
+    expect(screen.getByTestId('category-electrician')).toBeTruthy();
+    expect(screen.getByTestId('category-plumber')).toBeTruthy();
+    expect(screen.getByTestId('category-cleaner2')).toBeTruthy();
+  });
+
+  it('shows an error with retry when the API fails', async () => {
+    mockFetchOnce({
+      '/v1/categories': { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } },
+    });
+    await renderWithProviders(<AllCategoriesScreen />);
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 });

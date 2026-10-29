@@ -126,6 +126,10 @@ function Navigator() {
 
       <Stack.Protected guard={signedIn && !needsConsent && profileComplete}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="categories"
+          options={{ ...header, title: t('home.categoriesHeading') }}
+        />
         <Stack.Screen name="profile" options={{ ...header, title: t('profile.title') }} />
         <Stack.Screen name="addresses" options={{ ...header, title: t('addresses.title') }} />
         <Stack.Screen name="address-new" options={{ ...header, title: t('addresses.newTitle') }} />

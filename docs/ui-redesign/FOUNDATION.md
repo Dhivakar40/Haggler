@@ -107,6 +107,32 @@ location was already toggle-driven everywhere, and the only real bug was push no
 settings default. Share the register/request logic between every screen offering the same toggle
 (`notifications/push.ts`'s `syncPushRegistration`) rather than duplicating it.
 
+## Explicit mock data (`MOCK_POPULAR_SERVICES`, `HomeScreen.tsx`, D-114)
+
+When the product owner explicitly asks for mock data for a section with no real feature behind it
+yet ("replicate it with mock data... we'll build the real pipeline later" — a deliberate exception
+to "no fabricated data," not a default), keep it honest within that allowance:
+- Name the constant and comment it loudly as mock, stating exactly what real feature it stands in
+  for and that this came from an explicit instruction, not an assumption.
+- Wherever possible, keep *some* part of each mock entry real — here, every mock card's
+  `categorySlug` is a real category and tapping the card opens a genuine request for it; only the
+  photo/price-range/rating are placeholders. A mock entry that is 100% fake end to end (including
+  its only interactive affordance) is worse than one where the fake parts are cosmetic.
+- Never invent a category/entity that doesn't exist in the real data just to match an example in
+  the image (the image's "Moving & Delivery" example was swapped for a real category instead).
+- A decorative, unpersisted local toggle (here, the favourite heart) is fine background to mock
+  content — it changes its own visual state and nothing else — but say so in a comment; it is not
+  a real favorites feature and must not be assumed to be one by a later reader.
+
+## Real data, restyled grid (`CategoryTile.tsx`, D-114)
+
+When an image shows a fixed set of categories/items that doesn't match the app's real catalog,
+take the image's *visual language* (grid shape, icon-in-tile, colour variety) and apply it to the
+*real* data, not the image's specific set — the real catalog is always the source of truth for
+what the categories/items actually are (rule 1). Per-tile decorative tints with no semantic
+meaning (just cycling by grid position) are a cheap way to get an image's "colourful grid" look
+onto real homogeneous data without inventing per-item metadata that doesn't exist.
+
 ## Elements with no backing feature
 
 The design images are AI-generated and occasionally show something the app doesn't do (an extra

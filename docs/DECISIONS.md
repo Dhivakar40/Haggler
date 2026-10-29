@@ -2399,3 +2399,59 @@ multi-select writes straight to the local store and never calls the server, plus
 plumbing). `screens.spec.tsx`'s existing push-toggle test flipped to start from "off" (one new
 `beforeEach` reset for the three D-113 settings fields). Typecheck clean, lint clean, i18n parity
 clean. No backend or shared-package changes.
+
+## D-114: Home rebuilt from design image — real categories, explicitly-mocked "Popular Services"
+
+Rebuilding `HomeScreen.tsx` ("this look must be replicated as accurately as possible") surfaced
+the largest feature-existence gap of any page in this redesign. Researched every element against
+the actual codebase before writing anything (search, favorites/wishlist, promo banners, a
+sub-service catalog with photos and price ranges, per-category star ratings, an in-app
+notification inbox) — none of the last five exist anywhere in the app. Two decisions needed the
+product owner's explicit call before building:
+
+- **"Popular Services"** (named sub-services with photos, price ranges, ratings — none of which
+  exist): told explicitly to build it with **mock data, mock photos and mock ratings**, with the
+  real pipeline to follow later. Implemented as `MOCK_POPULAR_SERVICES` in `HomeScreen.tsx`, three
+  entries, each loudly commented as mock and naming this decision. To keep the cards from being
+  pure fiction: each one's `categorySlug` is a real category from the live catalog, and tapping a
+  card opens a genuine `/request/new?category=<slug>` for it — only the "photo" (a tinted icon
+  tile; no real photography exists or can be fetched under the zero-cost/no-network-image rule),
+  price range, and rating/review count are placeholders. The image's third example ("Move to
+  Hostel" / "Moving & Delivery") has no matching category at all in the real catalog (which is
+  trade-specific: electrician, plumber, cleaner, carpenter, appliance/AC/gas-appliance repair,
+  painter, pest control, other) — substituted "Furniture Assembly" under the real `carpenter`
+  category instead of inventing a category that doesn't exist. The favourite/heart icon is a
+  local-only, unpersisted toggle (no favorites feature exists to persist it to) — pressing it
+  changes its own fill state and nothing else, same honesty bar as everything else this round.
+- **Notification bell** (image shows an unread-count dot; no in-app inbox exists, push is
+  delivery-only): told to keep the icon with no badge, linking to Settings — same screen that
+  already holds the real push-notification toggle (D-113), rather than opening something that
+  doesn't exist.
+
+Decided without asking, as low-risk/clearly-backed-by-real-data calls: the **search bar** filters
+the already-loaded categories and popular-service cards by translated name client-side — a real,
+working filter, not a fake network search (none exists). The **hero carousel** is static,
+non-interactive marketing copy (three slides, swipeable, dot indicator) — same category as the
+sign-in page's value-prop bullets (D-110), no backend needed. **Service Categories** renders the
+real catalog (`useCategories()`, unchanged data source) restyled to the image's 4-per-row
+icon-over-label grid, each tile tinted from a small local decorative palette (`CategoryTile.tsx`,
+light/dark pairs) purely for the multi-coloured look the image has — the tint carries no meaning,
+it's assigned by grid position. The image's specific category set (Home Repair/Cleaning/
+Electronics/Moving & Delivery/Tutoring/Photography/Gardening/Other Services) does not match the
+real catalog at all and was **not** adopted — code stays the source of truth for what the
+categories actually are. Home caps the grid at 8 tiles (`HOME_GRID_LIMIT`) with a working "See
+All" → new `/categories` route (`AllCategoriesScreen.tsx`, same `CategoryTile`, uncapped) — the one
+small, zero-risk, fully-real-data addition built without asking, since it's nothing more than
+removing the existing cap on an already-fetched list.
+
+The header keeps the existing personalised greeting (`home.title`/`titleNamed`, by first name)
+rather than adopting the image's static "Haggler" wordmark + generic tagline — that greeting is a
+real, tested, more valuable feature already in place (D-104) and the image's copy is styling
+guidance, not an instruction to remove it (rule 5).
+
+Mobile suite 566/566 (6 new: search filters both sections, "See All" navigation, the bell's real
+destination, a popular card's real navigation + its heart's local-only toggle, and the new
+`/categories` screen's own list/error states). Typecheck clean, lint clean, i18n parity clean. No
+backend or shared-package changes — everything real here (categories, navigation) already existed;
+everything that doesn't exist is either omitted, redirected to a real destination, or explicitly
+marked mock per instruction.
