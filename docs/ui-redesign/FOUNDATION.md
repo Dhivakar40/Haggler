@@ -53,6 +53,18 @@ and keystrokes — and 6 plain `View`s underneath that just mirror characters ou
 `OtpBoxes` pattern (currently local to `OtpScreen.tsx`; promote to `components/` if a second page
 needs it) for any other segmented/PIN-style input a later image shows.
 
+## `InfoRow` card (`features/auth/ConsentScreen.tsx`)
+
+A `Card` wrapping an icon-in-circle + title/subtitle + optional trailing chevron, used for
+"explain this, and let the person go read more" rows (e.g. a consent page's Terms/Privacy/
+Location/Notifications rows). Differs from `ListRow` by being an individually-bordered,
+`radii.lg` tile (the D-109 "flat list rows become Card tiles" pattern) rather than a
+bottom-divided list item — use `InfoRow` when the image shows separate rounded cards, `ListRow`
+when it shows a continuous list. `onPress` omitted renders a plain, non-interactive informational
+card (no chevron) — the right choice for a row that has real content to show but no real
+destination to tap into (see "Elements with no backing feature" below for when that applies).
+Currently local to `ConsentScreen.tsx`; promote to `components/` if a second page needs it.
+
 ## Elements with no backing feature
 
 The design images are AI-generated and occasionally show something the app doesn't do (an extra
