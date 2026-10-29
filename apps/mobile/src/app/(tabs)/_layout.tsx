@@ -18,7 +18,11 @@ function TabIcon({ name, activeName, color, focused }: TabIconProps) {
   const { colors } = useTheme();
   return (
     <View style={[styles.iconContainer, focused && { backgroundColor: colors.primary }]}>
-      <Ionicons name={focused ? activeName : name} size={21} color={focused ? colors.onPrimary : color} />
+      <Ionicons
+        name={focused ? activeName : name}
+        size={21}
+        color={focused ? colors.onPrimary : color}
+      />
     </View>
   );
 }
@@ -78,7 +82,12 @@ export default function TabsLayout() {
           title: t('tabs.work'),
           href: isRanger ? undefined : null,
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="briefcase-outline" activeName="briefcase" color={color} focused={focused} />
+            <TabIcon
+              name="briefcase-outline"
+              activeName="briefcase"
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -96,7 +105,12 @@ export default function TabsLayout() {
         options={{
           title: t('tabs.settings'),
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="settings-outline" activeName="settings" color={color} focused={focused} />
+            <TabIcon
+              name="settings-outline"
+              activeName="settings"
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
