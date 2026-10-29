@@ -1,9 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { OTHER_CATEGORY_SLUG, type IncomingRequest } from '@haggler/shared';
 import {
   acceptRequest,
@@ -32,14 +33,12 @@ import { isActive } from '../../lib/job-status';
 import { firstName } from '../../lib/name';
 import { formatRupees, parseRupeesToPaise } from '../../lib/money';
 import { ensureForegroundPermission } from '../../location/tracker';
-import { spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
+import { radii, spacing } from '../../theme/tokens';
 
 const distanceLabel = (m: number): string =>
   m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
 
-/** An incoming request is the single most time-pressured surface a Ranger sees — a countdown,
- * real money, a decision in seconds — so it's genuinely elevated, unlike the flat presence-toggle
- * control below it (see the elevation policy in theme/tokens.ts). */
 function IncomingCard({
   item,
   onAccept,
@@ -54,6 +53,7 @@ function IncomingCard({
   busy: boolean;
 }) {
   const { t } = useTranslation();
+  const { colors } = useTheme();
   const isOther = item.categorySlug === OTHER_CATEGORY_SLUG;
   const [quoteAmount, setQuoteAmount] = useState('');
   const [quoteInvalid, setQuoteInvalid] = useState(false);
@@ -65,42 +65,89 @@ function IncomingCard({
     onQuote(paise);
   }
 
+  const attachments = [
+    item.photoCount > 0 ? t('work.photos', { count: item.photoCount }) : null,
+    item.hasVoiceNote ? t('work.voiceNote') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <Card testID={`incoming-${item.requestId}`} elevated>
-      <View style={{ gap: spacing.sm }}>
-        <Text variant="heading">{t(`categories.${item.categorySlug}`)}</Text>
+    <Card testID={`incoming-${item.requestId}`} elevated style={styles.incomingCard}>
+      <View style={styles.incomingContent}>
+        <View style={styles.incomingHeader}>
+          <View style={[styles.categoryIcon, { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons
+              name="construct-outline"
+              size={25}
+              color={colors.primary}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            />
+          </View>
+          <View style={styles.incomingTitle}>
+            <Text variant="heading">{t(`categories.${item.categorySlug}`)}</Text>
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+              <Text variant="caption" color="textMuted" style={styles.flexText}>
+                {t('work.away', { distance: distanceLabel(item.distanceM) })}
+              </Text>
+            </View>
+            <Text variant="caption" color="textMuted">
+              {item.city} {item.pincode}
+            </Text>
+          </View>
+        </View>
+
         <Text>{item.description}</Text>
-        <Text color="textMuted">
-          {t('work.away', { distance: distanceLabel(item.distanceM) })} · {item.city} {item.pincode}
-        </Text>
-        {isOther ? (
-          <Text testID={`band-${item.requestId}`} color="textMuted">
-            {t('work.noPriceGuide')}
-          </Text>
-        ) : (
-          <Text testID={`band-${item.requestId}`} variant="heading">
-            {formatRupees(item.listedPricePaise ?? 0)}
-            {item.isInspectionCharge ? ` · ${t('work.inspectionCharge')}` : ''}
-          </Text>
-        )}
-        {item.photoCount > 0 || item.hasVoiceNote ? (
-          <Text color="textMuted">
-            {[
-              item.photoCount > 0 ? t('work.photos', { count: item.photoCount }) : null,
-              item.hasVoiceNote ? t('work.voiceNote') : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </Text>
+
+        <View style={[styles.pricePanel, { backgroundColor: colors.surfaceAlt }]}>
+          <Ionicons name="cash-outline" size={20} color={colors.primary} />
+          <View style={styles.priceDetails}>
+            {isOther ? (
+              <Text testID={`band-${item.requestId}`} variant="caption" color="textMuted">
+                {t('work.noPriceGuide')}
+              </Text>
+            ) : (
+              <>
+                <Text testID={`band-${item.requestId}`} variant="heading">
+                  {formatRupees(item.listedPricePaise ?? 0)}
+                </Text>
+                {item.isInspectionCharge ? (
+                  <Text variant="caption" color="textMuted">
+                    {t('work.inspectionCharge')}
+                  </Text>
+                ) : null}
+              </>
+            )}
+          </View>
+        </View>
+
+        {attachments ? (
+          <View style={styles.infoRow}>
+            <Ionicons name="attach-outline" size={17} color={colors.textMuted} />
+            <Text variant="caption" color="textMuted">
+              {attachments}
+            </Text>
+          </View>
         ) : null}
+
         {item.scheduledFor ? (
-          <Text color="textMuted">
-            {t('work.scheduledFor', { when: new Date(item.scheduledFor).toLocaleString() })}
-          </Text>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar-outline" size={17} color={colors.textMuted} />
+            <Text variant="caption" color="textMuted" style={styles.flexText}>
+              {t('work.scheduledFor', { when: new Date(item.scheduledFor).toLocaleString() })}
+            </Text>
+          </View>
         ) : null}
-        <Countdown until={item.deadline} variant="label" testID={`countdown-${item.requestId}`} />
+
+        <View style={[styles.deadlinePanel, { borderColor: colors.border }]}>
+          <Ionicons name="time-outline" size={18} color={colors.warning} />
+          <Countdown until={item.deadline} variant="label" testID={`countdown-${item.requestId}`} />
+        </View>
+
         {isOther ? (
-          <View style={{ gap: spacing.sm }}>
+          <View style={styles.actionSection}>
             <TextField
               testID={`quote-amount-${item.requestId}`}
               label={t('work.yourQuote')}
@@ -111,13 +158,37 @@ function IncomingCard({
               prefix="₹"
               error={quoteInvalid ? t('job.invalidAmount') : undefined}
             />
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <View style={styles.actionRow}>
+              <View style={styles.actionButton}>
+                <Button
+                  testID={`send-quote-${item.requestId}`}
+                  title={t('work.sendQuote')}
+                  onPress={submitQuote}
+                  loading={busy}
+                />
+              </View>
+              <View style={styles.actionButton}>
+                <Button
+                  testID={`decline-${item.requestId}`}
+                  variant="secondary"
+                  title={t('work.decline')}
+                  onPress={onDecline}
+                  disabled={busy}
+                />
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.actionRow}>
+            <View style={styles.actionButton}>
               <Button
-                testID={`send-quote-${item.requestId}`}
-                title={t('work.sendQuote')}
-                onPress={submitQuote}
+                testID={`accept-${item.requestId}`}
+                title={t('work.accept')}
+                onPress={onAccept}
                 loading={busy}
               />
+            </View>
+            <View style={styles.actionButton}>
               <Button
                 testID={`decline-${item.requestId}`}
                 variant="secondary"
@@ -126,22 +197,6 @@ function IncomingCard({
                 disabled={busy}
               />
             </View>
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Button
-              testID={`accept-${item.requestId}`}
-              title={t('work.accept')}
-              onPress={onAccept}
-              loading={busy}
-            />
-            <Button
-              testID={`decline-${item.requestId}`}
-              variant="secondary"
-              title={t('work.decline')}
-              onPress={onDecline}
-              disabled={busy}
-            />
           </View>
         )}
       </View>
@@ -154,6 +209,7 @@ export function WorkScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
+  const { colors } = useTheme();
   const tier = useSession((s) => s.user?.workerKycTier ?? 0);
   const name = useSession((s) => firstName(s.user?.fullName));
   const refreshMe = useSession((s) => s.refreshMe);
@@ -244,30 +300,72 @@ export function WorkScreen() {
 
   if (tier < 2) {
     return (
-      <Screen>
-        <Text variant="title">{t('work.title')}</Text>
-        <Text testID="needs-verification" color="warning">
-          {t('work.needVerification')}
-        </Text>
-        <Button
-          testID="open-verification"
-          title={t('work.verify')}
-          onPress={() => router.push('/ranger')}
-        />
+      <Screen scroll>
+        <View style={styles.screenHeader}>
+          <View style={[styles.headerIcon, { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons name="briefcase-outline" size={25} color={colors.primary} />
+          </View>
+          <View style={styles.headerText}>
+            <Text variant="title">{t('work.title')}</Text>
+          </View>
+        </View>
+
+        <Card style={styles.verificationCard}>
+          <View style={styles.verificationContent}>
+            <View style={[styles.verificationIcon, { backgroundColor: colors.surfaceAlt }]}>
+              <Ionicons name="shield-checkmark-outline" size={34} color={colors.warning} />
+            </View>
+            <Text testID="needs-verification" variant="heading" color="warning">
+              {t('work.needVerification')}
+            </Text>
+            <Button
+              testID="open-verification"
+              title={t('work.verify')}
+              onPress={() => router.push('/ranger')}
+            />
+          </View>
+        </Card>
       </Screen>
     );
   }
 
   return (
     <Screen scroll>
-      <Text variant="title">{name ? t('work.titleNamed', { name }) : t('work.title')}</Text>
-      {/* Flat — not elevated. Going online/offline is a standing status, not a decision the page
-          is asking the Ranger to make right now (contrast with IncomingCard above). */}
-      <Card>
-        <View style={{ gap: spacing.sm }}>
-          <Text variant="heading" testID="presence-label" color={online ? 'success' : 'textMuted'}>
-            {online ? t('work.online') : t('work.offline')}
-          </Text>
+      <View style={styles.screenHeader}>
+        <View style={[styles.headerIcon, { backgroundColor: colors.surfaceAlt }]}>
+          <Ionicons name="briefcase-outline" size={25} color={colors.primary} />
+        </View>
+        <View style={styles.headerText}>
+          <Text variant="title">{name ? t('work.titleNamed', { name }) : t('work.title')}</Text>
+        </View>
+      </View>
+
+      <Card style={styles.presenceCard}>
+        <View style={styles.presenceContent}>
+          <View style={styles.presenceHeader}>
+            <View style={styles.presenceLabel}>
+              <View
+                style={[
+                  styles.presenceDot,
+                  { backgroundColor: online ? colors.success : colors.textMuted },
+                ]}
+              />
+              <Text variant="heading" color={online ? 'success' : 'text'} testID="presence-label">
+                {online ? t('work.online') : t('work.offline')}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: colors.surfaceAlt }]}>
+              <Ionicons
+                name={online ? 'radio-outline' : 'moon-outline'}
+                size={16}
+                color={online ? colors.success : colors.textMuted}
+              />
+              <Text variant="caption" color="textMuted">
+                {online ? t('work.online') : t('work.offline')}
+              </Text>
+            </View>
+          </View>
+
           <Button
             testID="toggle-online"
             variant={online ? 'secondary' : 'primary'}
@@ -275,6 +373,7 @@ export function WorkScreen() {
             onPress={() => void toggle()}
             loading={toggling}
           />
+
           {online ? (
             <Text variant="caption" color="textMuted">
               {t('work.keepOpen')}
@@ -284,18 +383,36 @@ export function WorkScreen() {
       </Card>
 
       {error ? (
-        <Text color="danger" accessibilityRole="alert" testID="work-error">
-          {error}
-        </Text>
+        <Card style={styles.errorCard}>
+          <View style={styles.infoRow}>
+            <Ionicons name="alert-circle-outline" size={20} color={colors.danger} />
+            <Text
+              color="danger"
+              accessibilityRole="alert"
+              testID="work-error"
+              style={styles.flexText}
+            >
+              {error}
+            </Text>
+          </View>
+        </Card>
       ) : null}
 
       {activeJob ? (
-        <Card testID="active-job" elevated>
-          <View style={{ gap: spacing.sm }}>
-            <Text variant="heading">{t('work.activeJob')}</Text>
-            <Text color="textMuted">
-              {t(`categories.${activeJob.categorySlug}`)} · {t(`job.status.${activeJob.status}`)}
-            </Text>
+        <Card testID="active-job" elevated style={styles.activeJobCard}>
+          <View style={styles.activeJobContent}>
+            <View style={styles.sectionHeadingRow}>
+              <View style={[styles.smallIcon, { backgroundColor: colors.surfaceAlt }]}>
+                <Ionicons name="construct-outline" size={22} color={colors.primary} />
+              </View>
+              <View style={styles.headerText}>
+                <Text variant="heading">{t('work.activeJob')}</Text>
+                <Text variant="caption" color="textMuted">
+                  {t(`categories.${activeJob.categorySlug}`)} ·{' '}
+                  {t(`job.status.${activeJob.status}`)}
+                </Text>
+              </View>
+            </View>
             <Button
               testID="open-active-job"
               title={t('work.openJob')}
@@ -306,10 +423,24 @@ export function WorkScreen() {
       ) : null}
 
       {online && !activeJob ? (
-        <View style={{ gap: spacing.md }}>
-          <Text variant="heading">{t('work.incoming')}</Text>
+        <View style={styles.incomingSection}>
+          <View style={styles.sectionHeadingRow}>
+            <View style={styles.headerText}>
+              <Text variant="heading">{t('work.incoming')}</Text>
+              <Text variant="caption" color="textMuted">
+                {incoming.data?.length ?? 0}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: colors.surfaceAlt }]}>
+              <View style={[styles.presenceDot, { backgroundColor: colors.success }]} />
+              <Text variant="caption" color="success">
+                {t('work.online')}
+              </Text>
+            </View>
+          </View>
+
           {incoming.data && incoming.data.length > 0 ? (
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <View style={styles.filterRow}>
               <Chip
                 testID="filter-all"
                 label={t('work.filterAll')}
@@ -324,11 +455,12 @@ export function WorkScreen() {
               />
             </View>
           ) : null}
+
           {incoming.isLoading ? (
-            <View testID="incoming-skeleton" style={{ gap: spacing.md }}>
+            <View testID="incoming-skeleton" style={styles.loadingList}>
               {[0, 1].map((i) => (
                 <Card key={i} elevated>
-                  <View style={{ gap: spacing.sm }}>
+                  <View style={styles.loadingContent}>
                     <Skeleton width="50%" height={20} />
                     <Skeleton width="90%" height={16} />
                     <Skeleton width="40%" height={14} />
@@ -337,9 +469,11 @@ export function WorkScreen() {
               ))}
             </View>
           ) : null}
+
           {incoming.data && incoming.data.length === 0 ? (
             <EmptyState message={t('work.waiting')} />
           ) : null}
+
           {visibleIncoming?.map((item) => (
             <IncomingCard
               key={item.requestId}
@@ -355,3 +489,134 @@ export function WorkScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  headerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerText: { flex: 1, gap: spacing.xs },
+  verificationCard: {
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+  },
+  verificationContent: {
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  verificationIcon: {
+    width: 76,
+    height: 76,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presenceCard: { borderRadius: radii.lg },
+  presenceContent: { gap: spacing.md },
+  presenceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  presenceLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  presenceDot: {
+    width: 9,
+    height: 9,
+    borderRadius: radii.pill,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+  },
+  errorCard: { borderColor: '#B3261E' },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  flexText: { flex: 1 },
+  activeJobCard: { borderRadius: radii.lg },
+  activeJobContent: { gap: spacing.md },
+  sectionHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  smallIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  incomingSection: { gap: spacing.md },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  loadingList: { gap: spacing.md },
+  loadingContent: { gap: spacing.md },
+  incomingCard: { borderRadius: radii.lg },
+  incomingContent: { gap: spacing.md },
+  incomingHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  categoryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  incomingTitle: { flex: 1, gap: spacing.xs },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  pricePanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+  },
+  priceDetails: { flex: 1, gap: spacing.xs },
+  deadlinePanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+  },
+  actionSection: { gap: spacing.md },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  actionButton: { flex: 1, minWidth: 130 },
+});
