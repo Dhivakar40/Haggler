@@ -2234,3 +2234,37 @@ apps. Mobile suite green: 544/544. i18n key-parity green across all 5 locales. A
 removed the "Download my data" entry point from `AccountScreen` (the `GET /me/export` endpoint
 itself is untouched, same "stop calling it, never delete it" reasoning as D-106's wallet); replaced
 the comma-separated "Your roles: Customer, Ranger" line with individual `Badge` tags.
+
+## D-109: UI redesign ported from a teammate's older snapshot (`ui/teammate-redesign`, not merged)
+
+A teammate redesigned the app's UI on an older checkout and sent back a no-git-history zip. The
+base commit they started from was found mechanically, not guessed: every non-UI logic directory
+(`apps/api/src`, `packages/shared/src`, `apps/api/prisma/migrations`, and
+`apps/mobile/src/{api,store,auth,lib,realtime,location,notifications}`) matched commit `6dd04dd`
+("D-101: email OTP fallback") **byte-for-byte, 0 differing files** — the strongest possible signal,
+confirmed independently by `docs/DECISIONS.md`'s own D-101 cutoff in the zip. Full evidence in
+`docs/ui-port/PLAN.md` and `docs/ui-port/REPORT.md`.
+
+Diffing the zip against that base turned up exactly **6 changed files, all UI-only**: the tab bar
+layout and the Home/Activity/Settings/Work/Account screens. Nothing in the zip touched
+`theme/tokens.ts`, `ThemeProvider`, `components/*`, assets, fonts, `apps/admin`, or added any new
+dependency — the redesign is pure screen-level composition from the existing kit (see
+`docs/DESIGN_SYSTEM.md`'s new section for the resulting conventions: icon-led section headers, a
+`SectionHeading` pattern, status dot+badge pairs, flat rows becoming `Card` tiles).
+
+All 6 files were also touched by this session's post-D-101 work (D-102–D-108), making every one of
+them a logic/presentation conflict. Current HEAD's logic won in every case, with the teammate's
+presentation re-applied around it — most notably: `SettingsScreen` kept D-107's push-notification
+toggle and clear-cache action (the zip's now-dead "Server status" section was not ported back in);
+`WorkScreen` kept D-103's focus-triggered `refreshMe()` and D-104's personalized title; `AccountScreen`
+kept D-106's "Haggler Plus" wallet label and D-108's removed data-export row and `Badge`-tag roles
+(the zip had independently arrived at the same badge-for-roles idea — no reconciliation needed
+there, just its spacing). No new interactive element was introduced (every testID/handler in the 6
+files is identical to its base-commit counterpart), so nothing needed new wiring or a "needs
+backend decision" entry.
+
+Shipped on branch `ui/teammate-redesign`, deliberately **not merged to `main`** — this is a design
+review artifact, not a decided direction yet. Mobile suite green: 544/544 (3 `work.spec.tsx`
+assertions updated for markup-only changes — see `docs/ui-port/REPORT.md`). `npx tsc --noEmit`
+clean. Lint and `prettier --check` clean on touched files only. i18n key-parity green; no new keys
+needed anywhere — every string the port touches reuses an existing key.

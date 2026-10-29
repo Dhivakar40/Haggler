@@ -84,3 +84,31 @@ noting for every screen test from here on:
 - The two screens already flagged in `docs/UI_AUDIT.md` as "no visual treatment yet"
   (`ranger/LeagueScreen.tsx`, `account/ClientLeagueScreen.tsx`) are rebuilt using `LeagueBadge` in
   Step 3 of the screen work, not here.
+
+## D-109: teammate redesign ported (branch `ui/teammate-redesign`)
+
+A teammate redesigned 6 screens on an older snapshot of the app (base commit `6dd04dd`, see
+`docs/ui-port/PLAN.md` and `docs/ui-port/REPORT.md` for the full evidence and file-by-file
+breakdown). No new component, token, color, font or dependency was introduced — every change is
+screen-level composition built from the *existing* kit (`Card`, `Badge`, `Chip`, `Button`,
+`ListRow`, `Text`) plus inline `@expo/vector-icons` and `StyleSheet`. The recurring patterns, now
+established conventions for any future screen in this style:
+
+- **Icon-led section headers**: a `48×48` (or `42×42` for a nested sub-header) `colors.surfaceAlt`
+  square, `radii.md`, holding a centered `-outline` icon in `colors.primary`, next to the title.
+- **`SectionHeading`**: a small local component (icon + `variant="label"` or `variant="heading"`
+  text) placed above a `Card` that groups related `ListRow`s or controls — used on
+  `SettingsScreen.tsx` and `AccountScreen.tsx`. Kept as a per-file local component rather than
+  promoted into `components/`, since the two usages differ slightly (label weight vs icon size) and
+  a single shared version wasn't worth the coupling for two call sites.
+- **Status dot + badge**: a small colored circle (`radii.pill`, ~7-9px) next to a
+  `colors.surfaceAlt` pill badge, used for online/offline presence and job status instead of color
+  alone — same information, now carried redundantly through shape/position too, not just hue.
+- **Flat list rows become `Card` tiles**: `HomeScreen`'s category grid and `ActivityScreen`'s job
+  list moved from hairline-divided rows to individually-bordered, `radii.lg` cards with a tinted
+  icon shell, following the existing elevation policy (flat unless the surface needs the user's
+  attention right now).
+
+This port only touched `apps/mobile/src/app/(tabs)/_layout.tsx` and
+`features/{home,activity,settings,work,account}`; `theme/tokens.ts`, `ThemeProvider.tsx`,
+`components/*`, and `apps/admin` were untouched by the original redesign and remain untouched here.
