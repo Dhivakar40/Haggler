@@ -1,13 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { addRole } from '../../api/endpoints';
 import { useSession } from '../../auth/session';
 import { Avatar, Badge, Button, Card, ListRow, Screen, Text } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { formatIndianPhone } from '../../lib/phone';
-import { spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
+import { radii, spacing } from '../../theme/tokens';
 
 const ROLE_KEY = {
   CUSTOMER: 'account.roleCustomer',
@@ -26,9 +28,22 @@ const ROLE_TEST_SLUG = {
   STUDENT: 'student',
 } as const;
 
+function SectionHeading({ title, icon }: { title: string; icon: keyof typeof Ionicons.glyphMap }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.sectionHeading}>
+      <Ionicons name={icon} size={18} color={colors.primary} />
+      <Text variant="label" color="textMuted">
+        {title}
+      </Text>
+    </View>
+  );
+}
+
 export function AccountScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { colors } = useTheme();
   const user = useSession((s) => s.user);
   const refreshMe = useSession((s) => s.refreshMe);
   const signOut = useSession((s) => s.signOut);
@@ -86,31 +101,40 @@ export function AccountScreen() {
 
   return (
     <Screen scroll>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <Avatar name={user.fullName} />
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <Text variant="title">{user.fullName ?? t('account.noName')}</Text>
-          <Text color="textMuted">
-            {t('account.signedInAs', { phone: formatIndianPhone(user.phone) })}
-          </Text>
-          <Text color="textMuted">{t('account.roles')}</Text>
-          <View testID="roles" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
-            {user.roles.map((r) => (
-              <Badge
-                key={r}
-                testID={`role-${ROLE_TEST_SLUG[r]}`}
-                tone="accent"
-                label={t(ROLE_KEY[r])}
-              />
-            ))}
+      <Card style={styles.profileCard}>
+        <View style={styles.profileRow}>
+          <Avatar name={user.fullName} />
+          <View style={styles.profileDetails}>
+            <Text variant="title" style={styles.profileName}>
+              {user.fullName ?? t('account.noName')}
+            </Text>
+            <Text color="textMuted">
+              {t('account.signedInAs', { phone: formatIndianPhone(user.phone) })}
+            </Text>
+            <Text color="textMuted">{t('account.roles')}</Text>
+            <View testID="roles" style={styles.roleBadges}>
+              {user.roles.map((r) => (
+                <Badge
+                  key={r}
+                  testID={`role-${ROLE_TEST_SLUG[r]}`}
+                  tone={r === 'WORKER' ? 'accent' : 'neutral'}
+                  label={t(ROLE_KEY[r])}
+                />
+              ))}
+            </View>
           </View>
         </View>
-      </View>
+      </Card>
 
       {message ? (
-        <Text color="danger" accessibilityRole="alert">
-          {message}
-        </Text>
+        <Card style={styles.messageCard}>
+          <View style={styles.messageRow}>
+            <Ionicons name="alert-circle-outline" size={21} color={colors.danger} />
+            <Text color="danger" accessibilityRole="alert" style={styles.messageText}>
+              {message}
+            </Text>
+          </View>
+        </Card>
       ) : null}
 
       <Card>
@@ -132,8 +156,11 @@ export function AccountScreen() {
           />
         </Card>
       ) : (
-        <Card>
-          <View style={{ gap: spacing.sm }}>
+        <Card style={styles.promoCard}>
+          <View style={styles.promoContent}>
+            <View style={[styles.promoIcon, { backgroundColor: colors.surfaceAlt }]}>
+              <Ionicons name="briefcase-outline" size={25} color={colors.primary} />
+            </View>
             <Text variant="heading">{t('account.becomeRanger')}</Text>
             <Text color="textMuted">{t('account.becomeRangerDesc')}</Text>
             <Button
@@ -156,8 +183,11 @@ export function AccountScreen() {
           />
         </Card>
       ) : (
-        <Card>
-          <View style={{ gap: spacing.sm }}>
+        <Card style={styles.promoCard}>
+          <View style={styles.promoContent}>
+            <View style={[styles.promoIcon, { backgroundColor: colors.surfaceAlt }]}>
+              <Ionicons name="business-outline" size={25} color={colors.primary} />
+            </View>
             <Text variant="heading">{t('employer.becomeEmployer')}</Text>
             <Text color="textMuted">{t('employer.becomeEmployerDesc')}</Text>
             <Button
@@ -180,8 +210,11 @@ export function AccountScreen() {
           />
         </Card>
       ) : (
-        <Card>
-          <View style={{ gap: spacing.sm }}>
+        <Card style={styles.promoCard}>
+          <View style={styles.promoContent}>
+            <View style={[styles.promoIcon, { backgroundColor: colors.surfaceAlt }]}>
+              <Ionicons name="school-outline" size={25} color={colors.primary} />
+            </View>
             <Text variant="heading">{t('campus.becomeStudent')}</Text>
             <Text color="textMuted">{t('campus.becomeStudentDesc')}</Text>
             <Button
@@ -194,10 +227,8 @@ export function AccountScreen() {
         </Card>
       )}
 
-      <View style={{ gap: spacing.xs }}>
-        <Text variant="label" color="textMuted">
-          {t('account.sectionMarketplace')}
-        </Text>
+      <View style={styles.section}>
+        <SectionHeading title={t('account.sectionMarketplace')} icon="storefront-outline" />
         <Card>
           <ListRow
             testID="browse-contracts"
@@ -244,12 +275,14 @@ export function AccountScreen() {
         </Card>
       </View>
 
-      <View style={{ gap: spacing.xs }}>
-        <Text variant="label" color="textMuted">
-          {t('account.sectionProfile')}
-        </Text>
+      <View style={styles.section}>
+        <SectionHeading title={t('account.sectionProfile')} icon="person-circle-outline" />
         <Card>
-          <ListRow icon="person-outline" title={t('account.editProfile')} onPress={go('/profile')} />
+          <ListRow
+            icon="person-outline"
+            title={t('account.editProfile')}
+            onPress={go('/profile')}
+          />
           <ListRow
             icon="location-outline"
             title={t('account.addresses')}
@@ -266,10 +299,8 @@ export function AccountScreen() {
         </Card>
       </View>
 
-      <View style={{ gap: spacing.xs }}>
-        <Text variant="label" color="textMuted">
-          {t('account.sectionAccount')}
-        </Text>
+      <View style={styles.section}>
+        <SectionHeading title={t('account.sectionAccount')} icon="settings-outline" />
         <Card>
           <ListRow
             icon="log-out-outline"
@@ -288,3 +319,46 @@ export function AccountScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  profileCard: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  profileDetails: { flex: 1, gap: spacing.sm },
+  profileName: { fontSize: 23, lineHeight: 30 },
+  roleBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  messageCard: { borderColor: '#B3261E' },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  messageText: { flex: 1 },
+  promoCard: { borderRadius: radii.lg },
+  promoContent: { gap: spacing.md },
+  promoIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  section: { gap: spacing.sm },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+});
