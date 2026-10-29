@@ -32,7 +32,13 @@ const categories = [
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');
-  useSettings.setState({ themeMode: 'system', language: null });
+  useSettings.setState({
+    themeMode: 'system',
+    language: null,
+    pushNotificationsEnabled: false,
+    locationEnabled: false,
+    preferredCategorySlugs: [],
+  });
 });
 
 describe('HomeScreen', () => {
@@ -115,26 +121,26 @@ describe('SettingsScreen', () => {
     expect(useSettings.getState().language).toBe('ta');
   });
 
-  it('turning push notifications off unregisters this device, on registers it', async () => {
+  it('(D-113) starts off by default; turning push notifications on registers this device, off unregisters it', async () => {
     const Notifications = jest.requireMock('expo-notifications') as Record<string, jest.Mock>;
     Notifications.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
     const { calls } = mockApi(() => ({ status: 200, body: { ok: true } }));
     await renderWithProviders(<SettingsScreen />);
     const toggle = screen.getByTestId('push-notifications-toggle');
-    expect(toggle.props.accessibilityState.checked).toBe(true);
-
-    await fireEvent.press(toggle);
-    expect(useSettings.getState().pushNotificationsEnabled).toBe(false);
-    await waitFor(() =>
-      expect(calls.some((c) => c.method === 'DELETE' && c.path === '/v1/me/push-token')).toBe(
-        true,
-      ),
-    );
+    expect(toggle.props.accessibilityState.checked).toBe(false);
 
     await fireEvent.press(toggle);
     expect(useSettings.getState().pushNotificationsEnabled).toBe(true);
     await waitFor(() =>
       expect(calls.some((c) => c.method === 'PATCH' && c.path === '/v1/me/push-token')).toBe(
+        true,
+      ),
+    );
+
+    await fireEvent.press(toggle);
+    expect(useSettings.getState().pushNotificationsEnabled).toBe(false);
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'DELETE' && c.path === '/v1/me/push-token')).toBe(
         true,
       ),
     );

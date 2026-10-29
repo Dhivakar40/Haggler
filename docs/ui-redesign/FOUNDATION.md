@@ -96,6 +96,17 @@ refactor the untouched screen to use the hook too, so there's exactly one implem
 set of tests to trust. This is a UI-redesign-adjacent refactor (same behavior, same testIDs,
 zero functional change to the untouched screen), not scope creep.
 
+## Opt-in permission toggles (`OnboardingScreen.tsx`'s Preferences step, D-113)
+
+When a design shows a toggle for an OS permission (notifications, location, camera, …), the
+prompt must fire *only* from that toggle's own `onPress` — never from a `useEffect` that reacts to
+a persisted "enabled" setting defaulting to `true`, which prompts automatically the moment that
+effect first runs (e.g. at sign-in), with no toggle ever touched. Audit every existing
+`request*PermissionsAsync` call site before assuming a new toggle is needed; this round found
+location was already toggle-driven everywhere, and the only real bug was push notifications'
+settings default. Share the register/request logic between every screen offering the same toggle
+(`notifications/push.ts`'s `syncPushRegistration`) rather than duplicating it.
+
 ## Elements with no backing feature
 
 The design images are AI-generated and occasionally show something the app doesn't do (an extra

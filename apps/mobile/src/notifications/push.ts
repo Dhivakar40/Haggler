@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 // Type-only: erased at compile time, so this does not trigger the runtime side effect below.
 import type * as NotificationsModule from 'expo-notifications';
+import { registerPushToken, unregisterPushToken } from '../api/endpoints';
+import { getDeviceId } from '../auth/secure-storage';
 
 /**
  * `expo-notifications` must NOT be statically imported: merely importing it runs a module-level
@@ -71,5 +73,22 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   } catch {
     // No Google Play services / APNs unreachable / not a real build — not fatal.
     return null;
+  }
+}
+
+/**
+ * The one place that turns the push-notifications preference on or off for real (register or
+ * clear this device's token server-side). Shared by Settings and onboarding's Preferences step
+ * (D-113) so the "only prompt when the person explicitly switches it on" behaviour — and what
+ * happens on both sides of the toggle — stays identical everywhere it appears. Callers still own
+ * the `pushNotificationsEnabled` setting itself (`useSettings`).
+ */
+export async function syncPushRegistration(enabled: boolean): Promise<void> {
+  const deviceId = await getDeviceId();
+  if (enabled) {
+    const token = await registerForPushNotificationsAsync();
+    if (token) await registerPushToken({ deviceId, pushToken: token }).catch(() => undefined);
+  } else {
+    await unregisterPushToken({ deviceId }).catch(() => undefined);
   }
 }

@@ -10,7 +10,8 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
 | OTP verification (`OtpScreen`) | `features/auth/OtpScreen.tsx`, `i18n/locales/*.ts` | Done — introduced the segmented `OtpBoxes` pattern (see `FOUNDATION.md`) |
 | Consent (`ConsentScreen`) | `features/auth/ConsentScreen.tsx`, `i18n/locales/*.ts` | Done — introduced the `InfoRow` card pattern (see `FOUNDATION.md`) |
 | Onboarding step 1 — Profile (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/PersonalDetailsFields.tsx`, `packages/shared/src/api-schemas.ts`, `apps/api/src/users/users.service.ts`, `i18n/locales/*.ts` | Done — see D-111 in `docs/DECISIONS.md` for the confirmed scope decisions. |
-| Onboarding step 2 — Address (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/AddressesScreens.tsx`, `features/account/useAddressLocation.ts` (new), `api/endpoints.ts`, `i18n/locales/*.ts` | Done — real functionality, not a reskin (explicit instruction). See D-112 in `docs/DECISIONS.md`. Also added "Edit address" (was missing on mobile even though the backend already supported it) and onboarding now creates a real default address used everywhere else. Step 3 (Preferences) is still waiting on its design image; the `Stepper`'s third dot stays a non-interactive placeholder until it exists. |
+| Onboarding step 2 — Address (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/AddressesScreens.tsx`, `features/account/useAddressLocation.ts` (new), `api/endpoints.ts`, `i18n/locales/*.ts` | Done — real functionality, not a reskin (explicit instruction). See D-112 in `docs/DECISIONS.md`. Also added "Edit address" (was missing on mobile even though the backend already supported it) and onboarding now creates a real default address used everywhere else. |
+| Onboarding step 3 — Preferences (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `store/settings.ts`, `notifications/push.ts`, `features/settings/SettingsScreen.tsx`, `i18n/locales/*.ts` | Done — the last onboarding step. Fixed a real bug along the way: push notifications were being auto-requested at sign-in regardless of any toggle; now, like location, the OS prompt only fires when the person explicitly switches the preference on. See D-113 in `docs/DECISIONS.md`. Preferred service categories use the real catalog (`useCategories()`), kept device-local since no feature uses them yet. |
 
 ## Not implemented, needs a decision
 
@@ -43,6 +44,10 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
   backing column in the Address model. Confirmed with the product owner: omitted rather than
   adding a migration for one field on one screen — `addresses.line2` ("Area / landmark (optional)")
   already covers this informally everywhere else addresses are entered. See D-112.
+- **Preferred service categories** (preferences step): collected and stored device-local only
+  (`useSettings().preferredCategorySlugs`) — confirmed with the product owner, since no feature
+  reads this yet. If a real use for it appears later, it would need a new user-record field and a
+  migration to sync it server-side (today it stays on the device that set it). See D-113.
 
 ## Assets needed
 

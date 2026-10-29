@@ -4,11 +4,9 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '@haggler/shared';
-import { registerPushToken, unregisterPushToken } from '../../api/endpoints';
-import { getDeviceId } from '../../auth/secure-storage';
 import { Button, Card, Checkbox, Chip, Screen, Text } from '../../components';
 import { LANGUAGE_NATIVE_NAMES } from '../../i18n';
-import { registerForPushNotificationsAsync } from '../../notifications/push';
+import { syncPushRegistration } from '../../notifications/push';
 import { showToast } from '../../store/toast-queue';
 import { type ThemeMode, useSettings } from '../../store/settings';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -38,13 +36,7 @@ export function SettingsScreen() {
   async function togglePush() {
     const next = !pushNotificationsEnabled;
     setPushNotificationsEnabled(next);
-    const deviceId = await getDeviceId();
-    if (next) {
-      const token = await registerForPushNotificationsAsync();
-      if (token) await registerPushToken({ deviceId, pushToken: token }).catch(() => undefined);
-    } else {
-      await unregisterPushToken({ deviceId }).catch(() => undefined);
-    }
+    await syncPushRegistration(next);
   }
 
   async function clearCache() {

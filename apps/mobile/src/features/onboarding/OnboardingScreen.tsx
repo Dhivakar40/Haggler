@@ -3,23 +3,27 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { addressInputSchema, type AddressInput, type Gender } from '@haggler/shared';
+import { useCategories } from '../../api/hooks';
 import { ApiError } from '../../api/client';
 import { completeOnboarding, createAddress } from '../../api/endpoints';
 import { useSession } from '../../auth/session';
-import { Button, Card, Chip, Screen, Text, TextField } from '../../components';
+import { Button, Card, Checkbox, Chip, Screen, Text, TextField } from '../../components';
+import { ensureForegroundPermission } from '../../location/tracker';
 import { PersonalDetailsFields } from '../account/PersonalDetailsFields';
 import { useAddressLocation } from '../account/useAddressLocation';
 import { errorMessage } from '../../lib/errors';
 import { type DobParts, partsToDob } from '../../lib/dob';
+import { syncPushRegistration } from '../../notifications/push';
+import { useSettings } from '../../store/settings';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radii, spacing } from '../../theme/tokens';
 
 const STEPS = ['stepProfile', 'stepAddress', 'stepPreferences'] as const;
 const LABEL_PRESETS = ['Home', 'Work', 'Other'] as const;
 
-/** A progress indicator only — step 3 doesn't exist as a screen yet (see
- * docs/ui-redesign/PAGES.md), so the circles are never tappable; only going back to a step
- * already filled in on this device (`maxReached`) works, via the header back button. */
+/** A progress indicator only — the dots are never tappable (going back a step only works via the
+ * header back button, which keeps that step's already-entered values). A filled dot (`i < active`)
+ * shows a checkmark for a step already completed earlier in this session. */
 function Stepper({ active }: { active: number }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -97,7 +101,16 @@ export function OnboardingScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const refreshMe = useSession((s) => s.refreshMe);
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [pendingAddress, setPendingAddress] = useState<AddressInput | null>(null);
+
+  const categories = useCategories(step === 3);
+  const pushNotificationsEnabled = useSettings((s) => s.pushNotificationsEnabled);
+  const setPushNotificationsEnabled = useSettings((s) => s.setPushNotificationsEnabled);
+  const locationEnabled = useSettings((s) => s.locationEnabled);
+  const setLocationEnabled = useSettings((s) => s.setLocationEnabled);
+  const preferredCategorySlugs = useSettings((s) => s.preferredCategorySlugs);
+  const setPreferredCategorySlugs = useSettings((s) => s.setPreferredCategorySlugs);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -163,9 +176,14 @@ export function OnboardingScreen() {
     }
   }
 
+  function skipAddress() {
+    setPendingAddress(null);
+    setStep(3);
+  }
+
   function continueFromAddress() {
     const hasAnyInput = Object.values(addr).some((v) => v.trim());
-    if (!hasAnyInput) return void finish(null);
+    if (!hasAnyInput) return skipAddress();
     const parsed = addressInputSchema.safeParse({
       label: addressLabel,
       line1: addr.line1,
@@ -176,7 +194,29 @@ export function OnboardingScreen() {
       ...(coords ?? {}),
     });
     if (!parsed.success) return setAddressError(t('addresses.invalid'));
-    void finish(parsed.data);
+    setAddressError(undefined);
+    setPendingAddress(parsed.data);
+    setStep(3);
+  }
+
+  function toggleCategory(slug: string) {
+    setPreferredCategorySlugs(
+      preferredCategorySlugs.includes(slug)
+        ? preferredCategorySlugs.filter((s) => s !== slug)
+        : [...preferredCategorySlugs, slug],
+    );
+  }
+
+  async function togglePush() {
+    const next = !pushNotificationsEnabled;
+    setPushNotificationsEnabled(next);
+    await syncPushRegistration(next);
+  }
+
+  async function toggleLocation() {
+    const next = !locationEnabled;
+    setLocationEnabled(next);
+    if (next) await ensureForegroundPermission();
   }
 
   if (step === 1) {
@@ -256,8 +296,9 @@ export function OnboardingScreen() {
     );
   }
 
-  return (
-    <Screen scroll>
+  if (step === 2) {
+    return (
+      <Screen scroll>
       <View style={styles.topRow}>
         <Pressable
           testID="onboarding-back"
@@ -272,8 +313,7 @@ export function OnboardingScreen() {
         <Pressable
           testID="onboarding-skip-address"
           accessibilityRole="button"
-          onPress={() => void finish(null)}
-          disabled={busy}
+          onPress={skipAddress}
           style={[styles.skipButton, { backgroundColor: colors.surfaceAlt }]}
         >
           <Text variant="label">{t('onboarding.addressSkip')}</Text>
@@ -374,14 +414,138 @@ export function OnboardingScreen() {
         <Pressable
           testID="onboarding-skip-address-later"
           accessibilityRole="button"
-          onPress={() => void finish(null)}
-          disabled={busy}
+          onPress={skipAddress}
           style={styles.skipLater}
         >
           <Text variant="label" color="textMuted">
             {t('onboarding.addressSkip')}
           </Text>
         </Pressable>
+      </View>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen scroll>
+      <View style={styles.topRow}>
+        <Pressable
+          testID="onboarding-back"
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+          onPress={() => setStep(2)}
+          style={[styles.backButton, { backgroundColor: colors.surfaceAlt }]}
+          hitSlop={8}
+        >
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
+        </Pressable>
+        <Pressable
+          testID="onboarding-skip-preferences"
+          accessibilityRole="button"
+          onPress={() => void finish(pendingAddress)}
+          disabled={busy}
+          style={[styles.skipButton, { backgroundColor: colors.surfaceAlt }]}
+        >
+          <Text variant="label">{t('onboarding.preferencesSkip')}</Text>
+        </Pressable>
+      </View>
+
+      <Stepper active={2} />
+
+      <View style={styles.hero}>
+        <View style={[styles.mark, { backgroundColor: colors.primary }]}>
+          <Ionicons name="settings-outline" size={28} color={colors.onPrimary} />
+        </View>
+        <Text variant="title">{t('onboarding.preferencesTitle')}</Text>
+        <Text color="textMuted">{t('onboarding.preferencesIntro')}</Text>
+      </View>
+
+      <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
+        <View style={styles.categoriesSection}>
+          <Text variant="heading">{t('onboarding.categoriesHeading')}</Text>
+          <Text color="textMuted">{t('onboarding.categoriesHint')}</Text>
+          <View style={styles.categoriesGrid}>
+            {(categories.data ?? []).map((cat) => {
+              const selected = preferredCategorySlugs.includes(cat.slug);
+              const iconName =
+                cat.icon in Ionicons.glyphMap
+                  ? (cat.icon as keyof typeof Ionicons.glyphMap)
+                  : 'ellipsis-horizontal-circle-outline';
+              return (
+                <Card
+                  key={cat.id}
+                  testID={`preferred-category-${cat.slug}`}
+                  accessibilityLabel={t(cat.nameKey)}
+                  onPress={() => toggleCategory(cat.slug)}
+                  style={{
+                    ...styles.categoryTile,
+                    ...(selected
+                      ? { borderColor: colors.primary, backgroundColor: colors.surfaceAlt }
+                      : null),
+                  }}
+                >
+                  <View style={styles.categoryRow}>
+                    <Ionicons name={iconName} size={20} color={colors.primary} />
+                    <Text variant="label" style={styles.categoryLabel} numberOfLines={2}>
+                      {t(cat.nameKey)}
+                    </Text>
+                  </View>
+                  {selected ? (
+                    <View style={[styles.categoryCheck, { backgroundColor: colors.primary }]}>
+                      <Ionicons name="checkmark" size={12} color={colors.onPrimary} />
+                    </View>
+                  ) : null}
+                </Card>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.prefSection}>
+          <Text variant="heading">{t('settings.notifications')}</Text>
+          <Text color="textMuted">{t('onboarding.notificationsIntro')}</Text>
+          <Card style={styles.prefCard}>
+            <Checkbox
+              testID="onboarding-push-toggle"
+              label={t('settings.pushNotifications')}
+              checked={pushNotificationsEnabled}
+              onPress={() => void togglePush()}
+            />
+            <Text variant="caption" color="textMuted">
+              {t('settings.pushNotificationsHint')}
+            </Text>
+          </Card>
+        </View>
+
+        <View style={styles.prefSection}>
+          <Text variant="heading">{t('onboarding.locationHeading')}</Text>
+          <Text color="textMuted">{t('onboarding.locationIntro')}</Text>
+          <Card style={styles.prefCard}>
+            <Checkbox
+              testID="onboarding-location-toggle"
+              label={t('onboarding.useLocationToggle')}
+              checked={locationEnabled}
+              onPress={() => void toggleLocation()}
+            />
+            <Text variant="caption" color="textMuted">
+              {t('onboarding.useLocationHint')}
+            </Text>
+          </Card>
+        </View>
+
+        {addressError ? (
+          <Text color="danger" accessibilityRole="alert">
+            {addressError}
+          </Text>
+        ) : null}
+        <Button
+          testID="onboarding-finish"
+          title={t('onboarding.finishSetup')}
+          icon="arrow-forward"
+          iconPosition="trailing"
+          onPress={() => void finish(pendingAddress)}
+          loading={busy}
+        />
       </View>
     </Screen>
   );
@@ -447,4 +611,31 @@ const styles = StyleSheet.create({
   labelSection: { gap: spacing.sm },
   labelChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   skipLater: { alignItems: 'center', paddingVertical: spacing.sm },
+  categoriesSection: { gap: spacing.xs },
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  categoryTile: {
+    width: '31%',
+    padding: spacing.sm,
+    borderRadius: radii.md,
+    gap: spacing.xs,
+  },
+  categoryRow: { gap: spacing.xs },
+  categoryLabel: { lineHeight: 16 },
+  categoryCheck: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    width: 16,
+    height: 16,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prefSection: { gap: spacing.xs },
+  prefCard: { gap: spacing.sm, marginTop: spacing.sm },
 });

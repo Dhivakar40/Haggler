@@ -2350,3 +2350,52 @@ skip paths, the default-"Home"/picked-"Other" label, bad-PIN validation, the CON
 edge case, GPS autofill, and address editing/prefill). Both apps typecheck clean, lint clean, i18n
 parity clean. No backend or shared-package changes this round — every piece of backend
 functionality this page needed already existed.
+
+## D-113: push/location permission prompts only fire when a person explicitly opts in
+
+Onboarding's Preferences step (`ui/redesign-from-images`, image 5 — the final step) surfaced a real
+bug, called out explicitly: "instead of the user being prompted to allow these services randomly,
+... when the user toggles this only he must be prompted." Audited every permission-prompting call
+site in the mobile app (`requestForegroundPermissionsAsync`, `requestBackgroundPermissionsAsync`,
+`Notifications.requestPermissionsAsync`) to find the actual cause:
+
+- **Location was already fine.** Both call sites — `useAddressLocation`'s "Use my current
+  location" button and the Ranger's "go online"/job-tracking flow — only ever ask when the person
+  taps something. Nothing to fix here.
+- **Push was the bug.** `pushNotificationsEnabled` defaulted to `true` in the persisted settings
+  store, and `usePushRegistration(signedIn, pushNotificationsEnabled)` fires its registration
+  effect (which requests the OS permission) automatically the moment `_layout.tsx` sees a signed-in
+  user — a brand-new account got the native push prompt immediately after sign-in, with no toggle
+  ever touched. Fixed by flipping the default to `false`. This only changes behaviour for fresh
+  installs: an existing device's persisted `true` value is untouched, so no one who already granted
+  (or dismissed) the prompt sees it again.
+
+Preferences now gives both a real, explicit opt-in control — a push toggle and a location toggle,
+both following the exact "request only when switched on" pattern Settings' existing push toggle
+already used. `syncPushRegistration()` (new, `notifications/push.ts`) extracts that register/
+unregister logic so `SettingsScreen` and onboarding share one implementation rather than two
+copies that could drift. The location toggle calls the already-existing `ensureForegroundPermission`
+(`location/tracker.ts`) — written for the Ranger "go online" flow, works identically here.
+
+**Preferred service categories**: the image's 9-tile grid matches the real catalog exactly
+(`GET /v1/categories` — `electrician`, `plumber`, `cleaner`, `carpenter`, `appliance_repair`,
+`ac_repair`, `painter`, `pest_control`, `gas_appliance_repair`, `other`; see `apps/api/prisma/
+seed.ts`), so the step renders the real, live catalog (same `useCategories()` hook `HomeScreen`
+uses) rather than inventing a hardcoded list. Per the product owner (no usage designed yet, but
+explicitly "we will collect it"): kept **device-local only** — a new `preferredCategorySlugs:
+string[]` field in the same persisted settings store as `pushNotificationsEnabled`, not sent to the
+server. No migration. Selecting/deselecting a tile writes straight to the store; there's nothing to
+"save" at the end since every toggle already took effect the moment it was pressed, consistent with
+how the push/location toggles work.
+
+**Three-step wizard, one `finish()`**: step 2's "Continue"/"Skip" no longer call `finish()`
+directly — they now just carry the parsed address (or none) into step 3's local `pendingAddress`
+state and advance. Step 3's "Finish Setup" and its own "Skip" both call the same `finish()` from
+D-112, unchanged. The stepper's dots gained a third (done/checkmark) state for a completed earlier
+step.
+
+Mobile suite 560/560 (5 new: no-auto-prompt-before-toggle for both push and location, category
+multi-select writes straight to the local store and never calls the server, plus the step-2→3
+plumbing). `screens.spec.tsx`'s existing push-toggle test flipped to start from "off" (one new
+`beforeEach` reset for the three D-113 settings fields). Typecheck clean, lint clean, i18n parity
+clean. No backend or shared-package changes.

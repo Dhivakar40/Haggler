@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
 import i18n from '../../i18n';
 import { useSession } from '../../auth/session';
+import { useSettings } from '../../store/settings';
 import { makeMe, mockApi, renderWithProviders, signInAs } from '../../test-utils';
 import { OnboardingScreen } from './OnboardingScreen';
 
@@ -18,19 +19,55 @@ const createdAddress = {
   longitude: null,
 };
 
+const categories = [
+  {
+    id: '11111111-1111-4111-8111-111111111111',
+    slug: 'electrician',
+    nameKey: 'categories.electrician',
+    icon: 'flash',
+    requiresLicense: false,
+    inspectionChargePaise: null,
+  },
+  {
+    id: '22222222-2222-4222-8222-222222222222',
+    slug: 'plumber',
+    nameKey: 'categories.plumber',
+    icon: 'water',
+    requiresLicense: false,
+    inspectionChargePaise: null,
+  },
+];
+
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(),
+  getForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
   reverseGeocodeAsync: jest.fn(),
   Accuracy: { Balanced: 3 },
 }));
 const loc = Location as unknown as Record<string, jest.Mock>;
 
+// `isDevice` is a plain boolean export copied by value into the module namespace at import time
+// (see notifications/usePushRegistration.spec.ts), so it must be mocked here, not mutated later.
+jest.mock('expo-device', () => ({ isDevice: true }));
+
 beforeEach(async () => {
   await i18n.changeLanguage('en');
   jest.clearAllMocks();
+  loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' });
+  useSettings.setState({
+    pushNotificationsEnabled: false,
+    locationEnabled: false,
+    preferredCategorySlugs: [],
+  });
   signInAs({ profileComplete: false });
 });
+
+/** Advances through step 2 (Address) by skipping it, landing on step 3 (Preferences). */
+async function skipToPreferences() {
+  await fireEvent.press(await screen.findByTestId('onboarding-skip-address'));
+  await screen.findByTestId('onboarding-finish');
+}
 
 /** Fills and advances step 1 (Profile) — every test needs this before step 2 is reachable. */
 async function fillAndAdvanceStep1(over: { name?: string; email?: string; gender?: 'MALE' | 'FEMALE' } = {}) {
@@ -96,99 +133,33 @@ describe('OnboardingScreen — step 2 (Address)', () => {
     expect(screen.getByTestId('onboarding-name').props.value).toBe('Vikram Shah');
   });
 
-  it('"Skip" finishes onboarding with no address and no email', async () => {
-    const completed = makeMe({ fullName: 'Vikram Shah', profileComplete: true });
-    const { calls } = mockApi((c) => {
-      if (c.path === '/v1/me/onboarding') return { body: completed };
-      if (c.path === '/v1/me') return { body: completed };
-      return undefined;
-    });
+  it('"Skip" and "I\'ll add this later" both just advance to step 3 — nothing is submitted yet', async () => {
+    const { calls } = mockApi((c) => (c.path === '/v1/categories' ? { body: categories } : undefined));
     await renderWithProviders(<OnboardingScreen />);
     await fillAndAdvanceStep1();
     await fireEvent.press(await screen.findByTestId('onboarding-skip-address'));
-    await waitFor(() => expect(useSession.getState().user?.profileComplete).toBe(true));
-    expect(calls.find((c) => c.path === '/v1/me/onboarding')?.body).toEqual({
-      fullName: 'Vikram Shah',
-      dateOfBirth: '1995-07-04',
-      gender: 'MALE',
-    });
-    expect(calls.some((c) => c.path === '/v1/me/addresses')).toBe(false);
-  });
-
-  it('"I\'ll add this later" (bottom) does the same as "Skip" (top)', async () => {
-    const completed = makeMe({ profileComplete: true });
-    const { calls } = mockApi((c) => {
-      if (c.path === '/v1/me/onboarding') return { body: completed };
-      if (c.path === '/v1/me') return { body: completed };
-      return undefined;
-    });
-    await renderWithProviders(<OnboardingScreen />);
-    await fillAndAdvanceStep1();
-    await fireEvent.press(await screen.findByTestId('onboarding-skip-address-later'));
-    await waitFor(() => expect(useSession.getState().user?.profileComplete).toBe(true));
-    expect(calls.some((c) => c.path === '/v1/me/addresses')).toBe(false);
-  });
-
-  it('Continue with a filled address creates it (default "Home" label) after completing onboarding', async () => {
-    const completed = makeMe({ profileComplete: true });
-    const { calls } = mockApi((c) => {
-      if (c.path === '/v1/me/onboarding') return { body: completed };
-      if (c.path === '/v1/me') return { body: completed };
-      if (c.path === '/v1/me/addresses' && c.method === 'POST') return { status: 201, body: createdAddress };
-      return undefined;
-    });
-    await renderWithProviders(<OnboardingScreen />);
-    await fillAndAdvanceStep1({ name: 'Asha Raman', gender: 'FEMALE', email: 'asha@example.com' });
-    await fireEvent.changeText(await screen.findByTestId('line1'), '12 Gandhi Road');
-    await fireEvent.changeText(screen.getByTestId('city'), 'Chennai');
-    await fireEvent.changeText(screen.getByTestId('state'), 'Tamil Nadu');
-    await fireEvent.changeText(screen.getByTestId('pincode'), '600042');
-    await fireEvent.press(screen.getByTestId('onboarding-continue-address'));
-
-    await waitFor(() => expect(useSession.getState().user?.profileComplete).toBe(true));
-    const onboardingIndex = calls.findIndex((c) => c.path === '/v1/me/onboarding');
-    const addressIndex = calls.findIndex((c) => c.path === '/v1/me/addresses' && c.method === 'POST');
-    expect(onboardingIndex).toBeGreaterThanOrEqual(0);
-    expect(addressIndex).toBeGreaterThan(onboardingIndex); // onboarding completes first, see finish()
-    expect(calls[onboardingIndex]?.body).toEqual({
-      fullName: 'Asha Raman',
-      dateOfBirth: '1995-07-04',
-      gender: 'FEMALE',
-      email: 'asha@example.com',
-    });
-    expect(calls[addressIndex]?.body).toEqual({
-      label: 'Home',
-      line1: '12 Gandhi Road',
-      city: 'Chennai',
-      state: 'Tamil Nadu',
-      pincode: '600042',
-    });
-  });
-
-  it('picking "Work" saves the address under that label instead', async () => {
-    const completed = makeMe({ profileComplete: true });
-    const { calls } = mockApi((c) => {
-      if (c.path === '/v1/me/onboarding') return { body: completed };
-      if (c.path === '/v1/me') return { body: completed };
-      if (c.path === '/v1/me/addresses' && c.method === 'POST') return { status: 201, body: createdAddress };
-      return undefined;
-    });
-    await renderWithProviders(<OnboardingScreen />);
-    await fillAndAdvanceStep1();
-    await fireEvent.changeText(await screen.findByTestId('line1'), '12 Gandhi Road');
-    await fireEvent.changeText(screen.getByTestId('city'), 'Chennai');
-    await fireEvent.changeText(screen.getByTestId('state'), 'Tamil Nadu');
-    await fireEvent.changeText(screen.getByTestId('pincode'), '600042');
-    await fireEvent.press(screen.getByTestId('address-label-Work'));
-    await fireEvent.press(screen.getByTestId('onboarding-continue-address'));
-    await waitFor(() =>
-      expect(calls.find((c) => c.path === '/v1/me/addresses')?.body).toMatchObject({
-        label: 'Work',
-      }),
+    expect(await screen.findByTestId('onboarding-finish')).toBeTruthy();
+    expect(calls.some((c) => c.path === '/v1/me/onboarding' || c.path === '/v1/me/addresses')).toBe(
+      false,
     );
   });
 
-  it('validates the address before calling the server (bad PIN code)', async () => {
+  it('a filled address advances to step 3 carrying the parsed address — nothing is submitted yet', async () => {
+    const { calls } = mockApi((c) => (c.path === '/v1/categories' ? { body: categories } : undefined));
+    await renderWithProviders(<OnboardingScreen />);
+    await fillAndAdvanceStep1();
+    await fireEvent.changeText(await screen.findByTestId('line1'), '12 Gandhi Road');
+    await fireEvent.changeText(screen.getByTestId('city'), 'Chennai');
+    await fireEvent.changeText(screen.getByTestId('state'), 'Tamil Nadu');
+    await fireEvent.changeText(screen.getByTestId('pincode'), '600042');
+    await fireEvent.press(screen.getByTestId('onboarding-continue-address'));
+    expect(await screen.findByTestId('onboarding-finish')).toBeTruthy();
+    expect(calls.some((c) => c.path === '/v1/me/onboarding' || c.path === '/v1/me/addresses')).toBe(
+      false,
+    );
+  });
+
+  it('validates the address before advancing (bad PIN code)', async () => {
     const { calls } = mockApi(() => undefined);
     await renderWithProviders(<OnboardingScreen />);
     await fillAndAdvanceStep1();
@@ -217,16 +188,168 @@ describe('OnboardingScreen — step 2 (Address)', () => {
     expect(screen.getByTestId('city').props.value).toBe('Chennai');
     expect(screen.getByTestId('pincode').props.value).toBe('600042');
   });
+});
 
-  it('shows the server error and does not advance into the app when onboarding fails for real', async () => {
+describe('OnboardingScreen — step 3 (Preferences)', () => {
+  /** Gets from a blank screen to step 3 with a filled, valid address pending. */
+  async function toStep3WithAddress() {
+    await fillAndAdvanceStep1({ name: 'Asha Raman', gender: 'FEMALE', email: 'asha@example.com' });
+    await fireEvent.changeText(await screen.findByTestId('line1'), '12 Gandhi Road');
+    await fireEvent.changeText(screen.getByTestId('city'), 'Chennai');
+    await fireEvent.changeText(screen.getByTestId('state'), 'Tamil Nadu');
+    await fireEvent.changeText(screen.getByTestId('pincode'), '600042');
+    await fireEvent.press(screen.getByTestId('onboarding-continue-address'));
+    await screen.findByTestId('onboarding-finish');
+  }
+
+  it('back returns to step 2 with the address fields kept', async () => {
+    mockApi((c) => (c.path === '/v1/categories' ? { body: categories } : undefined));
+    await renderWithProviders(<OnboardingScreen />);
+    await toStep3WithAddress();
+    await fireEvent.press(screen.getByTestId('onboarding-back'));
+    expect(screen.getByTestId('line1').props.value).toBe('12 Gandhi Road');
+  });
+
+  it('"Finish Setup" completes onboarding, then creates the pending address, with no email (D-111)', async () => {
+    const completed = makeMe({ profileComplete: true });
+    const { calls } = mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: categories };
+      if (c.path === '/v1/me/onboarding') return { body: completed };
+      if (c.path === '/v1/me') return { body: completed };
+      if (c.path === '/v1/me/addresses' && c.method === 'POST')
+        return { status: 201, body: createdAddress };
+      return undefined;
+    });
+    await renderWithProviders(<OnboardingScreen />);
+    await fillAndAdvanceStep1(); // no email passed
+    await fireEvent.changeText(await screen.findByTestId('line1'), '12 Gandhi Road');
+    await fireEvent.changeText(screen.getByTestId('city'), 'Chennai');
+    await fireEvent.changeText(screen.getByTestId('state'), 'Tamil Nadu');
+    await fireEvent.changeText(screen.getByTestId('pincode'), '600042');
+    await fireEvent.press(screen.getByTestId('onboarding-continue-address'));
+    await fireEvent.press(await screen.findByTestId('onboarding-finish'));
+
+    await waitFor(() => expect(useSession.getState().user?.profileComplete).toBe(true));
+    const onboardingIndex = calls.findIndex((c) => c.path === '/v1/me/onboarding');
+    const addressIndex = calls.findIndex((c) => c.path === '/v1/me/addresses' && c.method === 'POST');
+    expect(onboardingIndex).toBeGreaterThanOrEqual(0);
+    expect(addressIndex).toBeGreaterThan(onboardingIndex); // onboarding completes first, see finish()
+    expect(calls[onboardingIndex]?.body).toEqual({
+      fullName: 'Vikram Shah',
+      dateOfBirth: '1995-07-04',
+      gender: 'MALE',
+    });
+    expect(calls[addressIndex]?.body).toEqual({
+      label: 'Home',
+      line1: '12 Gandhi Road',
+      city: 'Chennai',
+      state: 'Tamil Nadu',
+      pincode: '600042',
+    });
+  });
+
+  it('picking "Work" at step 2 carries through to the created address', async () => {
+    const completed = makeMe({ profileComplete: true });
+    const { calls } = mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: categories };
+      if (c.path === '/v1/me/onboarding') return { body: completed };
+      if (c.path === '/v1/me') return { body: completed };
+      if (c.path === '/v1/me/addresses' && c.method === 'POST')
+        return { status: 201, body: createdAddress };
+      return undefined;
+    });
+    await renderWithProviders(<OnboardingScreen />);
+    await fillAndAdvanceStep1();
+    await fireEvent.changeText(await screen.findByTestId('line1'), '12 Gandhi Road');
+    await fireEvent.changeText(screen.getByTestId('city'), 'Chennai');
+    await fireEvent.changeText(screen.getByTestId('state'), 'Tamil Nadu');
+    await fireEvent.changeText(screen.getByTestId('pincode'), '600042');
+    await fireEvent.press(screen.getByTestId('address-label-Work'));
+    await fireEvent.press(screen.getByTestId('onboarding-continue-address'));
+    await fireEvent.press(await screen.findByTestId('onboarding-finish'));
+    await waitFor(() =>
+      expect(calls.find((c) => c.path === '/v1/me/addresses')?.body).toMatchObject({
+        label: 'Work',
+      }),
+    );
+  });
+
+  it('"Skip" (top) finishes onboarding with no address, same as "Finish Setup" with nothing filled', async () => {
+    const completed = makeMe({ profileComplete: true });
+    const { calls } = mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: categories };
+      if (c.path === '/v1/me/onboarding') return { body: completed };
+      if (c.path === '/v1/me') return { body: completed };
+      return undefined;
+    });
+    await renderWithProviders(<OnboardingScreen />);
+    await fillAndAdvanceStep1();
+    await skipToPreferences();
+    await fireEvent.press(screen.getByTestId('onboarding-skip-preferences'));
+    await waitFor(() => expect(useSession.getState().user?.profileComplete).toBe(true));
+    expect(calls.some((c) => c.path === '/v1/me/addresses')).toBe(false);
+  });
+
+  it('real service categories are selectable, stored locally (not sent to the server)', async () => {
+    const { calls } = mockApi((c) => (c.path === '/v1/categories' ? { body: categories } : undefined));
+    await renderWithProviders(<OnboardingScreen />);
+    await fillAndAdvanceStep1();
+    await skipToPreferences();
+    await fireEvent.press(await screen.findByTestId('preferred-category-electrician'));
+    expect(useSettings.getState().preferredCategorySlugs).toEqual(['electrician']);
+    await fireEvent.press(screen.getByTestId('preferred-category-plumber'));
+    expect(useSettings.getState().preferredCategorySlugs).toEqual(['electrician', 'plumber']);
+    await fireEvent.press(screen.getByTestId('preferred-category-electrician'));
+    expect(useSettings.getState().preferredCategorySlugs).toEqual(['plumber']);
+    expect(calls.every((c) => c.path !== '/v1/me/onboarding')).toBe(true); // selecting never submits
+  });
+
+  it('(D-113) push permission is never requested until the toggle is switched on', async () => {
+    const Notifications = jest.requireMock('expo-notifications') as Record<string, jest.Mock>;
+    Notifications.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
     mockApi((c) =>
-      c.path === '/v1/me/onboarding'
-        ? { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } }
-        : undefined,
+      c.path === '/v1/categories' ? { body: categories } : { status: 200, body: { ok: true } },
     );
     await renderWithProviders(<OnboardingScreen />);
     await fillAndAdvanceStep1();
-    await fireEvent.press(await screen.findByTestId('onboarding-skip-address'));
+    await skipToPreferences();
+    expect(screen.getByTestId('onboarding-push-toggle').props.accessibilityState.checked).toBe(
+      false,
+    );
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByTestId('onboarding-push-toggle'));
+    expect(useSettings.getState().pushNotificationsEnabled).toBe(true);
+    await waitFor(() => expect(Notifications.getPermissionsAsync).toHaveBeenCalled());
+  });
+
+  it('(D-113) location permission is never requested until the toggle is switched on', async () => {
+    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockApi((c) => (c.path === '/v1/categories' ? { body: categories } : undefined));
+    await renderWithProviders(<OnboardingScreen />);
+    await fillAndAdvanceStep1();
+    await skipToPreferences();
+    expect(screen.getByTestId('onboarding-location-toggle').props.accessibilityState.checked).toBe(
+      false,
+    );
+    expect(loc.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByTestId('onboarding-location-toggle'));
+    expect(useSettings.getState().locationEnabled).toBe(true);
+    await waitFor(() => expect(loc.requestForegroundPermissionsAsync).toHaveBeenCalled());
+  });
+
+  it('shows the server error and does not advance into the app when onboarding fails for real', async () => {
+    mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: categories };
+      if (c.path === '/v1/me/onboarding')
+        return { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } };
+      return undefined;
+    });
+    await renderWithProviders(<OnboardingScreen />);
+    await fillAndAdvanceStep1();
+    await skipToPreferences();
+    await fireEvent.press(screen.getByTestId('onboarding-skip-preferences'));
     expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(useSession.getState().user?.profileComplete).toBe(false);
   });
@@ -234,6 +357,7 @@ describe('OnboardingScreen — step 2 (Address)', () => {
   it('treats "already completed" (409) as success rather than an error — a stranded retry recovers', async () => {
     const completed = makeMe({ profileComplete: true });
     mockApi((c) => {
+      if (c.path === '/v1/categories') return { body: categories };
       if (c.path === '/v1/me/onboarding')
         return { status: 409, body: { error: { code: 'CONFLICT', message: 'Already done.' } } };
       if (c.path === '/v1/me') return { body: completed };
@@ -241,7 +365,8 @@ describe('OnboardingScreen — step 2 (Address)', () => {
     });
     await renderWithProviders(<OnboardingScreen />);
     await fillAndAdvanceStep1();
-    await fireEvent.press(await screen.findByTestId('onboarding-skip-address'));
+    await skipToPreferences();
+    await fireEvent.press(screen.getByTestId('onboarding-skip-preferences'));
     await waitFor(() => expect(useSession.getState().user?.profileComplete).toBe(true));
   });
 });
