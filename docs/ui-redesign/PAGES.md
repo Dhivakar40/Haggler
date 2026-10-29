@@ -7,6 +7,7 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
 | Page | Files | Status |
 |---|---|---|
 | Sign-in / landing (`PhoneScreen`) | `features/auth/PhoneScreen.tsx`, `components/Button.tsx`, `components/TextField.tsx`, `i18n/locales/*.ts` | Done — also set the app-wide foundation (see `FOUNDATION.md`) |
+| OTP verification (`OtpScreen`) | `features/auth/OtpScreen.tsx`, `i18n/locales/*.ts` | Done — introduced the segmented `OtpBoxes` pattern (see `FOUNDATION.md`) |
 
 ## Not implemented, needs a decision
 

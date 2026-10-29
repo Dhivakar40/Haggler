@@ -43,6 +43,16 @@ existing icon/vector treatment if the shape is simple enough, or (b) list the ex
 (name, size, format) under "Assets to supply" in that page's report and leave a clearly-named,
 neutral placeholder slot. Page 1 (sign-in) took option (a) — see `docs/DESIGN_SYSTEM.md` D-110.
 
+## Segmented code input (`OtpBoxes`, `features/auth/OtpScreen.tsx`)
+
+For a "6 individual boxes" code-entry design: don't split state across 6 inputs (that breaks
+paste, SMS autofill, and the single `otp-input` testID existing tests rely on). Instead, render
+one real `TextInput` — transparent, absolutely positioned over the box row, catching all touches
+and keystrokes — and 6 plain `View`s underneath that just mirror characters out of the same
+`value` string, with the box at the current length highlighted in `colors.primary`. Reuse this
+`OtpBoxes` pattern (currently local to `OtpScreen.tsx`; promote to `components/` if a second page
+needs it) for any other segmented/PIN-style input a later image shows.
+
 ## Elements with no backing feature
 
 The design images are AI-generated and occasionally show something the app doesn't do (an extra

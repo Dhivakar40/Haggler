@@ -206,7 +206,7 @@ describe('OtpScreen', () => {
   it('resend is disabled during the 30 s cooldown and shows the countdown', async () => {
     mockApi(() => undefined);
     await renderWithProviders(<OtpScreen />);
-    expect(screen.getByText(/Resend in \d+s/)).toBeTruthy();
+    expect(screen.getByText(/Resend code in \d+s/)).toBeTruthy();
     expect(screen.getByTestId('resend').props.accessibilityState).toMatchObject({ disabled: true });
   });
 
@@ -221,7 +221,7 @@ describe('OtpScreen', () => {
         : undefined,
     );
     await renderWithProviders(<OtpScreen />);
-    expect(screen.getByText('Sent to tester@example.com')).toBeTruthy();
+    expect(screen.getByText('tester@example.com')).toBeTruthy();
   });
 });
 
