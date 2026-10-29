@@ -9,6 +9,7 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
 | Sign-in / landing (`PhoneScreen`) | `features/auth/PhoneScreen.tsx`, `components/Button.tsx`, `components/TextField.tsx`, `i18n/locales/*.ts` | Done — also set the app-wide foundation (see `FOUNDATION.md`) |
 | OTP verification (`OtpScreen`) | `features/auth/OtpScreen.tsx`, `i18n/locales/*.ts` | Done — introduced the segmented `OtpBoxes` pattern (see `FOUNDATION.md`) |
 | Consent (`ConsentScreen`) | `features/auth/ConsentScreen.tsx`, `i18n/locales/*.ts` | Done — introduced the `InfoRow` card pattern (see `FOUNDATION.md`) |
+| Onboarding step 1 — Profile (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/PersonalDetailsFields.tsx`, `packages/shared/src/api-schemas.ts`, `apps/api/src/users/users.service.ts`, `i18n/locales/*.ts` | Done — see D-111 in `docs/DECISIONS.md` for the confirmed scope decisions. Steps 2 (Address) and 3 (Preferences) are waiting on their design images; the `Stepper` is a non-interactive progress indicator until they exist. |
 
 ## Not implemented, needs a decision
 
@@ -29,6 +30,14 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
   `ConsentScreen.tsx` explicitly keeps them as two separate DPDP consents by design (see the
   file's own comment and `docs/COMPLIANCE.md`). Merging them would be a compliance-relevant
   change, not a visual one, so they stay as two checkboxes, styled close together.
+
+- **Role picker at onboarding** (profile step): the design shows a Customer/Ranger picker as part
+  of step 1. Confirmed with the product owner: omitted. Role stays a post-onboarding, self-serve
+  action from the Account screen ("Become a Ranger" etc.), unchanged. See D-111.
+- **Profile photo upload** (profile step): the design shows an "Add Photo" control. No upload
+  endpoint exists anywhere in the codebase today (`photoUrl` is read-only on the client). Confirmed
+  with the product owner: rendered as a visible, clearly-labeled "coming soon" control rather than
+  faked. Building this for real needs a storage/upload endpoint — a backend decision, not a UI one.
 
 ## Assets needed
 

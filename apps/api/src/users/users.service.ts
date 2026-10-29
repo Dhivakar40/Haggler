@@ -57,8 +57,8 @@ export class UsersService {
   }
 
   /**
-   * The mandatory first-sign-in setup (D-075): name, date of birth, gender, email. One-time —
-   * further edits go through `updateProfile` (Settings > Edit Profile) instead.
+   * The mandatory first-sign-in setup (D-075): name, date of birth, gender, and an optional
+   * email. One-time — further edits go through `updateProfile` (Settings > Edit Profile) instead.
    */
   async completeOnboarding(userId: string, input: OnboardingInput): Promise<Me> {
     const user = await this.prisma.user.findUnique({

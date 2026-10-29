@@ -376,6 +376,21 @@ describe('mandatory profile setup (Part B, D-075)', () => {
     expect(after.body.dateOfBirth).toBe(dateOfBirth); // round-trips through encryption unchanged
   });
 
+  it('(D-111) completes onboarding with no email — it is optional, same as a later profile edit', async () => {
+    const s = await api.signIn();
+    const done = await api
+      .http()
+      .post('/v1/me/onboarding')
+      .set('Authorization', `Bearer ${s.accessToken}`)
+      .send({ fullName: 'Vikram Shah', dateOfBirth, gender: 'MALE' })
+      .expect(201);
+    expect(done.body).toMatchObject({
+      fullName: 'Vikram Shah',
+      email: null,
+      profileComplete: true,
+    });
+  });
+
   it('refuses a second onboarding once already complete', async () => {
     const s = await api.signIn();
     await api

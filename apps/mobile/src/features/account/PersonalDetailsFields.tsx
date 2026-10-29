@@ -20,6 +20,7 @@ export function PersonalDetailsFields({
   onDobChange,
   gender,
   onGenderChange,
+  hideEmail = false,
 }: {
   email: string;
   onEmailChange: (v: string) => void;
@@ -27,21 +28,26 @@ export function PersonalDetailsFields({
   onDobChange: (v: DobParts) => void;
   gender: Gender | null;
   onGenderChange: (v: Gender) => void;
+  /** The caller already renders its own email field elsewhere on the page (e.g. OnboardingScreen,
+   * to match its design's field order) — skip rendering a second one here. */
+  hideEmail?: boolean;
 }) {
   const { t } = useTranslation();
   return (
     <View style={{ gap: spacing.md }}>
-      <TextField
-        testID="email-input"
-        label={t('onboarding.emailLabel')}
-        value={email}
-        onChangeText={onEmailChange}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoComplete="email"
-        textContentType="emailAddress"
-        maxLength={254}
-      />
+      {hideEmail ? null : (
+        <TextField
+          testID="email-input"
+          label={t('onboarding.emailLabel')}
+          value={email}
+          onChangeText={onEmailChange}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          textContentType="emailAddress"
+          maxLength={254}
+        />
+      )}
       <View style={{ gap: spacing.sm }}>
         <Text variant="label">{t('onboarding.dobLabel')}</Text>
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>

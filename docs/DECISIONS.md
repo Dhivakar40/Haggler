@@ -2268,3 +2268,34 @@ review artifact, not a decided direction yet. Mobile suite green: 544/544 (3 `wo
 assertions updated for markup-only changes — see `docs/ui-port/REPORT.md`). `npx tsc --noEmit`
 clean. Lint and `prettier --check` clean on touched files only. i18n key-parity green; no new keys
 needed anywhere — every string the port touches reuses an existing key.
+
+## D-111: onboarding email becomes optional, matching profile editing
+
+Rebuilding onboarding's UI from a design image (`ui/redesign-from-images`, see
+`docs/ui-redesign/PAGES.md`) surfaced a real inconsistency: `onboardingInputSchema` required
+email, but `profileUpdateSchema` (Settings > Edit Profile, same field, same component) has always
+treated it as optional. The design image also labels the field "(Optional)". Confirmed with the
+product owner before changing anything (this is a validation/flow change, not a visual one — see
+the four-question check-in at the start of the onboarding page's redesign work): onboarding stays
+mandatory and non-skippable (no change there), but email within it is now genuinely optional,
+exactly like the later edit screen already allows.
+
+Changed: `onboardingInputSchema.email` → `.optional()` (`packages/shared/src/api-schemas.ts`),
+rebuilt the package. `UsersService.completeOnboarding` needed no code change — Prisma already
+skips an `undefined` field in `update()`, so omitting a falsy email now round-trips to `null`
+exactly like a profile edit does. Mobile: `OnboardingScreen.tsx` only validates email format when
+something was typed, and omits the key from the request body when it wasn't (mirroring
+`ProfileScreen.tsx`'s existing `...(email.trim() ? { email: email.trim() } : {})` pattern).
+
+Two explicitly out-of-scope asks from the same image, decided the same way (confirmed with the
+product owner, not assumed): a Role picker (Customer/Ranger) in onboarding was dropped — role
+selection stays a post-onboarding, self-serve action from the Account screen, unchanged. A
+profile-photo upload control is **not wired to anything** — no upload endpoint exists anywhere in
+the codebase (`photoUrl` is a read-only field today, set by nothing) — so it renders as a visibly
+inert "coming soon" control rather than a fake feature. Both noted in
+`docs/ui-redesign/PAGES.md`.
+
+New API test: `(D-111) completes onboarding with no email` (`auth.e2e-spec.ts`) — not run locally
+(no Docker for the Testcontainers suite in this environment), typechecked only. Mobile: two new
+`OnboardingScreen.spec.tsx` tests (submits with no email; still rejects a malformed one when
+typed). Full mobile suite 546/546, API unit suite 228/228, both apps typecheck clean.

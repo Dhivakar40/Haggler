@@ -10,11 +10,49 @@ beforeEach(async () => {
 });
 
 describe('OnboardingScreen', () => {
-  it('refuses to submit until name, date of birth, gender and email are all filled in', async () => {
+  it('refuses to submit until name, date of birth and gender are all filled in', async () => {
     const { calls } = mockApi(() => undefined);
     await renderWithProviders(<OnboardingScreen />);
     await fireEvent.press(screen.getByTestId('onboarding-continue'));
     expect(await screen.findByText('Enter your full name.')).toBeTruthy();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('(D-111) submits with no email at all — it is optional', async () => {
+    const completed = makeMe({ fullName: 'Vikram Shah', profileComplete: true });
+    const { calls } = mockApi((c) => {
+      if (c.path === '/v1/me/onboarding') return { body: completed };
+      if (c.path === '/v1/me') return { body: completed };
+      return undefined;
+    });
+    await renderWithProviders(<OnboardingScreen />);
+    await fireEvent.changeText(screen.getByTestId('onboarding-name'), 'Vikram Shah');
+    await fireEvent.changeText(screen.getByTestId('dob-day'), '04');
+    await fireEvent.changeText(screen.getByTestId('dob-month'), '07');
+    await fireEvent.changeText(screen.getByTestId('dob-year'), '1995');
+    await fireEvent.press(screen.getByTestId('gender-MALE'));
+    await fireEvent.press(screen.getByTestId('onboarding-continue'));
+
+    await waitFor(() => expect(useSession.getState().user?.profileComplete).toBe(true));
+    const onboardingCall = calls.find((c) => c.path === '/v1/me/onboarding');
+    expect(onboardingCall?.body).toEqual({
+      fullName: 'Vikram Shah',
+      dateOfBirth: '1995-07-04',
+      gender: 'MALE',
+    });
+  });
+
+  it('(D-111) still rejects a badly formatted email when one is typed', async () => {
+    const { calls } = mockApi(() => undefined);
+    await renderWithProviders(<OnboardingScreen />);
+    await fireEvent.changeText(screen.getByTestId('onboarding-name'), 'Vikram Shah');
+    await fireEvent.changeText(screen.getByTestId('dob-day'), '04');
+    await fireEvent.changeText(screen.getByTestId('dob-month'), '07');
+    await fireEvent.changeText(screen.getByTestId('dob-year'), '1995');
+    await fireEvent.press(screen.getByTestId('gender-MALE'));
+    await fireEvent.changeText(screen.getByTestId('email-input'), 'not-an-email');
+    await fireEvent.press(screen.getByTestId('onboarding-continue'));
+    expect(await screen.findByText('Enter a valid email address.')).toBeTruthy();
     expect(calls).toHaveLength(0);
   });
 

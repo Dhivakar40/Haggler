@@ -65,6 +65,13 @@ card (no chevron) — the right choice for a row that has real content to show b
 destination to tap into (see "Elements with no backing feature" below for when that applies).
 Currently local to `ConsentScreen.tsx`; promote to `components/` if a second page needs it.
 
+## Stepper (`features/onboarding/OnboardingScreen.tsx`)
+
+A non-interactive 3-dot progress indicator (dot + connecting line + label per step), for a page
+whose design shows a multi-step flow where only step 1 exists as a real screen so far. The dots
+are never pressable — don't wire them to navigation until the later steps actually exist as
+screens; a tappable step with nowhere to go is exactly the kind of dead control rule 3 rules out.
+
 ## Elements with no backing feature
 
 The design images are AI-generated and occasionally show something the app doesn't do (an extra

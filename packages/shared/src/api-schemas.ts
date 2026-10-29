@@ -80,12 +80,14 @@ export const meSchema = z.object({
 });
 export type Me = z.infer<typeof meSchema>;
 
-/** The mandatory one-time setup shown right after first sign-in, before the app is usable. */
+/** The mandatory one-time setup shown right after first sign-in, before the app is usable. Email
+ * is optional here — same as `profileUpdateSchema` — a person can add it later from Settings >
+ * Edit Profile. */
 export const onboardingInputSchema = z.object({
   fullName: z.string().trim().min(2).max(80),
   dateOfBirth: dateOfBirthSchema,
   gender: genderSchema,
-  email: z.string().trim().email().max(254),
+  email: z.string().trim().email().max(254).optional(),
 });
 export type OnboardingInput = z.infer<typeof onboardingInputSchema>;
 
