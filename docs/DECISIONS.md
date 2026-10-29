@@ -2299,3 +2299,54 @@ New API test: `(D-111) completes onboarding with no email` (`auth.e2e-spec.ts`) 
 (no Docker for the Testcontainers suite in this environment), typechecked only. Mobile: two new
 `OnboardingScreen.spec.tsx` tests (submits with no email; still rejects a malformed one when
 typed). Full mobile suite 546/546, API unit suite 228/228, both apps typecheck clean.
+
+## D-112: onboarding gains a real Address step; it becomes the default address everywhere
+
+Onboarding's Address step (`ui/redesign-from-images`, image 4) was explicitly asked for as a real
+feature, not a reskin: "do not treat this merely as a UI edit — we need some functionality changes
+too." The address a person saves during setup should become their default, used to pre-fill every
+service request, editable later via an "Edit address" option. All three pieces turned out to
+already exist in some form, which shaped the implementation:
+
+- **Default address**: already fully built. `AddressesService.create()` (`apps/api/src/users/
+  addresses.service.ts`) already makes an address default automatically when it's the user's
+  first one (`makeDefault = isDefault === true || count === 0`) — the very first address saved
+  during onboarding needs no extra "set default" call. `NewRequestScreen.tsx` already pre-selects
+  `list.find(a => a.isDefault)?.id` when no address is explicitly chosen — service requests
+  already use the default address automatically; no change was needed there at all.
+- **Edit address**: the backend (`PATCH /v1/me/addresses/:id`, `AddressesService.update()`) already
+  existed; only the mobile side was missing. Added `updateAddress()` to `api/endpoints.ts`, an
+  "Edit" button per row in `AddressesScreen`, and edit-mode support in `NewAddressScreen`
+  (`/address-new?id=...`, prefilled from the cached address list, PATCHes instead of POSTing).
+  Extracted the GPS/reverse-geocode "use current location" logic the create form already had into
+  a shared hook (`useAddressLocation.ts`) so onboarding's address step and this screen don't drift.
+
+**Two schema gaps, resolved with the product owner before writing code** (see the question/answer
+pair at the start of this page's work): the design image has no "State" field, but every existing
+address form requires one — a real State field was added to onboarding's form rather than silently
+dropping required validation. The image's "Landmark (optional)" field doesn't exist in the data
+model at all (`addresses.line2` already serves as "Area / landmark (optional)" everywhere else in
+the app) — adding a real column would mean a schema change and a production migration for one
+field on one screen, so it was left out rather than built; noted as a flagged gap in
+`docs/ui-redesign/PAGES.md` if wanted later.
+
+**Onboarding architecture**: `completeOnboarding` is a one-time call (a second one 409s) and
+`_layout.tsx`'s `Navigator` switches away from the whole onboarding route the instant
+`user.profileComplete` flips true — so step 1 (Profile) can no longer call the API on its own
+"Continue." `OnboardingScreen.tsx` now holds all fields (profile + address) in one component with
+local `step` state; nothing is sent to the server until step 2 finishes (`finish()`), whether that
+means "Continue" with a valid address or "Skip" / "I'll add this later" with none. `finish()` calls
+`completeOnboarding` first, then `createAddress` only if one was filled in — and treats a `CONFLICT`
+from `completeOnboarding` as success rather than an error, so a network drop between that call
+succeeding and `refreshMe()` running can't strand the screen on a retry.
+
+Reused rather than duplicated: `addresses.*` i18n keys for every field label already used
+elsewhere (`line1`, `line2`, `city`, `state`, `pincode`, `useLocation`, `locating`, …) — onboarding
+only adds its own section copy (`addressTitle`, `addressIntro`, `addressSkip`, `saveAddressAs`,
+new `presetHome/presetWork/presetOther` chip labels for "Save address as").
+
+Mobile suite 555/555 (9 new tests across onboarding and the address edit flow — step transitions,
+skip paths, the default-"Home"/picked-"Other" label, bad-PIN validation, the CONFLICT-as-success
+edge case, GPS autofill, and address editing/prefill). Both apps typecheck clean, lint clean, i18n
+parity clean. No backend or shared-package changes this round — every piece of backend
+functionality this page needed already existed.

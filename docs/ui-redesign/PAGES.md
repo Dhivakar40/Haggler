@@ -9,7 +9,8 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
 | Sign-in / landing (`PhoneScreen`) | `features/auth/PhoneScreen.tsx`, `components/Button.tsx`, `components/TextField.tsx`, `i18n/locales/*.ts` | Done — also set the app-wide foundation (see `FOUNDATION.md`) |
 | OTP verification (`OtpScreen`) | `features/auth/OtpScreen.tsx`, `i18n/locales/*.ts` | Done — introduced the segmented `OtpBoxes` pattern (see `FOUNDATION.md`) |
 | Consent (`ConsentScreen`) | `features/auth/ConsentScreen.tsx`, `i18n/locales/*.ts` | Done — introduced the `InfoRow` card pattern (see `FOUNDATION.md`) |
-| Onboarding step 1 — Profile (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/PersonalDetailsFields.tsx`, `packages/shared/src/api-schemas.ts`, `apps/api/src/users/users.service.ts`, `i18n/locales/*.ts` | Done — see D-111 in `docs/DECISIONS.md` for the confirmed scope decisions. Steps 2 (Address) and 3 (Preferences) are waiting on their design images; the `Stepper` is a non-interactive progress indicator until they exist. |
+| Onboarding step 1 — Profile (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/PersonalDetailsFields.tsx`, `packages/shared/src/api-schemas.ts`, `apps/api/src/users/users.service.ts`, `i18n/locales/*.ts` | Done — see D-111 in `docs/DECISIONS.md` for the confirmed scope decisions. |
+| Onboarding step 2 — Address (`OnboardingScreen`) | `features/onboarding/OnboardingScreen.tsx`, `features/account/AddressesScreens.tsx`, `features/account/useAddressLocation.ts` (new), `api/endpoints.ts`, `i18n/locales/*.ts` | Done — real functionality, not a reskin (explicit instruction). See D-112 in `docs/DECISIONS.md`. Also added "Edit address" (was missing on mobile even though the backend already supported it) and onboarding now creates a real default address used everywhere else. Step 3 (Preferences) is still waiting on its design image; the `Stepper`'s third dot stays a non-interactive placeholder until it exists. |
 
 ## Not implemented, needs a decision
 
@@ -38,6 +39,10 @@ Branch: `ui/redesign-from-images`. One row per design image received. Commit has
   endpoint exists anywhere in the codebase today (`photoUrl` is read-only on the client). Confirmed
   with the product owner: rendered as a visible, clearly-labeled "coming soon" control rather than
   faked. Building this for real needs a storage/upload endpoint — a backend decision, not a UI one.
+- **Landmark field** (address step): the design shows a "Landmark (optional)" field with no
+  backing column in the Address model. Confirmed with the product owner: omitted rather than
+  adding a migration for one field on one screen — `addresses.line2` ("Area / landmark (optional)")
+  already covers this informally everywhere else addresses are entered. See D-112.
 
 ## Assets needed
 

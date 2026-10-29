@@ -71,6 +71,30 @@ A non-interactive 3-dot progress indicator (dot + connecting line + label per st
 whose design shows a multi-step flow where only step 1 exists as a real screen so far. The dots
 are never pressable — don't wire them to navigation until the later steps actually exist as
 screens; a tappable step with nowhere to go is exactly the kind of dead control rule 3 rules out.
+Once step 2 existed (the Address step, D-112), the dots gained a third state: done (filled +
+checkmark, for a step already completed earlier in the same session), active, and pending — still
+never tappable, just richer information.
+
+## Multi-step mandatory flow in one screen, one `finish()` (`OnboardingScreen.tsx`)
+
+When a design turns a single mandatory, one-time-API-call screen into a multi-step wizard, don't
+call the API at the end of each step — check whether the *real* submit is one-time (here,
+`completeOnboarding` 409s on a second call, and the root navigator leaves the route the instant
+`profileComplete` flips true, so there's no "come back for step 2" moment). Instead hold every
+step's fields in one component's state with a local `step` number, and call the API(s) exactly
+once, from whichever action ends the wizard (a final "Continue" or any "Skip"/"later" affordance).
+Treat a conflict from that one-time call as success, not an error — it means a previous attempt
+already got through before something else (e.g. a second network call) failed, and retrying should
+recover, not strand the person on an error screen forever.
+
+## Reusing a hook across a redesigned screen and its untouched sibling (`useAddressLocation.ts`)
+
+When a redesigned screen needs logic that already exists almost verbatim in a screen outside this
+round's scope (here: onboarding's address step needed the exact GPS/reverse-geocode flow
+`NewAddressScreen.tsx` already had), extract it to a shared hook instead of copy-pasting — then
+refactor the untouched screen to use the hook too, so there's exactly one implementation and one
+set of tests to trust. This is a UI-redesign-adjacent refactor (same behavior, same testIDs,
+zero functional change to the untouched screen), not scope creep.
 
 ## Elements with no backing feature
 

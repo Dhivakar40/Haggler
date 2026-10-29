@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { addressInputSchema } from '@haggler/shared';
@@ -10,6 +9,7 @@ import {
   deleteAddress,
   listAddresses,
   setDefaultAddress,
+  updateAddress,
 } from '../../api/endpoints';
 import {
   Button,
@@ -24,6 +24,7 @@ import {
 } from '../../components';
 import { errorMessage } from '../../lib/errors';
 import { spacing } from '../../theme/tokens';
+import { useAddressLocation } from './useAddressLocation';
 
 const KEY = ['addresses'];
 
@@ -71,6 +72,12 @@ export function AddressesScreen() {
                 marginTop: spacing.sm,
               }}
             >
+              <Button
+                testID={`edit-address-${a.label}`}
+                variant="secondary"
+                title={t('addresses.edit')}
+                onPress={() => router.push({ pathname: '/address-new', params: { id: a.id } })}
+              />
               {!a.isDefault && (
                 <Button
                   variant="secondary"
@@ -109,44 +116,39 @@ export function NewAddressScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const editing = typeof id === 'string';
+  const existing = useQuery({ queryKey: KEY, queryFn: listAddresses, enabled: editing });
   const [f, setF] = useState({ label: '', line1: '', line2: '', city: '', state: '', pincode: '' });
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
-  const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
   const set = (k: keyof typeof f) => (v: string) => setF((cur) => ({ ...cur, [k]: v }));
+  const { coords, status, locating, useMyLocation } = useAddressLocation((place) =>
+    setF((cur) => ({
+      ...cur,
+      city: cur.city || place.city || '',
+      state: cur.state || place.region || '',
+      pincode: cur.pincode || place.postalCode || '',
+    })),
+  );
 
-  /** Real GPS, foreground only. Coordinates go to the server, which validates they are in India. */
-  async function useMyLocation() {
-    setStatus(undefined);
-    setLocating(true);
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== 'granted') return setStatus(t('addresses.locationDenied'));
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      setStatus(t('addresses.locationCaptured'));
-      // Best-effort autofill from the phone's own geocoder (no key, no third-party billing).
-      try {
-        const [place] = await Location.reverseGeocodeAsync(pos.coords);
-        if (place) {
-          setF((cur) => ({
-            ...cur,
-            city: cur.city || place.city || place.subregion || '',
-            state: cur.state || place.region || '',
-            pincode: cur.pincode || (place.postalCode ?? ''),
-          }));
-        }
-      } catch {
-        /* autofill is a nicety; the person can type it */
-      }
-    } catch {
-      setStatus(t('addresses.locationDenied'));
-    } finally {
-      setLocating(false);
-    }
-  }
+  // Fill the form once the existing address arrives — not on every refetch, so edits in progress
+  // aren't clobbered by a background refresh.
+  useEffect(() => {
+    if (!editing || prefilled) return;
+    const a = existing.data?.find((x) => x.id === id);
+    if (!a) return;
+    setF({
+      label: a.label,
+      line1: a.line1,
+      line2: a.line2 ?? '',
+      city: a.city,
+      state: a.state,
+      pincode: a.pincode,
+    });
+    setPrefilled(true);
+  }, [editing, prefilled, existing.data, id]);
 
   async function save() {
     const parsed = addressInputSchema.safeParse({
@@ -162,7 +164,8 @@ export function NewAddressScreen() {
     setError(undefined);
     setBusy(true);
     try {
-      await createAddress(parsed.data);
+      if (typeof id === 'string') await updateAddress(id, parsed.data);
+      else await createAddress(parsed.data);
       await qc.invalidateQueries({ queryKey: KEY });
       router.back();
     } catch (err) {
@@ -174,6 +177,9 @@ export function NewAddressScreen() {
 
   return (
     <Screen scroll>
+      {editing ? (
+        <Text variant="heading">{t('addresses.editTitle')}</Text>
+      ) : null}
       <Button
         testID="use-location"
         variant="secondary"

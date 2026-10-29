@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   type AddressInput,
+  type AddressUpdate,
   addressSchema,
   authSessionSchema,
   type ConsentInput,
@@ -101,6 +102,8 @@ export const listAddresses = () =>
   apiRequest('/v1/me/addresses', { schema: z.array(addressSchema) });
 export const createAddress = (body: AddressInput) =>
   apiRequest('/v1/me/addresses', { method: 'POST', body, schema: addressSchema });
+export const updateAddress = (id: string, body: AddressUpdate) =>
+  apiRequest(`/v1/me/addresses/${id}`, { method: 'PATCH', body, schema: addressSchema });
 export const setDefaultAddress = (id: string) =>
   apiRequest(`/v1/me/addresses/${id}`, {
     method: 'PATCH',

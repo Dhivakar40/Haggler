@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import i18n from '../../i18n';
 import { useSession } from '../../auth/session';
@@ -27,6 +28,7 @@ const loc = Location as unknown as Record<string, jest.Mock>;
 beforeEach(async () => {
   await i18n.changeLanguage('en');
   jest.clearAllMocks();
+  (useLocalSearchParams as jest.Mock).mockReturnValue({});
   secureStore().clear();
   signInAs();
 });
@@ -327,6 +329,33 @@ describe('addresses', () => {
     await fireEvent.press(screen.getByTestId('save-address'));
     await waitFor(() => expect(routerMock().back).toHaveBeenCalled());
     expect(calls.find((c) => c.method === 'POST')?.body).not.toHaveProperty('latitude');
+  });
+
+  it('opens "Edit" from the list, navigating with the address id', async () => {
+    mockApi(() => ({ body: [addr()] }));
+    await renderWithProviders(<AddressesScreen />);
+    await fireEvent.press(await screen.findByTestId(`edit-address-${addr().label}`));
+    expect(routerMock().push).toHaveBeenCalledWith({
+      pathname: '/address-new',
+      params: { id: addr().id },
+    });
+  });
+
+  it('editing prefills the form from the existing address and PATCHes instead of creating', async () => {
+    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: addr().id });
+    const { calls } = mockApi((c) => {
+      if (c.method === 'PATCH') return { body: addr({ line1: '14 Gandhi Road' }) };
+      return { body: [addr()] };
+    });
+    await renderWithProviders(<NewAddressScreen />);
+    await waitFor(() => expect(screen.getByTestId('line1').props.value).toBe('12 Gandhi Road'));
+    expect(screen.getByTestId('city').props.value).toBe('Chennai');
+    await fireEvent.changeText(screen.getByTestId('line1'), '14 Gandhi Road');
+    await fireEvent.press(screen.getByTestId('save-address'));
+    await waitFor(() => expect(routerMock().back).toHaveBeenCalled());
+    const patch = calls.find((c) => c.method === 'PATCH');
+    expect(patch?.path.endsWith(addr().id)).toBe(true);
+    expect(patch?.body).toMatchObject({ line1: '14 Gandhi Road', city: 'Chennai' });
   });
 
   it('validates before calling the server (bad PIN code)', async () => {
